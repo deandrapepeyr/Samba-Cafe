@@ -20,19 +20,26 @@ export default function LoginPage() {
     setIsLoggingIn(true);
     setError('');
     
-    // Real login logic using Supabase 'users' table
-    const { data, error: fetchError } = await supabase
-      .from('users')
-      .select('*')
-      .or(`username.eq.${username},name.eq.${username}`)
-      .eq('password', password)
-      .single();
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('users')
+        .select('*')
+        .or(`username.eq.${username},name.eq.${username}`)
+        .eq('password', password)
+        .single();
 
-    if (fetchError || !data) {
-      setError('Invalid username or password.');
+      if (fetchError) {
+        setError(`Error: ${fetchError.message || 'Unknown fetch error'}`);
+        setIsLoggingIn(false);
+      } else if (!data) {
+        setError('Invalid username or password.');
+        setIsLoggingIn(false);
+      } else {
+        login(data.role as 'manager' | 'cashier', data.name);
+      }
+    } catch (err: any) {
+      setError(`Exception: ${err.message || String(err)}`);
       setIsLoggingIn(false);
-    } else {
-      login(data.role as 'manager' | 'cashier', data.name);
     }
   };
 
