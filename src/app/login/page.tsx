@@ -99,7 +99,7 @@ export default function LoginPage() {
           <div className="bg-muted p-4 rounded-lg text-xs text-muted-foreground space-y-2 text-center">
             <p className="font-semibold">Test Accounts:</p>
             <p>Manager: manager / admin123</p>
-            <p>Cashier: cashier / kasir123</p>
+            <p>Cashier: sheera / password123</p>
           </div>
         </div>
         
