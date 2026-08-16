@@ -19,28 +19,53 @@ export default function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoggingIn(true);
     setError('');
 
+    // Negative case: empty fields (although HTML 'required' catches this, it's good for fallback)
+    if (!username.trim()) {
+      setError('Username tidak boleh kosong.');
+      return;
+    }
+    if (!password.trim()) {
+      setError('Password tidak boleh kosong.');
+      return;
+    }
+
+    setIsLoggingIn(true);
+
     try {
-      const { data, error: fetchError } = await supabase
+      // 1. Cek apakah username ada di database terlebih dahulu
+      const { data: userData, error: userError } = await supabase
         .from('users')
         .select('*')
         .or(`username.eq.${username},name.eq.${username}`)
-        .eq('password', password)
-        .single();
+        .maybeSingle(); // maybeSingle menghindari error jika tidak ada baris
 
-      if (fetchError) {
-        setError('Username atau password salah.');
+      if (userError) {
+        setError(`Terjadi kesalahan: ${userError.message}`);
         setIsLoggingIn(false);
-      } else if (!data) {
-        setError('Username atau password salah.');
-        setIsLoggingIn(false);
-      } else {
-        login(data.role as 'manager' | 'cashier', data.name);
+        return;
       }
+
+      // Negative case: Username tidak ditemukan
+      if (!userData) {
+        setError('Username tidak ditemukan. Silakan cek kembali.');
+        setIsLoggingIn(false);
+        return;
+      }
+
+      // 2. Jika username ada, cek kecocokan password
+      // Negative case: Password salah
+      if (userData.password !== password) {
+        setError('Password yang Anda masukkan salah.');
+        setIsLoggingIn(false);
+        return;
+      }
+
+      // Berhasil login
+      login(userData.role as 'manager' | 'cashier', userData.name);
     } catch (err: any) {
-      setError('Gagal terhubung ke server. Coba lagi.');
+      setError('Gagal terhubung ke server. Pastikan koneksi internet Anda stabil.');
       setIsLoggingIn(false);
     }
   };
