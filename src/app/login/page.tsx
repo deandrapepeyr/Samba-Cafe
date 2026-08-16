@@ -57,6 +57,14 @@ export default function LoginPage() {
           background: #0a0a0a;
           overflow: hidden;
           position: relative;
+          visibility: hidden;
+          opacity: 0;
+        }
+
+        .login-page.mounted {
+          visibility: visible;
+          opacity: 1;
+          transition: opacity 0.3s ease;
         }
 
         /* Ambient background glow */
@@ -610,6 +618,7 @@ export default function LoginPage() {
         }
       `}</style>
 
+      <div style={{ minHeight: '100vh', background: '#0a0a0a' }}>
       <div className={`login-page ${mounted ? 'mounted' : ''}`} style={{ minHeight: '100vh', display: 'flex', background: '#0a0a0a', overflow: 'hidden' }}>
         {/* Left branding panel */}
         <div className="brand-panel" style={{ overflow: 'hidden' }}>
@@ -819,6 +828,7 @@ export default function LoginPage() {
             </div>
           </div>
         </div>
+      </div>
       </div>
     </>
   );
