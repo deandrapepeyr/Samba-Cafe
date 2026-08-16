@@ -1,4 +1,4 @@
-const CACHE_NAME = 'samba-cafe-v1';
+const CACHE_NAME = 'samba-cafe-v2';
 const STATIC_ASSETS = [
   '/',
   '/login',
