@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Sidebar } from '@/components/layout/Sidebar';
+import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Search, Receipt, Loader2, Calendar, DollarSign, Package } from 'lucide-react';
@@ -158,11 +158,7 @@ export default function HistoryPage() {
   const summaryOrders = filteredTransactions.length;
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden text-foreground">
-      <div className="hidden lg:block">
-        <Sidebar />
-      </div>
-      
+    <MainLayout title="History">
       <div className="flex-1 flex flex-col min-w-0 p-4 lg:p-8">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -463,6 +459,6 @@ export default function HistoryPage() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </MainLayout>
   );
 }

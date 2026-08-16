@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Sidebar } from '@/components/layout/Sidebar';
+import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2, CalendarDays, UserSquare2, TrendingUp, AlertCircle, Receipt, X } from 'lucide-react';
@@ -152,11 +152,7 @@ export default function ReportsPage() {
     : [];
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden text-foreground">
-      <div className="hidden lg:block">
-        <Sidebar />
-      </div>
-      
+    <MainLayout title="Reports">
       <div className="flex-1 flex flex-col min-w-0 p-4 lg:p-8">
         <div className="mb-6 lg:mb-8">
           <h1 className="text-2xl lg:text-3xl font-bold flex items-center gap-3">
@@ -388,7 +384,6 @@ export default function ReportsPage() {
           </div>
         </DialogContent>
       </Dialog>
-
-    </div>
+    </MainLayout>
   );
 }

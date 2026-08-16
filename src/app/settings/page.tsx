@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Sidebar } from '@/components/layout/Sidebar';
+import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -286,11 +286,7 @@ export default function SettingsPage() {
   if (role !== 'manager') return null; // Prevent flash of content
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden text-foreground">
-      <div className="hidden lg:block">
-        <Sidebar />
-      </div>
-      
+    <MainLayout title="Settings">
       <div className="flex-1 flex flex-col min-w-0 p-4 lg:p-8">
         <div className="flex items-center justify-between mb-6 lg:mb-8 flex-shrink-0">
           <div>
@@ -880,7 +876,6 @@ export default function SettingsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-    </div>
+    </MainLayout>
   );
 }

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -99,69 +100,71 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="flex-1 p-4 lg:p-8 max-w-4xl mx-auto w-full">
-      <div className="mb-8">
-        <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Your Profile</h1>
-        <p className="text-muted-foreground mt-2">Manage your account settings and credentials.</p>
-      </div>
-      
-      <Card className="bg-card border-border">
-        <CardHeader>
-          <CardTitle>Profile Details</CardTitle>
-          <CardDescription>
-            Update your personal information and login credentials.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-6 max-w-md">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Full Name</label>
-              <Input 
-                value={editForm.name} 
-                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                className="bg-background border-border"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Username</label>
-              <Input 
-                value={editForm.username} 
-                onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
-                className="bg-background border-border"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Role</label>
-              <Input 
-                value={role === 'manager' ? 'Manager / Admin' : 'Cashier'} 
-                disabled
-                className="bg-muted border-border cursor-not-allowed opacity-50 text-muted-foreground"
-              />
-            </div>
+    <MainLayout title="Profile">
+      <div className="flex-1 p-4 lg:p-8 max-w-4xl mx-auto w-full">
+        <div className="mb-8">
+          <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Your Profile</h1>
+          <p className="text-muted-foreground mt-2">Manage your account settings and credentials.</p>
+        </div>
+        
+        <Card className="bg-card border-border">
+          <CardHeader>
+            <CardTitle>Profile Details</CardTitle>
+            <CardDescription>
+              Update your personal information and login credentials.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6 max-w-md">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Full Name</label>
+                <Input 
+                  value={editForm.name} 
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  className="bg-background border-border"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Username</label>
+                <Input 
+                  value={editForm.username} 
+                  onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
+                  className="bg-background border-border"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Role</label>
+                <Input 
+                  value={role === 'manager' ? 'Manager / Admin' : 'Cashier'} 
+                  disabled
+                  className="bg-muted border-border cursor-not-allowed opacity-50 text-muted-foreground"
+                />
+              </div>
 
-            <div className="space-y-2 pt-4 border-t border-border">
-              <label className="text-sm font-medium">New Password</label>
-              <Input 
-                type="password"
-                placeholder="Leave blank to keep current password"
-                value={editForm.password} 
-                onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
-                className="bg-background border-border"
-              />
+              <div className="space-y-2 pt-4 border-t border-border">
+                <label className="text-sm font-medium">New Password</label>
+                <Input 
+                  type="password"
+                  placeholder="Leave blank to keep current password"
+                  value={editForm.password} 
+                  onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                  className="bg-background border-border"
+                />
+              </div>
+              
+              <Button 
+                onClick={handleSave} 
+                disabled={isSaving || !editForm.name || !editForm.username}
+                className="bg-primary text-primary-foreground hover:bg-primary/90 w-full mt-4"
+              >
+                {isSaving ? 'Saving...' : 'Save Changes'}
+              </Button>
             </div>
-            
-            <Button 
-              onClick={handleSave} 
-              disabled={isSaving || !editForm.name || !editForm.username}
-              className="bg-primary text-primary-foreground hover:bg-primary/90 w-full mt-4"
-            >
-              {isSaving ? 'Saving...' : 'Save Changes'}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+          </CardContent>
+        </Card>
+      </div>
+    </MainLayout>
   );
 }

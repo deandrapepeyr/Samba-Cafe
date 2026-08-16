@@ -1,6 +1,6 @@
 'use client';
 
-import { Sidebar } from '@/components/layout/Sidebar';
+import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DollarSign, Package, TrendingUp, Users, TrendingDown, Loader2, CreditCard, Banknote, AlertTriangle, Clock, ArrowUpRight, ArrowDownRight, ShoppingBag } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
@@ -166,11 +166,7 @@ export default function DashboardPage() {
   const dateString = currentTime.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden text-foreground">
-      <div className="hidden lg:block">
-        <Sidebar />
-      </div>
-      
+    <MainLayout title="Dashboard">
       <div className="flex-1 flex flex-col min-w-0 p-4 lg:p-8 overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-8 shrink-0">
@@ -442,6 +438,6 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
-    </div>
+    </MainLayout>
   );
 }

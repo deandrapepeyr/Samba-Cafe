@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Sidebar } from '@/components/layout/Sidebar';
+import { MainLayout } from '@/components/layout/MainLayout';
 import { supabase } from '@/lib/supabase';
 import { Search, Plus, Minus, FileEdit, Menu, X, QrCode, Banknote, CheckCircle2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -54,8 +54,7 @@ export default function POSPage() {
   const [paymentMethod, setPaymentMethod] = useState<'QRIS' | 'Cash' | null>(null);
   const [cashReceived, setCashReceived] = useState<string>('');
 
-  // Mobile sidebar state
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  // Mobile sidebar state is now handled by MainLayout
 
   // Auth & Shift Management
   const { userName, role, isLoading, logout } = useAuth();
@@ -433,38 +432,11 @@ export default function POSPage() {
   );
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden text-foreground">
-      {/* Desktop Sidebar */}
-      <div className="hidden lg:block">
-        <Sidebar onLogoutClick={handleCalculateEndShift} />
-      </div>
-
-      {/* Mobile Sidebar Overlay */}
-      {isMobileSidebarOpen && (
-        <div className="fixed inset-0 z-50 flex lg:hidden">
-          <div className="fixed inset-0 bg-black/50" onClick={() => setIsMobileSidebarOpen(false)} />
-          <div className="relative z-50 flex flex-col bg-background w-3/4 max-w-sm h-full">
-            <button 
-              className="absolute right-4 top-4 p-2 text-muted-foreground hover:text-foreground"
-              onClick={() => setIsMobileSidebarOpen(false)}
-            >
-              <X size={24} />
-            </button>
-            <Sidebar onLogoutClick={handleCalculateEndShift} />
-          </div>
-        </div>
-      )}
-
+    <MainLayout onLogoutClick={handleCalculateEndShift} title="Point of Sale">
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0 bg-background/50">
+      <div className="flex-1 flex flex-col min-w-0 bg-background/50 h-full">
         <header className="px-4 lg:px-6 py-4 lg:py-6 border-b border-border flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
           <div className="flex items-center gap-4 flex-1">
-            <button 
-              className="lg:hidden p-2 text-foreground" 
-              onClick={() => setIsMobileSidebarOpen(true)}
-            >
-              <Menu size={24} />
-            </button>
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={20} />
               <Input 
@@ -805,6 +777,6 @@ export default function POSPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </MainLayout>
   );
 }

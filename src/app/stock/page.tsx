@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Sidebar } from '@/components/layout/Sidebar';
+import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Package, Search, Plus, AlertTriangle, ArrowDownUp, Edit, Loader2 } from 'lucide-react';
@@ -146,11 +146,7 @@ export default function StockPage() {
   const lowStockCount = stocks.filter(s => s.quantity <= s.min_stock_alert).length;
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden text-foreground">
-      <div className="hidden lg:block">
-        <Sidebar />
-      </div>
-      
+    <MainLayout title="Stock">
       <div className="flex-1 flex flex-col min-w-0 p-4 lg:p-8">
         <div className="flex items-center justify-between mb-6 lg:mb-8">
           <div>
@@ -384,6 +380,6 @@ export default function StockPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </MainLayout>
   );
 }
