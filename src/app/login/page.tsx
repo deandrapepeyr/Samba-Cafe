@@ -610,14 +610,14 @@ export default function LoginPage() {
         }
       `}</style>
 
-      <div className={`login-page ${mounted ? 'mounted' : ''}`}>
+      <div className={`login-page ${mounted ? 'mounted' : ''}`} style={{ minHeight: '100vh', display: 'flex', background: '#0a0a0a', overflow: 'hidden' }}>
         {/* Left branding panel */}
-        <div className="brand-panel">
+        <div className="brand-panel" style={{ overflow: 'hidden' }}>
           <div className="brand-pattern" />
           <div className="brand-content">
             <div className="brand-logo-container">
-              <div className="brand-logo">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <div className="brand-logo" style={{ width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '24px', height: '24px' }}>
                   <path d="M17 8h1a4 4 0 1 1 0 8h-1" />
                   <path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z" />
                   <line x1="6" y1="2" x2="6" y2="4" />
@@ -661,8 +661,8 @@ export default function LoginPage() {
           <div className="form-container">
             {/* Mobile logo */}
             <div className="mobile-logo">
-              <div className="mobile-logo-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <div className="mobile-logo-icon" style={{ width: '56px', height: '56px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '28px', height: '28px' }}>
                   <path d="M17 8h1a4 4 0 1 1 0 8h-1" />
                   <path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z" />
                   <line x1="6" y1="2" x2="6" y2="4" />
