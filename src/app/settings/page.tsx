@@ -59,6 +59,7 @@ export default function SettingsPage() {
   const [isEditItemDialogOpen, setIsEditItemDialogOpen] = useState(false);
   const [isAddCategoryDialogOpen, setIsAddCategoryDialogOpen] = useState(false);
   const [isAddUserDialogOpen, setIsAddUserDialogOpen] = useState(false);
+  const [isEditUserDialogOpen, setIsEditUserDialogOpen] = useState(false);
   
   const [activeCategoryFilter, setActiveCategoryFilter] = useState('1'); // '1' is 'All'
 
@@ -86,6 +87,8 @@ export default function SettingsPage() {
     password: '',
     role: 'cashier'
   });
+  
+  const [editingUser, setEditingUser] = useState<any | null>(null);
   
   const [newImageFile, setNewImageFile] = useState<File | null>(null);
   const [editImageFile, setEditImageFile] = useState<File | null>(null);
@@ -250,6 +253,33 @@ export default function SettingsPage() {
       setNewUser({ name: '', username: '', password: '', role: 'cashier' });
     } else {
       alert("Failed to add user: " + error?.message);
+      console.error(error);
+    }
+  };
+
+  const handleEditUser = async () => {
+    if (!editingUser || !editingUser.name || !editingUser.username) return;
+    
+    // update password only if provided
+    let updateData = {
+      name: editingUser.name,
+      username: editingUser.username,
+      role: editingUser.role
+    } as any;
+    
+    if (editingUser.password) {
+      updateData.password = editingUser.password;
+    }
+    
+    const { error } = await supabase.from('users').update(updateData).eq('id', editingUser.id);
+    
+    if (!error) {
+      setUsers(users.map(u => u.id === editingUser.id ? { ...u, ...updateData } : u));
+      setIsEditUserDialogOpen(false);
+      setEditingUser(null);
+    } else {
+      alert("Failed to update user: " + error.message);
+      console.error(error);
     }
   };
 
@@ -440,20 +470,32 @@ export default function SettingsPage() {
                           </h3>
                           <p className="text-sm text-muted-foreground mt-1">@{user.username || user.name}</p>
                         </div>
-                        <Button 
-                          variant="destructive" 
-                          className="w-full sm:w-auto"
-                          onClick={async () => {
-                            const { error } = await supabase.from('users').delete().eq('id', user.id);
-                            if (!error) {
-                              setUsers(users.filter(u => u.id !== user.id));
-                            } else {
-                              alert("Failed to delete user: " + error.message);
-                            }
-                          }}
-                        >
-                          Delete
-                        </Button>
+                        <div className="flex gap-2 w-full sm:w-auto">
+                          <Button 
+                            variant="secondary" 
+                            className="w-full sm:w-auto"
+                            onClick={() => {
+                              setEditingUser({ ...user, password: '' });
+                              setIsEditUserDialogOpen(true);
+                            }}
+                          >
+                            Edit
+                          </Button>
+                          <Button 
+                            variant="destructive" 
+                            className="w-full sm:w-auto"
+                            onClick={async () => {
+                              const { error } = await supabase.from('users').delete().eq('id', user.id);
+                              if (!error) {
+                                setUsers(users.filter(u => u.id !== user.id));
+                              } else {
+                                alert("Failed to delete user: " + error.message);
+                              }
+                            }}
+                          >
+                            Delete
+                          </Button>
+                        </div>
                       </div>
                     ))}
                     {users.length === 0 && (
@@ -780,6 +822,61 @@ export default function SettingsPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAddUserDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleAddUser} className="bg-primary text-primary-foreground hover:bg-primary/90">Add User</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit User Dialog */}
+      <Dialog open={isEditUserDialogOpen} onOpenChange={setIsEditUserDialogOpen}>
+        <DialogContent className="bg-card border-border sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit User</DialogTitle>
+          </DialogHeader>
+          {editingUser && (
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <label className="text-right text-sm font-medium">Name</label>
+                <Input 
+                  className="col-span-3 bg-background border-border" 
+                  value={editingUser.name}
+                  onChange={(e) => setEditingUser({...editingUser, name: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <label className="text-right text-sm font-medium">Username</label>
+                <Input 
+                  type="text"
+                  className="col-span-3 bg-background border-border" 
+                  value={editingUser.username}
+                  onChange={(e) => setEditingUser({...editingUser, username: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <label className="text-right text-sm font-medium">Password</label>
+                <Input 
+                  type="password"
+                  placeholder="Leave empty to keep current"
+                  className="col-span-3 bg-background border-border" 
+                  value={editingUser.password}
+                  onChange={(e) => setEditingUser({...editingUser, password: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <label className="text-right text-sm font-medium">Role</label>
+                <select 
+                  className="col-span-3 flex h-10 w-full items-center justify-between rounded-md border border-border bg-background px-3 py-2 text-sm"
+                  value={editingUser.role}
+                  onChange={(e) => setEditingUser({...editingUser, role: e.target.value})}
+                >
+                  <option value="cashier">Cashier</option>
+                  <option value="manager">Manager / Admin</option>
+                </select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditUserDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleEditUser} className="bg-primary text-primary-foreground hover:bg-primary/90">Save Changes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

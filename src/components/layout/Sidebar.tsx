@@ -55,10 +55,10 @@ export function Sidebar({ onLogoutClick }: { onLogoutClick?: () => void } = {}) 
       </div>
 
       <div className="flex flex-col gap-2 px-2 lg:px-4">
-        <button className="flex items-center gap-3 px-3 py-3 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-all">
+        <Link href="/profile" className={cn("flex items-center gap-3 px-3 py-3 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-all", { "bg-primary/10 text-primary hover:bg-primary/10": pathname === '/profile' })}>
           <UserCircle size={20} />
           <span className="hidden lg:block font-medium">Profile</span>
-        </button>
+        </Link>
         <button onClick={onLogoutClick || logout} className="flex items-center gap-3 px-3 py-3 rounded-lg text-destructive hover:bg-destructive/10 transition-all">
           <LogOut size={20} />
           <span className="hidden lg:block font-medium">Log Out</span>
