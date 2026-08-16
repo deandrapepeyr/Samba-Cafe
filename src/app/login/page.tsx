@@ -140,8 +140,6 @@ export default function LoginPage() {
           align-items: center;
           gap: 14px;
           margin-bottom: 80px;
-          opacity: 0;
-          animation: slideUp 0.6s ease-out 0.2s forwards;
         }
 
         .brand-logo {
@@ -175,8 +173,6 @@ export default function LoginPage() {
           color: #ffffff;
           letter-spacing: -0.03em;
           margin-bottom: 24px;
-          opacity: 0;
-          animation: slideUp 0.6s ease-out 0.4s forwards;
         }
 
         .brand-headline span {
@@ -191,15 +187,11 @@ export default function LoginPage() {
           line-height: 1.7;
           color: #737373;
           max-width: 380px;
-          opacity: 0;
-          animation: slideUp 0.6s ease-out 0.6s forwards;
         }
 
         .brand-footer {
           position: relative;
           z-index: 2;
-          opacity: 0;
-          animation: slideUp 0.6s ease-out 0.8s forwards;
         }
 
         .brand-stats {
@@ -240,8 +232,6 @@ export default function LoginPage() {
         .form-container {
           width: 100%;
           max-width: 400px;
-          opacity: 0;
-          animation: fadeInScale 0.7s ease-out 0.3s forwards;
         }
 
         @keyframes fadeInScale {
