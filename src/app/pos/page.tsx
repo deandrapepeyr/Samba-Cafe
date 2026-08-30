@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { supabase } from '@/lib/supabase';
-import { Search, Plus, Minus, FileEdit, Menu, X, QrCode, Banknote, CheckCircle2 } from 'lucide-react';
+import { Search, Plus, Minus, FileEdit, Menu, X, QrCode, Banknote, CheckCircle2, ShoppingCart, LockKeyhole } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -71,6 +71,7 @@ export default function POSPage() {
   const [isShiftSummaryOpen, setIsShiftSummaryOpen] = useState(false);
   const [orderNumber, setOrderNumber] = useState('');
   const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
+  const [isCartOpen, setIsCartOpen] = useState(true);
 
   useEffect(() => {
     if (!isLoading && !role) {
@@ -89,7 +90,9 @@ export default function POSPage() {
         supabase.from('products').select('*').eq('is_available', true)
       ]);
 
-      if (categoriesRes.data) setCategories(categoriesRes.data);
+      if (categoriesRes.data) {
+        setCategories([{ id: '1', name: 'All Menu' }, ...categoriesRes.data]);
+      }
       if (productsRes.data) setProducts(productsRes.data);
       
       setIsLoadingData(false);
@@ -108,8 +111,6 @@ export default function POSPage() {
         
       if (data) {
         setActiveShift(data);
-      } else {
-        setIsStartShiftDialogOpen(true);
       }
     }
 
@@ -432,24 +433,68 @@ export default function POSPage() {
   );
 
   return (
-    <MainLayout onLogoutClick={handleCalculateEndShift} title="Point of Sale">
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0 bg-background/50 h-full">
-        <header className="px-4 lg:px-6 py-4 lg:py-6 border-b border-border flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
+    <MainLayout 
+      onLogoutClick={handleCalculateEndShift} 
+      title="Point of Sale"
+      headerAction={
+        <Sheet>
+          <SheetTrigger className="md:hidden relative p-2 h-10 w-10 flex items-center justify-center bg-background border border-border rounded-lg hover:bg-muted text-muted-foreground transition-colors">
+            <ShoppingCart size={18} />
+            {cartItemCount > 0 && (
+              <div className="absolute -top-2 -right-2 bg-primary text-primary-foreground text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center border-2 border-background">
+                {cartItemCount}
+              </div>
+            )}
+          </SheetTrigger>
+          <SheetContent side="bottom" className="h-[85vh] p-0 bg-card border-t border-border rounded-t-2xl flex flex-col z-[100]">
+            <SheetHeader className="p-4 border-b border-border sr-only">
+              <SheetTitle>Current Order</SheetTitle>
+            </SheetHeader>
+            <CartContent />
+          </SheetContent>
+        </Sheet>
+      }
+    >
+      <div className="flex h-full w-full">
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col min-w-0 bg-background/50 h-full">
+          <header className="px-4 md:px-6 py-4 md:py-6 border-b border-border flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
           <div className="flex items-center gap-4 flex-1">
+            {!activeShift && (
+              <Button 
+                variant="outline" 
+                className="h-12 w-12 p-0 flex shrink-0 items-center justify-center bg-yellow-500/10 border-yellow-500 text-yellow-600 hover:bg-yellow-500 hover:text-black transition-colors rounded-xl" 
+                onClick={() => setIsStartShiftDialogOpen(true)}
+                title="Buka Kasir (Mulai Shift)"
+              >
+                <LockKeyhole size={20} />
+              </Button>
+            )}
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={20} />
               <Input 
-                className="pl-10 h-12 bg-card border-border text-base lg:text-lg focus-visible:ring-primary"
+                className="pl-10 h-12 bg-card border-border text-base md:text-lg focus-visible:ring-primary rounded-xl"
                 placeholder="Search menu items..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
           </div>
+          <div className="flex items-center gap-3">
+            {/* Desktop Cart Toggle */}
+            <Button variant="outline" className="hidden md:flex items-center gap-2 h-12" onClick={() => setIsCartOpen(!isCartOpen)}>
+              <ShoppingCart size={20} />
+              <span className="hidden lg:inline">{isCartOpen ? 'Hide Cart' : 'Show Cart'}</span>
+              {cartItemCount > 0 && (
+                <div className="bg-primary text-primary-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {cartItemCount}
+                </div>
+              )}
+            </Button>
+          </div>
         </header>
 
-        <div className="px-4 lg:px-6 pt-4">
+        <div className="px-4 md:px-6 pt-4">
           <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
             {categories.map(cat => (
               <button
@@ -467,29 +512,44 @@ export default function POSPage() {
           </div>
         </div>
 
-        <div className="flex-1 p-4 lg:p-6 overflow-y-auto scrollbar-thin scrollbar-thumb-border">
+        <div className="flex-1 p-4 md:p-6 overflow-y-auto scrollbar-thin scrollbar-thumb-border relative">
+          {!activeShift && (
+            <div className="absolute inset-0 z-10 bg-background/60 backdrop-blur-sm flex flex-col items-center justify-center p-4">
+              <div className="bg-card p-6 md:p-8 rounded-3xl shadow-xl border border-border flex flex-col items-center text-center max-w-sm">
+                <div className="w-20 h-20 bg-yellow-500/20 text-yellow-500 rounded-full flex items-center justify-center mb-6">
+                  <LockKeyhole size={40} />
+                </div>
+                <h3 className="text-2xl font-bold mb-3">Kasir Terkunci</h3>
+                <p className="text-muted-foreground mb-8 text-sm md:text-base">Anda harus menginput modal awal di laci kasir terlebih dahulu untuk mulai menerima pesanan.</p>
+                <Button onClick={() => setIsStartShiftDialogOpen(true)} className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold h-12 text-lg rounded-xl">
+                  Buka Kasir Sekarang
+                </Button>
+              </div>
+            </div>
+          )}
+          
           {isLoadingData ? (
             <div className="flex items-center justify-center h-full">
               <p className="text-muted-foreground">Loading menu...</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4 pb-24 lg:pb-0">
+            <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4 pb-24 md:pb-0">
               {filteredProducts.map(product => (
                 <div 
                   key={product.id}
                   onClick={() => addToCart(product)}
                   className="bg-card border border-border rounded-xl overflow-hidden cursor-pointer group hover:border-primary/50 transition-all hover:shadow-[0_0_15px_rgba(250,204,21,0.1)] flex flex-col h-full"
                 >
-                  <div className="h-28 lg:h-32 w-full overflow-hidden bg-muted">
+                  <div className="h-28 md:h-32 w-full overflow-hidden bg-muted">
                     <img 
                       src={product.image_url} 
                       alt={product.name} 
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                   </div>
-                  <div className="p-3 lg:p-4 flex-1 flex flex-col justify-between">
-                    <h3 className="font-medium lg:font-semibold text-foreground text-sm lg:text-base line-clamp-2">{product.name}</h3>
-                    <p className="text-primary font-medium mt-1 text-sm lg:text-base">Rp {product.price.toLocaleString('id-ID')}</p>
+                  <div className="p-3 md:p-4 flex-1 flex flex-col justify-between">
+                    <h3 className="font-medium md:font-semibold text-foreground text-sm md:text-base line-clamp-2">{product.name}</h3>
+                    <p className="text-primary font-medium mt-1 text-sm md:text-base">Rp {product.price.toLocaleString('id-ID')}</p>
                   </div>
                 </div>
               ))}
@@ -499,32 +559,10 @@ export default function POSPage() {
       </div>
 
       {/* Desktop Cart/Checkout Panel */}
-      <div className="hidden lg:flex w-96 border-l border-border bg-card flex-col shadow-xl z-10 h-full">
+      <div className={`w-80 lg:w-96 border-l border-border bg-card flex-col shadow-xl z-10 h-full transition-all ${isCartOpen ? 'hidden md:flex' : 'hidden'}`}>
         <CartContent />
       </div>
 
-      {/* Mobile Sticky Footer Cart Bar */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 p-4 bg-card border-t border-border z-20 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
-        <Sheet>
-          <SheetTrigger className="w-full h-14 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 flex items-center justify-between px-6 text-lg cursor-pointer">
-            <div className="flex items-center gap-2 font-semibold">
-              <div className="bg-primary-foreground text-primary rounded-md w-7 h-7 flex items-center justify-center text-sm">
-                {cartItemCount}
-              </div>
-              <span>Items</span>
-            </div>
-            <div className="font-bold">
-              Rp {total.toLocaleString('id-ID')}
-            </div>
-          </SheetTrigger>
-          <SheetContent side="bottom" className="h-[85vh] p-0 bg-card border-t border-border rounded-t-2xl flex flex-col">
-            <SheetHeader className="p-4 border-b border-border sr-only">
-              <SheetTitle>Current Order</SheetTitle>
-            </SheetHeader>
-            <CartContent />
-          </SheetContent>
-        </Sheet>
-      </div>
 
       {/* Notes Dialog */}
       <Dialog open={isNoteDialogOpen} onOpenChange={setIsNoteDialogOpen}>
@@ -694,11 +732,7 @@ export default function POSPage() {
 
       <Dialog 
         open={isStartShiftDialogOpen} 
-        onOpenChange={(open) => {
-          // Prevent closing if there's no active shift yet
-          if (!activeShift && !open) return;
-          setIsStartShiftDialogOpen(open);
-        }}
+        onOpenChange={setIsStartShiftDialogOpen}
       >
         <DialogContent 
           className="bg-card border-border sm:max-w-md"
@@ -725,7 +759,10 @@ export default function POSPage() {
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setIsStartShiftDialogOpen(false)}>
+              Batal
+            </Button>
             <Button onClick={() => handleStartShift()} disabled={!startingCashInput} className="bg-primary text-primary-foreground hover:bg-primary/90">
               Mulai Shift
             </Button>
@@ -777,6 +814,7 @@ export default function POSPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
     </MainLayout>
   );
 }

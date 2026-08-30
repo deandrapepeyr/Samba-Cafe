@@ -49,6 +49,7 @@ export default function ReportsPage() {
   const [dailyReports, setDailyReports] = useState<DailyReport[]>([]);
   const [shiftReports, setShiftReports] = useState<ShiftReport[]>([]);
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
+  const [filterType, setFilterType] = useState<'daily'|'weekly'|'monthly'|'yearly'>('daily');
   const [isLoadingData, setIsLoadingData] = useState(true);
 
   // States for Details Dialog
@@ -77,33 +78,6 @@ export default function ReportsPage() {
 
     if (txData) {
       setAllTransactions(txData);
-      
-      const grouped = txData.reduce((acc: Record<string, DailyReport>, tx) => {
-        const dateObj = new Date(tx.created_at);
-        const rawDate = dateObj.toISOString().split('T')[0];
-        const dateStr = dateObj.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-        
-        if (!acc[rawDate]) {
-          acc[rawDate] = {
-            date: dateStr,
-            rawDate: rawDate,
-            totalTransactions: 0,
-            qrisRevenue: 0,
-            cashRevenue: 0,
-            totalRevenue: 0
-          };
-        }
-        
-        acc[rawDate].totalTransactions += 1;
-        acc[rawDate].totalRevenue += tx.total;
-        
-        if (tx.method === 'QRIS') acc[rawDate].qrisRevenue += tx.total;
-        if (tx.method === 'Cash') acc[rawDate].cashRevenue += tx.total;
-        
-        return acc;
-      }, {});
-
-      setDailyReports(Object.values(grouped));
     }
     
     // Fetch Shifts for Shift Report
@@ -144,6 +118,67 @@ export default function ReportsPage() {
     setIsLoadingData(false);
   };
 
+  useEffect(() => {
+    if (allTransactions.length > 0) {
+      const grouped = allTransactions.reduce((acc: Record<string, DailyReport>, tx) => {
+        const dateObj = new Date(tx.created_at);
+        let groupKey = '';
+        let dateStr = '';
+        let rawDate = '';
+        
+        if (filterType === 'daily') {
+          rawDate = dateObj.toISOString().split('T')[0];
+          groupKey = rawDate;
+          dateStr = dateObj.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        } else if (filterType === 'monthly') {
+          groupKey = `${dateObj.getFullYear()}-${(dateObj.getMonth() + 1).toString().padStart(2, '0')}`;
+          rawDate = groupKey;
+          dateStr = dateObj.toLocaleDateString('id-ID', { year: 'numeric', month: 'long' });
+        } else if (filterType === 'yearly') {
+          groupKey = `${dateObj.getFullYear()}`;
+          rawDate = groupKey;
+          dateStr = `${dateObj.getFullYear()}`;
+        } else if (filterType === 'weekly') {
+          const d = new Date(dateObj);
+          const day = d.getDay();
+          const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+          const startOfWeek = new Date(d.setDate(diff));
+          
+          const endOfWeek = new Date(startOfWeek);
+          endOfWeek.setDate(endOfWeek.getDate() + 6);
+          
+          groupKey = `${startOfWeek.getFullYear()}-W${Math.ceil((startOfWeek.getTime() - new Date(startOfWeek.getFullYear(), 0, 1).getTime()) / 86400000 / 7)}`;
+          rawDate = groupKey;
+          dateStr = `${startOfWeek.toLocaleDateString('id-ID', {day: 'numeric', month: 'short'})} - ${endOfWeek.toLocaleDateString('id-ID', {day: 'numeric', month: 'short', year: 'numeric'})}`;
+        }
+        
+        if (!acc[groupKey]) {
+          acc[groupKey] = {
+            date: dateStr,
+            rawDate: rawDate,
+            totalTransactions: 0,
+            qrisRevenue: 0,
+            cashRevenue: 0,
+            totalRevenue: 0
+          };
+        }
+        
+        acc[groupKey].totalTransactions += 1;
+        acc[groupKey].totalRevenue += tx.total;
+        
+        if (tx.method === 'QRIS') acc[groupKey].qrisRevenue += tx.total;
+        if (tx.method === 'Cash') acc[groupKey].cashRevenue += tx.total;
+        
+        return acc;
+      }, {});
+      
+      const sortedReports = Object.values(grouped).sort((a, b) => b.rawDate.localeCompare(a.rawDate));
+      setDailyReports(sortedReports);
+    } else {
+      setDailyReports([]);
+    }
+  }, [allTransactions, filterType]);
+
   if (role !== 'manager') return null;
 
   // Filter transactions for the selected date dialog
@@ -175,8 +210,22 @@ export default function ReportsPage() {
           <TabsContent value="daily" className="flex-1 m-0 data-[state=active]:flex flex-col min-h-0">
             <Card className="flex-1 flex flex-col bg-card border-border overflow-hidden shadow-sm">
               <CardHeader className="bg-muted/30 border-b border-border pb-4 pt-6 flex flex-row items-center justify-between">
-                <CardTitle className="text-lg">Ringkasan Pendapatan Harian</CardTitle>
-                <span className="text-xs text-muted-foreground italic">* Klik pada baris untuk melihat detail transaksi</span>
+                <div>
+                  <CardTitle className="text-lg">Ringkasan Pendapatan Harian</CardTitle>
+                  <span className="text-xs text-muted-foreground italic">* Klik pada baris untuk melihat detail transaksi</span>
+                </div>
+                <div>
+                  <select
+                    value={filterType}
+                    onChange={(e) => setFilterType(e.target.value as any)}
+                    className="bg-card border border-border text-sm rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary font-medium"
+                  >
+                    <option value="daily">Harian (Daily)</option>
+                    <option value="weekly">Mingguan (Weekly)</option>
+                    <option value="monthly">Bulanan (Monthly)</option>
+                    <option value="yearly">Tahunan (Yearly)</option>
+                  </select>
+                </div>
               </CardHeader>
               <ScrollArea className="flex-1">
                 <div className="p-0">

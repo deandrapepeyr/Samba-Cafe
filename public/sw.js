@@ -55,7 +55,13 @@ self.addEventListener('fetch', (event) => {
       })
       .catch(() => {
         // Fallback to cache when offline
-        return caches.match(event.request);
+        return caches.match(event.request).then((cachedResponse) => {
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          // If not found in cache, we must return a valid Response to avoid TypeError
+          return Response.error();
+        });
       })
   );
 });

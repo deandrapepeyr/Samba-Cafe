@@ -2,6 +2,7 @@
 
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { DollarSign, Package, TrendingUp, Users, TrendingDown, Loader2, CreditCard, Banknote, AlertTriangle, Clock, ArrowUpRight, ArrowDownRight, ShoppingBag } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
@@ -24,6 +25,12 @@ export default function DashboardPage() {
   
   const [qrisToday, setQrisToday] = useState(0);
   const [cashToday, setCashToday] = useState(0);
+  
+  const [allTimeRevenue, setAllTimeRevenue] = useState(0);
+  const [allTimeOrders, setAllTimeOrders] = useState(0);
+  const [allTimeQris, setAllTimeQris] = useState(0);
+  const [allTimeCash, setAllTimeCash] = useState(0);
+  const [allTimeItems, setAllTimeItems] = useState<{name: string; count: number; revenue: number}[]>([]);
   
   const [topItems, setTopItems] = useState<{name: string; count: number; revenue: number}[]>([]);
   const [activeCashiers, setActiveCashiers] = useState(0);
@@ -83,6 +90,31 @@ export default function DashboardPage() {
     const revYesterday = txYesterdayList.reduce((sum, tx) => sum + tx.total, 0);
     setRevenueToday(revToday);
     setRevenueYesterday(revYesterday);
+    
+    // All-time Metrics
+    const { data: allTimeTx } = await supabase.from('transactions').select('id, total, method');
+    if (allTimeTx) {
+      setAllTimeOrders(allTimeTx.length);
+      setAllTimeRevenue(allTimeTx.reduce((sum, tx) => sum + tx.total, 0));
+      setAllTimeQris(allTimeTx.filter(tx => tx.method === 'QRIS').reduce((sum, tx) => sum + tx.total, 0));
+      setAllTimeCash(allTimeTx.filter(tx => tx.method === 'Cash').reduce((sum, tx) => sum + tx.total, 0));
+      
+      const { data: allTimeItemsData } = await supabase.from('transaction_items').select('product_name, quantity, price');
+      if (allTimeItemsData) {
+        const itemMap: Record<string, {count: number; revenue: number}> = {};
+        allTimeItemsData.forEach(item => {
+          if (!itemMap[item.product_name]) itemMap[item.product_name] = { count: 0, revenue: 0 };
+          itemMap[item.product_name].count += item.quantity;
+          itemMap[item.product_name].revenue += item.quantity * item.price;
+        });
+        
+        const sorted = Object.entries(itemMap)
+          .map(([name, data]) => ({ name, count: data.count, revenue: data.revenue }))
+          .sort((a, b) => b.count - a.count);
+        
+        setAllTimeItems(sorted);
+      }
+    }
     
     let revPct = 0;
     if (revYesterday === 0) {
@@ -245,6 +277,92 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            {/* Row 1.5: All Time Stats */}
+            <div className="grid gap-4 grid-cols-1 md:grid-cols-2 mb-4">
+              <Dialog>
+                <DialogTrigger className="text-left w-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <Card className="bg-card border-border border-l-4 border-l-primary cursor-pointer hover:bg-muted/50 transition-colors">
+                    <CardContent className="p-5 flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-muted-foreground font-medium mb-1">Total Pendapatan (Keseluruhan)</p>
+                        <p className="text-2xl font-bold">Rp {allTimeRevenue.toLocaleString('id-ID')}</p>
+                      </div>
+                      <div className="w-12 h-12 bg-primary/15 rounded-xl flex items-center justify-center shrink-0">
+                        <DollarSign size={24} className="text-primary" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </DialogTrigger>
+                <DialogContent className="bg-card border-border sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Detail Total Pendapatan</DialogTitle>
+                  </DialogHeader>
+                  <div className="py-4 space-y-4">
+                    <div className="flex items-center justify-between p-4 border border-border rounded-xl bg-background">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-500/15 rounded-lg flex items-center justify-center">
+                          <CreditCard size={20} className="text-blue-500" />
+                        </div>
+                        <span className="font-semibold">QRIS</span>
+                      </div>
+                      <span className="text-lg font-bold">Rp {allTimeQris.toLocaleString('id-ID')}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-4 border border-border rounded-xl bg-background">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-green-500/15 rounded-lg flex items-center justify-center">
+                          <Banknote size={20} className="text-green-500" />
+                        </div>
+                        <span className="font-semibold">Cash</span>
+                      </div>
+                      <span className="text-lg font-bold">Rp {allTimeCash.toLocaleString('id-ID')}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-4 pt-2">
+                      <span className="text-muted-foreground font-medium">Total Keseluruhan</span>
+                      <span className="text-xl font-bold text-primary">Rp {allTimeRevenue.toLocaleString('id-ID')}</span>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              <Dialog>
+                <DialogTrigger className="text-left w-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <Card className="bg-card border-border border-l-4 border-l-blue-500 cursor-pointer hover:bg-muted/50 transition-colors">
+                    <CardContent className="p-5 flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-muted-foreground font-medium mb-1">Total Orderan (Keseluruhan)</p>
+                        <p className="text-2xl font-bold">{allTimeOrders}</p>
+                      </div>
+                      <div className="w-12 h-12 bg-blue-500/15 rounded-xl flex items-center justify-center shrink-0">
+                        <ShoppingBag size={24} className="text-blue-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </DialogTrigger>
+                <DialogContent className="bg-card border-border sm:max-w-lg">
+                  <DialogHeader>
+                    <DialogTitle>Detail Total Menu Dipesan</DialogTitle>
+                  </DialogHeader>
+                  <div className="py-4">
+                    <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2 scrollbar-thin">
+                      {allTimeItems.length === 0 ? (
+                        <p className="text-center text-muted-foreground py-4">Belum ada data pesanan</p>
+                      ) : (
+                        allTimeItems.map((item, idx) => (
+                          <div key={idx} className="flex justify-between items-center p-3 border border-border rounded-lg bg-background">
+                            <span className="font-medium text-sm">{item.name}</span>
+                            <div className="flex items-center gap-4">
+                              <span className="text-sm font-bold bg-primary/10 text-primary px-3 py-1 rounded-full">{item.count} porsi</span>
+                              <span className="text-sm text-muted-foreground w-24 text-right">Rp {item.revenue.toLocaleString('id-ID')}</span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+
             {/* Row 2: Quick Stats */}
             <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
               <Card className="bg-card border-border">
@@ -260,7 +378,7 @@ export default function DashboardPage() {
                     </span>
                   </div>
                   <p className="text-2xl font-bold">{txToday}</p>
-                  <p className="text-xs text-muted-foreground mt-1">Total Pesanan</p>
+                  <p className="text-xs text-muted-foreground mt-1">Pesanan Hari Ini</p>
                 </CardContent>
               </Card>
 
