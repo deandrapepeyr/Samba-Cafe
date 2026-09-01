@@ -50,7 +50,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!isLoading) {
       if (!role) {
-        router.replace('/login');
+        router.replace('/pos');
       } else if (role !== 'manager') {
         router.replace('/pos');
       } else {

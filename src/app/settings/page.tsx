@@ -14,13 +14,13 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 export default function SettingsPage() {
-  const { role, isLoading } = useAuth();
+  const { role, userName, updateUserName, isLoading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (!isLoading) {
       if (!role) {
-        router.replace('/login');
+        router.replace('/pos');
       } else if (role !== 'manager') {
         router.replace('/pos');
       }
@@ -275,6 +275,12 @@ export default function SettingsPage() {
     
     if (!error) {
       setUsers(users.map(u => u.id === editingUser.id ? { ...u, ...updateData } : u));
+      if (editingUser.role === role) {
+        updateUserName(editingUser.name);
+      }
+      if (editingUser.role === 'manager' && editingUser.decoy_name) {
+        localStorage.setItem('samba_manager_decoy_name', editingUser.decoy_name);
+      }
       setIsEditUserDialogOpen(false);
       setEditingUser(null);
     } else {
@@ -868,6 +874,18 @@ export default function SettingsPage() {
                   <option value="manager">Manager / Admin</option>
                 </select>
               </div>
+
+              {editingUser.role === 'manager' && (
+                <div className="grid grid-cols-4 items-center gap-4 pt-1">
+                  <label className="text-right text-xs font-semibold text-amber-500 leading-tight">Nama Samaran Kasir (Decoy)</label>
+                  <Input 
+                    placeholder="Contoh: budi, Kasir 3..."
+                    className="col-span-3 bg-background border-border text-sm" 
+                    value={editingUser.decoy_name ?? (typeof window !== 'undefined' ? localStorage.getItem('samba_manager_decoy_name') || 'budi' : 'budi')}
+                    onChange={(e) => setEditingUser({...editingUser, decoy_name: e.target.value})}
+                  />
+                </div>
+              )}
             </div>
           )}
           <DialogFooter>

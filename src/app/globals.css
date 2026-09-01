@@ -76,7 +76,21 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    -ms-overflow-style: none !important;
+    scrollbar-width: none !important;
   }
+
+  ::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
+  }
+
+  [data-slot="scroll-area-scrollbar"] {
+    display: none !important;
+  }
+
   body {
     @apply bg-background text-foreground;
     overflow: hidden;

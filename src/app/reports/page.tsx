@@ -127,7 +127,7 @@ export default function ReportsPage() {
         let rawDate = '';
         
         if (filterType === 'daily') {
-          rawDate = dateObj.toISOString().split('T')[0];
+          rawDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
           groupKey = rawDate;
           dateStr = dateObj.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         } else if (filterType === 'monthly') {
@@ -228,7 +228,52 @@ export default function ReportsPage() {
                 </div>
               </CardHeader>
               <ScrollArea className="flex-1">
-                <div className="p-0">
+                {/* Mobile Card List View */}
+                <div className="md:hidden space-y-3 p-4">
+                  {isLoadingData ? (
+                    <div className="py-12 text-center text-muted-foreground">
+                      <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
+                    </div>
+                  ) : dailyReports.length === 0 ? (
+                    <div className="p-8 text-center text-muted-foreground text-xs border border-dashed border-border rounded-xl">
+                      Belum ada data transaksi.
+                    </div>
+                  ) : (
+                    dailyReports.map((report, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => setSelectedDailyReport(report)}
+                        className="p-4 bg-card border border-border rounded-xl shadow-sm hover:border-primary/50 transition-all cursor-pointer space-y-3"
+                      >
+                        <div className="flex items-center justify-between border-b border-border/60 pb-2">
+                          <span className="font-bold text-foreground">{report.date}</span>
+                          <span className="bg-primary/10 text-primary px-2.5 py-0.5 rounded-full text-xs font-bold">
+                            {report.totalTransactions} Pesanan
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                          <div>
+                            <p className="text-[10px] uppercase font-semibold text-muted-foreground/70">QRIS</p>
+                            <p className="font-medium text-foreground mt-0.5">Rp {report.qrisRevenue.toLocaleString('id-ID')}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase font-semibold text-muted-foreground/70">Cash</p>
+                            <p className="font-medium text-foreground mt-0.5">Rp {report.cashRevenue.toLocaleString('id-ID')}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center pt-2 border-t border-border/40 text-xs">
+                          <span className="text-muted-foreground font-medium">Total Pendapatan:</span>
+                          <span className="font-bold text-sm text-primary">Rp {report.totalRevenue.toLocaleString('id-ID')}</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Desktop Table View */}
+                <div className="hidden md:block p-0">
                   <table className="w-full text-left text-sm whitespace-nowrap">
                     <thead className="bg-muted/50 text-muted-foreground sticky top-0 z-10">
                       <tr>
@@ -288,7 +333,68 @@ export default function ReportsPage() {
                 <CardTitle className="text-lg">Laporan Setoran Kasir (Shift)</CardTitle>
               </CardHeader>
               <ScrollArea className="flex-1">
-                <div className="p-0">
+                {/* Mobile Card List View for Shifts */}
+                <div className="md:hidden space-y-3 p-4">
+                  {isLoadingData ? (
+                    <div className="py-12 text-center text-muted-foreground">
+                      <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
+                    </div>
+                  ) : shiftReports.length === 0 ? (
+                    <div className="p-8 text-center text-muted-foreground text-xs border border-dashed border-border rounded-xl">
+                      Belum ada data shift kasir.
+                    </div>
+                  ) : (
+                    shiftReports.map((shift) => (
+                      <div key={shift.id} className="p-4 bg-card border border-border rounded-xl shadow-sm space-y-3">
+                        <div className="flex items-center justify-between border-b border-border/60 pb-2">
+                          <div className="flex items-center gap-2 font-bold text-foreground">
+                            <UserSquare2 className="text-muted-foreground" size={18} />
+                            <span>{shift.cashierName}</span>
+                          </div>
+                          {shift.status === 'active' ? (
+                            <span className="text-[10px] bg-green-500/20 text-green-500 px-2 py-0.5 rounded-full uppercase tracking-wider font-bold animate-pulse">Aktif</span>
+                          ) : (
+                            <span className="text-[10px] bg-muted text-muted-foreground px-2 py-0.5 rounded-full font-semibold">Shift Selesai</span>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                          <div>
+                            <p className="text-[10px] uppercase font-semibold text-muted-foreground/70">Waktu & Jam</p>
+                            <p className="font-medium text-foreground mt-0.5">{shift.date} • {shift.timeRange}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase font-semibold text-muted-foreground/70">Modal Awal</p>
+                            <p className="font-medium text-foreground mt-0.5">Rp {shift.startingCash.toLocaleString('id-ID')}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center pt-2 border-t border-border/40 text-xs">
+                          <span className="text-muted-foreground font-medium">Setoran Fisik:</span>
+                          <span className="font-bold text-foreground">{shift.actualRevenue !== null ? `Rp ${shift.actualRevenue.toLocaleString('id-ID')}` : '-'}</span>
+                        </div>
+
+                        {shift.difference !== null && (
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-muted-foreground font-medium">Selisih:</span>
+                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                              shift.difference < 0 
+                                ? "bg-destructive/10 text-destructive border border-destructive/20" 
+                                : shift.difference > 0 
+                                  ? "bg-green-500/10 text-green-500 border border-green-500/20" 
+                                  : "bg-muted text-muted-foreground"
+                            }`}>
+                              {shift.difference > 0 ? '+' : ''}Rp {shift.difference.toLocaleString('id-ID')}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Desktop Table View */}
+                <div className="hidden md:block p-0">
                   <table className="w-full text-left text-sm whitespace-nowrap">
                     <thead className="bg-muted/50 text-muted-foreground sticky top-0">
                       <tr>

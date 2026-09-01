@@ -190,7 +190,75 @@ export default function StockPage() {
           </CardHeader>
           
           <ScrollArea className="flex-1">
-            <div className="p-0">
+            {/* Mobile Card List View */}
+            <div className="md:hidden space-y-3 p-4">
+              {isLoadingData ? (
+                <div className="py-12 text-center text-muted-foreground space-y-3">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
+                  <p className="text-xs">Loading inventory...</p>
+                </div>
+              ) : filteredStocks.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground text-xs border border-dashed border-border rounded-xl">
+                  No stock items found.
+                </div>
+              ) : (
+                filteredStocks.map((item) => {
+                  const isLowStock = item.quantity <= item.min_stock_alert;
+                  return (
+                    <div key={item.id} className={`p-4 bg-card border border-border rounded-xl shadow-sm space-y-3 ${isLowStock ? 'bg-destructive/5 border-destructive/30' : ''}`}>
+                      <div className="flex items-center justify-between border-b border-border/60 pb-2">
+                        <div className="flex items-center gap-2 font-bold text-foreground">
+                          <span>{item.name}</span>
+                          {isLowStock && <AlertTriangle size={14} className="text-destructive" />}
+                        </div>
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${isLowStock ? 'bg-destructive/10 text-destructive' : 'bg-primary/10 text-primary'}`}>
+                          Stok: {item.quantity} {item.unit}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <p className="text-[10px] text-muted-foreground/70 font-semibold uppercase">Modal per Unit</p>
+                          <p className="font-medium text-foreground mt-0.5">Rp {item.cost_per_unit.toLocaleString('id-ID')}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground/70 font-semibold uppercase">Total Modal</p>
+                          <p className="font-bold text-primary mt-0.5">Rp {(item.quantity * item.cost_per_unit).toLocaleString('id-ID')}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/40">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="h-8 text-xs bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 border-none font-semibold"
+                          onClick={() => {
+                            setSelectedStock(item);
+                            setIsUpdateStockDialogOpen(true);
+                          }}
+                        >
+                          Update Stok
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                          onClick={() => {
+                            setSelectedStock(item);
+                            setIsEditDialogOpen(true);
+                          }}
+                        >
+                          <Edit size={14} />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden md:block p-0">
               <table className="w-full text-left text-sm whitespace-nowrap">
                 <thead className="bg-muted/50 text-muted-foreground sticky top-0">
                   <tr>

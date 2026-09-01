@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Search, Receipt, Loader2, Calendar, DollarSign, Package } from 'lucide-react';
+import { Search, Receipt, Loader2, Calendar, DollarSign, Package, Clock, UserCheck } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
@@ -42,6 +42,17 @@ type Shift = {
   status: string;
 };
 
+type CashierGroup = {
+  cashier_name: string;
+  hasActiveShift: boolean;
+  activeShift: Shift | null;
+  latestShift: Shift;
+  allShifts: Shift[];
+  totalShiftsCount: number;
+  totalRevenue: number;
+  totalOrders: number;
+};
+
 export default function HistoryPage() {
   const { role, isLoading } = useAuth();
   const router = useRouter();
@@ -54,7 +65,7 @@ export default function HistoryPage() {
 
   useEffect(() => {
     if (!isLoading && !role) {
-      router.replace('/login');
+      router.replace('/pos');
     }
   }, [role, isLoading, router]);
 
@@ -97,7 +108,7 @@ export default function HistoryPage() {
         return {
           id: tx.id,
           date: dateStr,
-          rawDate: dateObj.toISOString().split('T')[0],
+          rawDate: `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`,
           method: tx.method,
           total: tx.total,
           cashier_name: tx.cashier_name,
@@ -136,6 +147,7 @@ export default function HistoryPage() {
   
   // Dialog state
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+  const [selectedCashierGroup, setSelectedCashierGroup] = useState<CashierGroup | null>(null);
 
   if (!role) return null;
 
@@ -148,9 +160,55 @@ export default function HistoryPage() {
     return matchesFilter && matchesSearch && matchesDate;
   });
   
+  const todayStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
+
   const filteredShifts = shifts.filter(shift => {
-    const shiftDate = new Date(shift.start_time).toISOString().split('T')[0];
-    return !filterDate || shiftDate === filterDate;
+    const d = new Date(shift.start_time);
+    const shiftDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const isShiftActiveToday = shift.status === 'active' && filterDate === todayStr;
+    return !filterDate || shiftDate === filterDate || isShiftActiveToday;
+  });
+
+  // Group shifts by Cashier and sort active ones to the top
+  const cashierGroupsMap = new Map<string, Shift[]>();
+
+  filteredShifts.forEach(shift => {
+    const key = shift.cashier_name || 'Unknown Cashier';
+    if (!cashierGroupsMap.has(key)) {
+      cashierGroupsMap.set(key, []);
+    }
+    cashierGroupsMap.get(key)!.push(shift);
+  });
+
+  const groupedCashiers: CashierGroup[] = Array.from(cashierGroupsMap.entries()).map(([cashier_name, cashierShifts]) => {
+    const sortedShifts = [...cashierShifts].sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
+    const activeShift = sortedShifts.find(s => s.status === 'active') || null;
+    const latestShift = sortedShifts[0];
+
+    const cashierTxs = filteredTransactions.filter(t => (t.cashier_name || '').toLowerCase() === cashier_name.toLowerCase());
+    const totalRevenue = cashierTxs.reduce((sum, t) => sum + t.total, 0);
+    const totalOrders = cashierTxs.length;
+
+    return {
+      cashier_name,
+      hasActiveShift: !!activeShift,
+      activeShift,
+      latestShift,
+      allShifts: sortedShifts,
+      totalShiftsCount: sortedShifts.length,
+      totalRevenue,
+      totalOrders,
+    };
+  });
+
+  // Active cashier stays at the top of the list!
+  groupedCashiers.sort((a, b) => {
+    if (a.hasActiveShift && !b.hasActiveShift) return -1;
+    if (!a.hasActiveShift && b.hasActiveShift) return 1;
+    
+    const timeA = new Date(a.latestShift.start_time).getTime();
+    const timeB = new Date(b.latestShift.start_time).getTime();
+    return timeB - timeA;
   });
 
   // Calculate Summary
@@ -212,7 +270,7 @@ export default function HistoryPage() {
             <TabsList className="bg-muted">
               <TabsTrigger value="transactions" className="data-[state=active]:bg-background">Transactions</TabsTrigger>
               {role === 'manager' && (
-                <TabsTrigger value="shifts" className="data-[state=active]:bg-background">Shifts History</TabsTrigger>
+                <TabsTrigger value="shifts" className="data-[state=active]:bg-background">Cashier Shifts</TabsTrigger>
               )}
             </TabsList>
           </div>
@@ -248,7 +306,76 @@ export default function HistoryPage() {
               </CardHeader>
               
               <ScrollArea className="flex-1">
-                <div className="p-0">
+                {/* Mobile Card List View (Visible on Mobile) */}
+                <div className="md:hidden space-y-3 p-4">
+                  {isLoadingData ? (
+                    <div className="py-12 text-center text-muted-foreground space-y-3">
+                      <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
+                      <p className="text-xs">Memuat riwayat transaksi...</p>
+                    </div>
+                  ) : filteredTransactions.length === 0 ? (
+                    <div className="p-8 text-center text-muted-foreground text-xs border border-dashed border-border rounded-xl">
+                      No transactions found.
+                    </div>
+                  ) : (
+                    filteredTransactions.map((trx) => {
+                      const normSt = (trx.status || 'preparing').toLowerCase();
+                      const isPrep = normSt === 'preparing' || normSt === 'paid';
+                      const isReady = normSt === 'ready';
+
+                      return (
+                        <div
+                          key={trx.id}
+                          onClick={() => setSelectedTx(trx)}
+                          className="p-4 bg-card border border-border rounded-xl shadow-sm hover:border-primary/50 transition-all cursor-pointer space-y-3"
+                        >
+                          <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
+                            <div className="flex items-center gap-2 font-bold text-foreground">
+                              <Receipt size={16} className="text-primary" />
+                              <span>#{trx.id}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                                trx.method === 'QRIS' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : 'bg-green-500/10 text-green-500 border-green-500/20'
+                              }`}>
+                                {trx.method}
+                              </span>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                                isPrep ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' :
+                                isReady ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                                'bg-muted text-muted-foreground border-border'
+                              }`}>
+                                {isPrep ? '⏳ Sedang Dibuat' : isReady ? '🔔 Siap' : '✅ Selesai'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                            <div>
+                              <p className="text-[10px] uppercase font-semibold text-muted-foreground/70">Waktu & Tanggal</p>
+                              <p className="font-medium text-foreground mt-0.5">{trx.date}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase font-semibold text-muted-foreground/70">Kasir</p>
+                              <p className="font-medium text-foreground mt-0.5 truncate">{trx.cashier_name || 'Unknown'}</p>
+                            </div>
+                          </div>
+
+                          <div className="flex justify-between items-center pt-2 border-t border-border/40 text-xs">
+                            <span className="text-muted-foreground font-medium">{trx.itemsCount} item pesanan</span>
+                            <div className="flex items-center gap-1">
+                              <span className="font-bold text-sm text-primary">Rp {trx.total.toLocaleString('id-ID')}</span>
+                              <span className="text-muted-foreground text-xs">➔</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Desktop Table View (Hidden on Mobile) */}
+                <div className="hidden md:block p-0">
                   <table className="w-full text-left text-sm whitespace-nowrap">
                     <thead className="bg-muted/50 text-muted-foreground sticky top-0">
                       <tr>
@@ -257,13 +384,14 @@ export default function HistoryPage() {
                         <th className="font-medium p-4">Cashier</th>
                         <th className="font-medium p-4">Items</th>
                         <th className="font-medium p-4">Payment Method</th>
+                        <th className="font-medium p-4">Status Pesanan</th>
                         <th className="font-medium p-4 text-right pr-6">Total Amount</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
                       {isLoadingData ? (
                         <tr>
-                          <td colSpan={6} className="p-12 text-center text-muted-foreground">
+                          <td colSpan={7} className="p-12 text-center text-muted-foreground">
                             <div className="flex flex-col items-center justify-center gap-4">
                               <Loader2 className="w-8 h-8 animate-spin text-primary" />
                               <p>Memuat riwayat transaksi...</p>
@@ -272,34 +400,49 @@ export default function HistoryPage() {
                         </tr>
                       ) : (
                         <>
-                          {filteredTransactions.map((trx) => (
-                            <tr 
-                              key={trx.id} 
-                              onClick={() => setSelectedTx(trx)}
-                              className="hover:bg-muted/50 transition-colors cursor-pointer group"
-                            >
-                              <td className="p-4 pl-6 font-medium flex items-center gap-2 group-hover:text-primary transition-colors">
-                                <Receipt size={16} className="text-primary" />
-                                #{trx.id}
-                              </td>
-                              <td className="p-4 text-muted-foreground">{trx.date}</td>
-                              <td className="p-4 text-muted-foreground">{trx.cashier_name || 'Unknown'}</td>
-                              <td className="p-4">{trx.itemsCount} items</td>
-                              <td className="p-4">
-                                <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${
-                                  trx.method === 'QRIS' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : 'bg-green-500/10 text-green-500 border-green-500/20'
-                                }`}>
-                                  {trx.method}
-                                </span>
-                              </td>
-                              <td className="p-4 text-right pr-6 font-bold">
-                                Rp {trx.total.toLocaleString('id-ID')}
-                              </td>
-                            </tr>
-                          ))}
+                          {filteredTransactions.map((trx) => {
+                            const normSt = (trx.status || 'preparing').toLowerCase();
+                            const isPrep = normSt === 'preparing' || normSt === 'paid';
+                            const isReady = normSt === 'ready';
+
+                            return (
+                              <tr 
+                                key={trx.id} 
+                                onClick={() => setSelectedTx(trx)}
+                                className="hover:bg-muted/50 transition-colors cursor-pointer group"
+                              >
+                                <td className="p-4 pl-6 font-medium flex items-center gap-2 group-hover:text-primary transition-colors">
+                                  <Receipt size={16} className="text-primary" />
+                                  #{trx.id}
+                                </td>
+                                <td className="p-4 text-muted-foreground">{trx.date}</td>
+                                <td className="p-4 text-muted-foreground">{trx.cashier_name || 'Unknown'}</td>
+                                <td className="p-4">{trx.itemsCount} items</td>
+                                <td className="p-4">
+                                  <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${
+                                    trx.method === 'QRIS' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : 'bg-green-500/10 text-green-500 border-green-500/20'
+                                  }`}>
+                                    {trx.method}
+                                  </span>
+                                </td>
+                                <td className="p-4">
+                                  <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${
+                                    isPrep ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' :
+                                    isReady ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                                    'bg-muted text-muted-foreground border-border'
+                                  }`}>
+                                    {isPrep ? '⏳ Sedang Dibuat' : isReady ? '🔔 Siap' : '✅ Selesai'}
+                                  </span>
+                                </td>
+                                <td className="p-4 text-right pr-6 font-bold">
+                                  Rp {trx.total.toLocaleString('id-ID')}
+                                </td>
+                              </tr>
+                            );
+                          })}
                           {filteredTransactions.length === 0 && (
                             <tr>
-                              <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                              <td colSpan={7} className="p-8 text-center text-muted-foreground">
                                 No transactions found.
                               </td>
                             </tr>
@@ -317,16 +460,77 @@ export default function HistoryPage() {
             <TabsContent value="shifts" className="flex-1 m-0 data-[state=active]:flex flex-col min-h-0">
               <Card className="flex-1 flex flex-col bg-card border-border overflow-hidden">
                 <ScrollArea className="flex-1">
-                  <div className="p-0">
+                  {/* Mobile Card List View for Shifts */}
+                  <div className="md:hidden space-y-3 p-4">
+                    {isLoadingData ? (
+                      <div className="py-12 text-center text-muted-foreground">
+                        <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
+                      </div>
+                    ) : groupedCashiers.length === 0 ? (
+                      <div className="p-8 text-center text-muted-foreground text-xs border border-dashed border-border rounded-xl">
+                        No cashiers recorded for this date.
+                      </div>
+                    ) : (
+                      groupedCashiers.map((cg) => {
+                        const startDate = new Date(cg.latestShift.start_time);
+                        const endDate = cg.latestShift.end_time ? new Date(cg.latestShift.end_time) : null;
+                        const timeStr = `${startDate.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'})} - ${endDate ? endDate.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) : 'Active'}`;
+
+                        return (
+                          <div
+                            key={cg.cashier_name}
+                            onClick={() => setSelectedCashierGroup(cg)}
+                            className="p-4 bg-card border border-border rounded-xl shadow-sm hover:border-primary/50 transition-all cursor-pointer space-y-3"
+                          >
+                            <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs">
+                                  {cg.cashier_name.charAt(0).toUpperCase()}
+                                </div>
+                                <span className="font-bold text-foreground">{cg.cashier_name}</span>
+                              </div>
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                                cg.hasActiveShift 
+                                  ? 'bg-green-500/10 text-green-500 border-green-500/30' 
+                                  : 'bg-muted text-muted-foreground border-border'
+                              }`}>
+                                {cg.hasActiveShift && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}
+                                {cg.hasActiveShift ? 'Active Shift' : 'Shift Ended'}
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              <div>
+                                <p className="text-[10px] text-muted-foreground/70 font-semibold uppercase">Jam Shift</p>
+                                <p className="font-medium text-foreground mt-0.5">{timeStr}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] text-muted-foreground/70 font-semibold uppercase">Shift Terekam</p>
+                                <p className="font-medium text-foreground mt-0.5">{cg.totalShiftsCount} shift</p>
+                              </div>
+                            </div>
+
+                            <div className="flex justify-between items-center pt-2 border-t border-border/40 text-xs">
+                              <span className="text-muted-foreground">Total Penjualan:</span>
+                              <span className="font-bold text-sm text-foreground">Rp {cg.totalRevenue.toLocaleString('id-ID')}</span>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Desktop Table View for Shifts */}
+                  <div className="hidden md:block p-0">
                     <table className="w-full text-left text-sm whitespace-nowrap">
                       <thead className="bg-muted/50 text-muted-foreground sticky top-0">
                         <tr>
                           <th className="font-medium p-4 pl-6">Cashier</th>
-                          <th className="font-medium p-4">Time (Start - End)</th>
-                          <th className="font-medium p-4">Starting Cash</th>
-                          <th className="font-medium p-4">Expected Cash</th>
-                          <th className="font-medium p-4">Actual Cash</th>
-                          <th className="font-medium p-4 text-right pr-6">Difference</th>
+                          <th className="font-medium p-4">Status</th>
+                          <th className="font-medium p-4">Latest Shift Time</th>
+                          <th className="font-medium p-4">Shifts Recorded</th>
+                          <th className="font-medium p-4">Sales Revenue</th>
+                          <th className="font-medium p-4 text-right pr-6">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
@@ -338,41 +542,54 @@ export default function HistoryPage() {
                           </tr>
                         ) : (
                           <>
-                            {filteredShifts.map((shift) => {
-                              const diff = shift.ending_cash !== null && shift.expected_cash !== null 
-                                ? shift.ending_cash - shift.expected_cash 
-                                : null;
-                              
-                              const startDate = new Date(shift.start_time);
-                              const endDate = shift.end_time ? new Date(shift.end_time) : null;
+                            {groupedCashiers.map((cg) => {
+                              const startDate = new Date(cg.latestShift.start_time);
+                              const endDate = cg.latestShift.end_time ? new Date(cg.latestShift.end_time) : null;
                               const timeStr = `${startDate.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'})} - ${endDate ? endDate.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) : 'Active'}`;
 
                               return (
-                                <tr key={shift.id} className="hover:bg-muted/50 transition-colors">
+                                <tr 
+                                  key={cg.cashier_name} 
+                                  onClick={() => setSelectedCashierGroup(cg)}
+                                  className="hover:bg-muted/50 transition-colors cursor-pointer group"
+                                >
                                   <td className="p-4 pl-6 font-medium">
-                                    <div className="flex items-center gap-2">
-                                      {shift.cashier_name}
-                                      {shift.status === 'active' && <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" title="Active Shift" />}
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-sm">
+                                        {cg.cashier_name.charAt(0).toUpperCase()}
+                                      </div>
+                                      <div className="font-semibold group-hover:text-primary transition-colors">
+                                        {cg.cashier_name}
+                                      </div>
                                     </div>
                                   </td>
+                                  <td className="p-4">
+                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                                      cg.hasActiveShift 
+                                        ? 'bg-green-500/10 text-green-500 border-green-500/30' 
+                                        : 'bg-muted text-muted-foreground border-border'
+                                    }`}>
+                                      {cg.hasActiveShift && <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />}
+                                      {cg.hasActiveShift ? 'Active Shift' : 'Shift Ended'}
+                                    </span>
+                                  </td>
                                   <td className="p-4 text-muted-foreground">{timeStr}</td>
-                                  <td className="p-4 text-muted-foreground">Rp {shift.starting_cash.toLocaleString('id-ID')}</td>
-                                  <td className="p-4 text-muted-foreground">{shift.expected_cash !== null ? `Rp ${shift.expected_cash.toLocaleString('id-ID')}` : '-'}</td>
-                                  <td className="p-4 font-medium">{shift.ending_cash !== null ? `Rp ${shift.ending_cash.toLocaleString('id-ID')}` : '-'}</td>
-                                  <td className="p-4 text-right pr-6 font-bold">
-                                    {diff !== null ? (
-                                      <span className={diff < 0 ? "text-destructive" : diff > 0 ? "text-green-500" : "text-muted-foreground"}>
-                                        {diff > 0 ? '+' : ''}Rp {diff.toLocaleString('id-ID')}
-                                      </span>
-                                    ) : '-'}
+                                  <td className="p-4 text-muted-foreground">{cg.totalShiftsCount} shift{cg.totalShiftsCount > 1 ? 's' : ''}</td>
+                                  <td className="p-4 font-bold text-foreground">
+                                    Rp {cg.totalRevenue.toLocaleString('id-ID')}
+                                  </td>
+                                  <td className="p-4 text-right pr-6">
+                                    <button className="text-xs px-3 py-1.5 rounded-md bg-secondary text-secondary-foreground hover:bg-primary hover:text-primary-foreground transition-all">
+                                      View Details
+                                    </button>
                                   </td>
                                 </tr>
                               );
                             })}
-                            {filteredShifts.length === 0 && (
+                            {groupedCashiers.length === 0 && (
                               <tr>
                                 <td colSpan={6} className="p-8 text-center text-muted-foreground">
-                                  No shifts recorded for this date.
+                                  No cashiers recorded for this date.
                                 </td>
                               </tr>
                             )}
@@ -454,6 +671,101 @@ export default function HistoryPage() {
                     </div>
                   </div>
                 )}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Cashier Shift Details Dialog */}
+      <Dialog open={!!selectedCashierGroup} onOpenChange={(open) => !open && setSelectedCashierGroup(null)}>
+        <DialogContent className="bg-card border-border sm:max-w-[550px] max-h-[85vh] flex flex-col">
+          {selectedCashierGroup && (
+            <>
+              <DialogHeader>
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-primary font-bold text-lg">
+                    {selectedCashierGroup.cashier_name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <DialogTitle className="text-xl flex items-center gap-2">
+                      {selectedCashierGroup.cashier_name}
+                      <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold border ${
+                        selectedCashierGroup.hasActiveShift 
+                          ? 'bg-green-500/10 text-green-500 border-green-500/30' 
+                          : 'bg-muted text-muted-foreground border-border'
+                      }`}>
+                        {selectedCashierGroup.hasActiveShift ? 'Active Shift' : 'Shift Ended'}
+                      </span>
+                    </DialogTitle>
+                    <DialogDescription>Detailed Shift History & Cashier Performance</DialogDescription>
+                  </div>
+                </div>
+              </DialogHeader>
+
+              <div className="grid grid-cols-2 gap-3 py-2">
+                <div className="p-3 bg-muted/40 rounded-lg border border-border">
+                  <p className="text-xs text-muted-foreground">Total Sales</p>
+                  <p className="text-lg font-bold text-primary">Rp {selectedCashierGroup.totalRevenue.toLocaleString('id-ID')}</p>
+                </div>
+                <div className="p-3 bg-muted/40 rounded-lg border border-border">
+                  <p className="text-xs text-muted-foreground">Total Orders</p>
+                  <p className="text-lg font-bold">{selectedCashierGroup.totalOrders} orders</p>
+                </div>
+              </div>
+
+              <Separator className="bg-border" />
+
+              <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+                <h4 className="font-semibold text-sm">Shift Records ({selectedCashierGroup.allShifts.length})</h4>
+                <div className="space-y-3">
+                  {selectedCashierGroup.allShifts.map((shift, idx) => {
+                    const startDate = new Date(shift.start_time);
+                    const endDate = shift.end_time ? new Date(shift.end_time) : null;
+                    const timeStr = `${startDate.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'})} - ${endDate ? endDate.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) : 'Active'}`;
+                    
+                    const diff = shift.ending_cash !== null && shift.expected_cash !== null 
+                      ? shift.ending_cash - shift.expected_cash 
+                      : null;
+
+                    return (
+                      <div key={shift.id || idx} className="p-3.5 rounded-lg bg-muted/30 border border-border space-y-2">
+                        <div className="flex items-center justify-between text-xs font-semibold">
+                          <span className="flex items-center gap-1.5">
+                            <Clock size={14} className="text-primary" />
+                            {timeStr}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            shift.status === 'active' ? 'bg-green-500/20 text-green-500' : 'bg-muted text-muted-foreground'
+                          }`}>
+                            {shift.status === 'active' ? 'ACTIVE SHIFT' : 'ENDED'}
+                          </span>
+                        </div>
+                        
+                        <div className="grid grid-cols-3 gap-2 text-xs pt-2 border-t border-border/50">
+                          <div>
+                            <span className="text-muted-foreground block text-[10px]">Starting Cash</span>
+                            <span className="font-medium">Rp {shift.starting_cash.toLocaleString('id-ID')}</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground block text-[10px]">Actual Cash</span>
+                            <span className="font-medium">{shift.ending_cash !== null ? `Rp ${shift.ending_cash.toLocaleString('id-ID')}` : '-'}</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground block text-[10px]">Difference</span>
+                            <span className="font-bold">
+                              {diff !== null ? (
+                                <span className={diff < 0 ? "text-destructive" : diff > 0 ? "text-green-500" : "text-muted-foreground"}>
+                                  {diff > 0 ? '+' : ''}Rp {diff.toLocaleString('id-ID')}
+                                </span>
+                              ) : '-'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </>
           )}

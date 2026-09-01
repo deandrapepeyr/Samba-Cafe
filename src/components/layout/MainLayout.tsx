@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Sidebar } from './Sidebar';
-import { Menu, X, Home, Clock, LayoutDashboard } from 'lucide-react';
+import { Menu, X, Home, Clock, LayoutDashboard, ChefHat } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
@@ -10,20 +10,28 @@ import { useAuth } from '@/lib/AuthContext';
 interface MainLayoutProps {
   children: React.ReactNode;
   onLogoutClick?: () => void;
+  onLoginClick?: () => void;
   title: string;
   headerAction?: React.ReactNode;
 }
 
-export function MainLayout({ children, onLogoutClick, title, headerAction }: MainLayoutProps) {
+export function MainLayout({ children, onLogoutClick, onLoginClick, title, headerAction }: MainLayoutProps) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
-  const { role } = useAuth();
+  const { role, isLoading } = useAuth();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isManager = mounted && !isLoading && role === 'manager';
 
   return (
     <div className="flex h-screen bg-background overflow-hidden text-foreground">
       {/* Desktop Sidebar */}
       <div className="hidden md:block">
-        <Sidebar onLogoutClick={onLogoutClick} />
+        <Sidebar onLogoutClick={onLogoutClick} onLoginClick={onLoginClick} />
       </div>
 
       {/* Mobile Sidebar Overlay */}
@@ -37,7 +45,7 @@ export function MainLayout({ children, onLogoutClick, title, headerAction }: Mai
             >
               <X size={24} />
             </button>
-            <Sidebar onLogoutClick={onLogoutClick} />
+            <Sidebar onLogoutClick={onLogoutClick} onLoginClick={onLoginClick} />
           </div>
         </div>
       )}
@@ -68,13 +76,18 @@ export function MainLayout({ children, onLogoutClick, title, headerAction }: Mai
             <Home size={22} className={pathname === '/pos' ? 'fill-primary/20' : ''} />
             <span className="text-[10px] mt-1 font-medium">POS</span>
           </Link>
+
+          <Link href="/orders" className={`flex flex-col items-center justify-center w-full h-full ${pathname === '/orders' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}>
+            <ChefHat size={22} className={pathname === '/orders' ? 'fill-primary/20' : ''} />
+            <span className="text-[10px] mt-1 font-medium">Pesanan</span>
+          </Link>
           
           <Link href="/history" className={`flex flex-col items-center justify-center w-full h-full ${pathname === '/history' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}>
             <Clock size={22} className={pathname === '/history' ? 'fill-primary/20' : ''} />
-            <span className="text-[10px] mt-1 font-medium">History</span>
+            <span className="text-[10px] mt-1 font-medium font-medium">History</span>
           </Link>
 
-          {role === 'manager' && (
+          {isManager && (
             <Link href="/dashboard" className={`flex flex-col items-center justify-center w-full h-full ${pathname === '/dashboard' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}>
               <LayoutDashboard size={22} className={pathname === '/dashboard' ? 'fill-primary/20' : ''} />
               <span className="text-[10px] mt-1 font-medium">Dashboard</span>

@@ -2,7 +2,7 @@
   "name": "Samba Cafe POS",
   "short_name": "Samba Cafe",
   "description": "Smart Point of Sale system for Samba Cafe",
-  "start_url": "/login",
+  "start_url": "/pos",
   "display": "standalone",
   "background_color": "#0a0a0a",
   "theme_color": "#facc15",

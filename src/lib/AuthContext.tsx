@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 
 export type Role = 'manager' | 'cashier' | null;
 
@@ -10,6 +11,7 @@ interface AuthContextType {
   userName: string | null;
   login: (role: Role, name: string) => void;
   logout: () => void;
+  updateUserName: (name: string) => void;
   isLoading: boolean;
 }
 
@@ -27,6 +29,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (savedRole && savedName) {
       setRole(savedRole);
       setUserName(savedName);
+
+      // Auto-sync user name with database
+      if (savedRole === 'manager') {
+        supabase
+          .from('users')
+          .select('name')
+          .eq('role', 'manager')
+          .maybeSingle()
+          .then(({ data }) => {
+            if (data && data.name) {
+              setUserName(data.name);
+              localStorage.setItem('samba_name', data.name);
+            }
+          });
+      } else {
+        supabase
+          .from('users')
+          .select('name')
+          .eq('name', savedName)
+          .maybeSingle()
+          .then(({ data }) => {
+            if (data && data.name) {
+              setUserName(data.name);
+              localStorage.setItem('samba_name', data.name);
+            }
+          });
+      }
     }
     setIsLoading(false);
   }, []);
@@ -45,16 +74,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateUserName = (newName: string) => {
+    setUserName(newName);
+    localStorage.setItem('samba_name', newName);
+  };
+
   const logout = () => {
     setRole(null);
     setUserName(null);
     localStorage.removeItem('samba_role');
     localStorage.removeItem('samba_name');
-    router.push('/login');
+    router.push('/pos');
   };
 
   return (
-    <AuthContext.Provider value={{ role, userName, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ role, userName, login, logout, updateUserName, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
