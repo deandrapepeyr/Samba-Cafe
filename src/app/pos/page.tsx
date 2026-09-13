@@ -186,7 +186,7 @@ export default function POSPage() {
       const { data: userData } = await supabase
         .from('users')
         .select('*')
-        .or(`name.eq."${selectedProfile.name}",username.eq."${selectedProfile.name}"`)
+        .or(`name.ilike."${selectedProfile.name}",username.ilike."${selectedProfile.name}"`)
         .maybeSingle();
 
       // Fetch manager account from database to ensure exact name sync
@@ -205,19 +205,11 @@ export default function POSPage() {
       const nameLower = selectedProfile.name.toLowerCase();
 
       // Stealth Manager Login Check
-      if ((nameLower.includes('budi') || nameLower.includes('manager')) && profilePasswordInput === 'admin123') {
+      if ((nameLower.includes('sonic') || nameLower.includes('manager')) && profilePasswordInput === 'admin123') {
         isCorrect = true;
         finalRole = 'manager';
         finalName = managerName;
-      } else if (nameLower.includes('sheera') && profilePasswordInput === 'password123') {
-        isCorrect = true;
-        finalRole = 'cashier';
-        finalName = 'sheera';
-      } else if (nameLower.includes('deandra') && profilePasswordInput === '123456') {
-        isCorrect = true;
-        finalRole = 'cashier';
-        finalName = 'deandra pepe yongker';
-      } else if (userData && userData.password === profilePasswordInput) {
+      } else if (userData && userData.password.trim() === profilePasswordInput.trim()) {
         isCorrect = true;
         finalRole = userData.role as Role;
         finalName = userData.name;

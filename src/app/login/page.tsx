@@ -41,7 +41,7 @@ export default function LoginPage() {
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('*')
-        .or(`username.eq.${username},name.eq.${username}`)
+        .or(`username.ilike.${username},name.ilike.${username}`)
         .maybeSingle(); // maybeSingle menghindari error jika tidak ada baris
 
       if (userError) {

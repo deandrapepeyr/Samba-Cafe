@@ -24,8 +24,9 @@ export function Sidebar({ onLogoutClick, onLoginClick }: { onLogoutClick?: () =>
   const [passwordError, setPasswordError] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [managerDecoyName, setManagerDecoyName] = useState('budi');
+  const [managerDecoyName, setManagerDecoyName] = useState('sonic');
   const [shakeAccounts, setShakeAccounts] = useState(false);
+  const [cashierProfiles, setCashierProfiles] = useState<any[]>([]);
 
   useEffect(() => {
     const handleShake = () => {
@@ -73,6 +74,33 @@ export function Sidebar({ onLogoutClick, onLoginClick }: { onLogoutClick?: () =>
     }
   }, [mounted, role]);
 
+  useEffect(() => {
+    if (mounted) {
+      const fetchProfiles = async () => {
+        const { data } = await supabase.from('users').select('*').eq('role', 'cashier');
+        if (data) {
+          const mapped = data.map(u => ({
+            name: u.name,
+            role: 'cashier',
+            label: 'Kasir',
+            initial: u.name.charAt(0).toUpperCase()
+          }));
+          
+          if (!mapped.find(m => m.name.toLowerCase() === managerDecoyName.toLowerCase())) {
+            mapped.push({
+              name: managerDecoyName,
+              role: 'cashier',
+              label: 'Kasir',
+              initial: managerDecoyName.charAt(0).toUpperCase()
+            });
+          }
+          setCashierProfiles(mapped);
+        }
+      };
+      fetchProfiles();
+    }
+  }, [mounted, managerDecoyName, isPasswordDialogOpen]); // Refresh when dialog closes too
+
   const fetchActiveCount = async () => {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
@@ -94,12 +122,6 @@ export function Sidebar({ onLogoutClick, onLoginClick }: { onLogoutClick?: () =>
   const isManager = mounted && !isLoading && role === 'manager';
   const isAuthLoaded = mounted && !isLoading;
 
-  const cashierProfiles = [
-    { name: 'deandra pepe yongker', role: 'cashier', label: 'Kasir', initial: 'D' },
-    { name: 'sheera', role: 'cashier', label: 'Kasir', initial: 'S' },
-    { name: managerDecoyName, role: 'cashier', label: 'Kasir', initial: managerDecoyName.charAt(0).toUpperCase() },
-  ];
-
   const handleProfileClick = (profile: any) => {
     setSelectedProfile(profile);
     setPasswordInput('');
@@ -120,7 +142,7 @@ export function Sidebar({ onLogoutClick, onLoginClick }: { onLogoutClick?: () =>
       const { data: userData } = await supabase
         .from('users')
         .select('*')
-        .or(`name.eq."${selectedProfile.name}",username.eq."${selectedProfile.name}"`)
+        .or(`name.ilike."${selectedProfile.name}",username.ilike."${selectedProfile.name}"`)
         .maybeSingle();
 
       const { data: managerUser } = await supabase
@@ -135,19 +157,11 @@ export function Sidebar({ onLogoutClick, onLoginClick }: { onLogoutClick?: () =>
       let finalName = selectedProfile.name;
       const nameLower = selectedProfile.name.toLowerCase();
 
-      if ((nameLower.includes('budi') || nameLower.includes('manager') || nameLower === managerDecoyName.toLowerCase()) && passwordInput === 'admin123') {
+      if ((nameLower.includes('sonic') || nameLower.includes('manager') || nameLower === managerDecoyName.toLowerCase()) && passwordInput === 'admin123') {
         isCorrect = true;
         finalRole = 'manager';
         finalName = managerName;
-      } else if (nameLower.includes('sheera') && passwordInput === 'password123') {
-        isCorrect = true;
-        finalRole = 'cashier';
-        finalName = 'sheera';
-      } else if (nameLower.includes('deandra') && passwordInput === '123456') {
-        isCorrect = true;
-        finalRole = 'cashier';
-        finalName = 'deandra pepe yongker';
-      } else if (userData && userData.password === passwordInput) {
+      } else if (userData && userData.password.trim() === passwordInput.trim()) {
         isCorrect = true;
         finalRole = userData.role;
         finalName = userData.name;
