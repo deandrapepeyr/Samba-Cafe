@@ -102,3 +102,59 @@
     overscroll-behavior: none;
   }
 }
+
+/* Print styles — only show the receipt */
+@media print {
+  /* Hide everything by default */
+  body > * {
+    visibility: hidden !important;
+  }
+
+  /* Show only the dialog overlay and receipt */
+  [role="dialog"],
+  [role="dialog"] * {
+    visibility: visible !important;
+  }
+
+  /* Reset the dialog positioning for print */
+  [data-state="open"][role="dialog"] {
+    position: static !important;
+    transform: none !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: white !important;
+    border-radius: 0 !important;
+  }
+
+  /* Hide the overlay backdrop */
+  [data-state="open"][data-overlay] {
+    background: transparent !important;
+  }
+
+  /* Hide close button */
+  [role="dialog"] button[data-slot="dialog-close"] {
+    display: none !important;
+  }
+
+  /* Ensure white background for page */
+  html, body {
+    background: white !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  /* Make the receipt container fill */
+  #print-receipt {
+    background: white !important;
+    border: none !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 80mm; /* Receipt printer width */
+    font-size: 12px !important;
+  }
+}

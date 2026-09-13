@@ -20,6 +20,7 @@ type Transaction = {
   method: string;
   total: number;
   cashier_name: string;
+  customer_name: string | null;
   itemsCount: number;
   status: string;
   cash_received?: number;
@@ -112,6 +113,7 @@ export default function HistoryPage() {
           method: tx.method,
           total: tx.total,
           cashier_name: tx.cashier_name,
+          customer_name: tx.customer_name,
           cash_received: tx.cash_received,
           itemsCount: items.reduce((sum, item) => sum + item.quantity, 0),
           status: tx.status,
@@ -356,8 +358,8 @@ export default function HistoryPage() {
                               <p className="font-medium text-foreground mt-0.5">{trx.date}</p>
                             </div>
                             <div>
-                              <p className="text-[10px] uppercase font-semibold text-muted-foreground/70">Kasir</p>
-                              <p className="font-medium text-foreground mt-0.5 truncate">{trx.cashier_name || 'Unknown'}</p>
+                              <p className="text-[10px] uppercase font-semibold text-muted-foreground/70">Kasir / Pelanggan</p>
+                              <p className="font-medium text-foreground mt-0.5 truncate">{trx.cashier_name || 'Unknown'}{trx.customer_name ? ` • ${trx.customer_name}` : ''}</p>
                             </div>
                           </div>
 
@@ -381,7 +383,7 @@ export default function HistoryPage() {
                       <tr>
                         <th className="font-medium p-4 pl-6">Order ID</th>
                         <th className="font-medium p-4">Date & Time</th>
-                        <th className="font-medium p-4">Cashier</th>
+                        <th className="font-medium p-4">Kasir / Pelanggan</th>
                         <th className="font-medium p-4">Items</th>
                         <th className="font-medium p-4">Payment Method</th>
                         <th className="font-medium p-4">Status Pesanan</th>
@@ -416,7 +418,7 @@ export default function HistoryPage() {
                                   #{trx.id}
                                 </td>
                                 <td className="p-4 text-muted-foreground">{trx.date}</td>
-                                <td className="p-4 text-muted-foreground">{trx.cashier_name || 'Unknown'}</td>
+                                <td className="p-4 text-muted-foreground">{trx.cashier_name || 'Unknown'}{trx.customer_name ? ` (${trx.customer_name})` : ''}</td>
                                 <td className="p-4">{trx.itemsCount} items</td>
                                 <td className="p-4">
                                   <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${
@@ -617,7 +619,7 @@ export default function HistoryPage() {
                   </div>
                   <div>
                     <DialogTitle className="text-xl">Order #{selectedTx.id}</DialogTitle>
-                    <DialogDescription>{selectedTx.date} • Kasir: {selectedTx.cashier_name || 'Unknown'}</DialogDescription>
+                    <DialogDescription>{selectedTx.date} • Kasir: {selectedTx.cashier_name || 'Unknown'} {selectedTx.customer_name ? `• Pelanggan: ${selectedTx.customer_name}` : ''}</DialogDescription>
                   </div>
                 </div>
               </DialogHeader>

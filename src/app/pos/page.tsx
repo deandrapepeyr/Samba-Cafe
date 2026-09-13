@@ -61,6 +61,12 @@ export default function POSPage() {
   const [checkoutStep, setCheckoutStep] = useState<'none' | 'method' | 'confirm' | 'success'>('none');
   const [paymentMethod, setPaymentMethod] = useState<'QRIS' | 'Cash' | null>(null);
   const [cashReceived, setCashReceived] = useState<string>('');
+  const [customerName, setCustomerName] = useState('');
+
+  // DANA State
+  const [isDANAModalOpen, setIsDANAModalOpen] = useState(false);
+  const [DANATimeLeft, setDANATimeLeft] = useState(60);
+  const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
 
   // Auth & Shift Management
   const { userName, role, isLoading, login, logout } = useAuth();
@@ -132,9 +138,22 @@ export default function POSPage() {
     initPageData();
   }, [userName]);
 
+  // DANA Timer logic
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isDANAModalOpen && DANATimeLeft > 0) {
+      interval = setInterval(() => {
+        setDANATimeLeft(prev => prev - 1);
+      }, 1000);
+    } else if (DANATimeLeft === 0) {
+      setIsDANAModalOpen(false);
+    }
+    return () => clearInterval(interval);
+  }, [isDANAModalOpen, DANATimeLeft]);
+
   const handleLockActionClick = () => {
     if (!role || !userName) {
-      setIsSelectCashierOpen(true);
+      window.dispatchEvent(new CustomEvent('shake-sidebar-profiles'));
     } else {
       setSelectedProfile({ name: userName, role: role });
       setStartingCashInput('100000');
@@ -373,48 +392,131 @@ export default function POSPage() {
 
   const handleCheckoutProcess = async () => {
     if (checkoutStep === 'confirm') {
-      setIsProcessingCheckout(true);
+      if (paymentMethod === 'QRIS') {
+        await generateMidtransQR();
+      } else {
+        await finalizeTransaction();
+      }
+    }
+  };
+
+  const generateMidtransQR = async () => {
+    setIsDANAModalOpen(true);
+    setQrCodeUrl(null);
+    setDANATimeLeft(60);
+
+    const transactionId = orderNumber + '-' + Date.now();
+    const transaction = {
+      id: transactionId,
+      method: paymentMethod || 'QRIS', // Fallback karena setPaymentMethod adalah async
+      total: total,
+      cashier_name: userName || 'Unknown',
+      status: 'pending_payment',
+      cash_received: null,
+      customer_name: customerName || null
+    };
+
+    const itemsToInsert = cart.map(item => ({
+      transaction_id: transactionId,
+      product_name: item.product.name,
+      price: item.product.price,
+      quantity: item.quantity,
+      notes: item.notes || null
+    }));
+
+    try {
+      if (!navigator.onLine) throw new Error("Offline Mode");
+
+      // Save to Supabase as pending_payment
+      const { error: txError } = await supabase.from('transactions').insert([transaction]);
+      if (txError) throw txError;
+      const { error: itemsError } = await supabase.from('transaction_items').insert(itemsToInsert);
+      if (itemsError) throw itemsError;
+
+      // Call Midtrans API
+      const res = await fetch('/api/midtrans/charge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          order_id: transactionId, 
+          gross_amount: total,
+          customer_name: customerName || 'Pelanggan'
+        })
+      });
+      const data = await res.json();
       
-      const transactionId = orderNumber;
-      const transaction = {
-        id: transactionId,
+      if (data.qr_url) {
+        setQrCodeUrl(data.qr_url);
+        
+        // Listen to Supabase Realtime
+        const channel = supabase.channel('tx_changes_' + transactionId)
+          .on('postgres_changes', { 
+            event: 'UPDATE', 
+            schema: 'public', 
+            table: 'transactions', 
+            filter: `id=eq.${transactionId}` 
+          }, (payload) => {
+            if (payload.new.status === 'preparing' || payload.new.status === 'paid') {
+              // Payment Success from Webhook!
+              setIsDANAModalOpen(false);
+              setIsProcessingCheckout(false);
+              setCheckoutStep('success');
+              channel.unsubscribe();
+            }
+          }).subscribe();
+      } else {
+        alert("Gagal mendapatkan QR dari Midtrans: " + (data.error || JSON.stringify(data)));
+        setIsDANAModalOpen(false);
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert("Error: " + (err.message || err.error || JSON.stringify(err)));
+      setIsDANAModalOpen(false);
+    }
+  };
+
+  const handleSimulateDANASuccess = async () => {
+    setIsDANAModalOpen(false);
+    await finalizeTransaction();
+  };
+
+  const finalizeTransaction = async () => {
+    setIsProcessingCheckout(true);
+    
+    const transactionId = orderNumber;
+    const transaction = {
+      id: transactionId,
         method: paymentMethod,
         total: total,
         cashier_name: userName || 'Unknown',
         status: 'preparing',
-        cash_received: paymentMethod === 'Cash' && cashReceived ? parseInt(cashReceived.replace(/\./g, '')) : null
-      };
+        cash_received: paymentMethod === 'Cash' && cashReceived ? parseInt(cashReceived.replace(/\./g, '')) : null,
+        customer_name: customerName || null
+    };
+
+    const itemsToInsert = cart.map(item => ({
+      transaction_id: transactionId,
+      product_name: item.product.name,
+      price: item.product.price,
+      quantity: item.quantity,
+      notes: item.notes || null
+    }));
+
+    try {
+      // If offline, skip direct to local storage catch block
+      if (!navigator.onLine) throw new Error("Offline Mode");
 
       const { error: txError } = await supabase.from('transactions').insert([transaction]);
-      
-      if (txError) {
-        alert("Failed to save transaction: " + txError.message);
-        setIsProcessingCheckout(false);
-        return;
-      }
-
-      const itemsToInsert = cart.map(item => ({
-        transaction_id: transactionId,
-        product_name: item.product.name,
-        price: item.product.price,
-        quantity: item.quantity,
-        notes: item.notes || null
-      }));
+      if (txError) throw txError;
 
       const { error: itemsError } = await supabase.from('transaction_items').insert(itemsToInsert);
-      
-      if (itemsError) {
-        alert("Failed to save transaction items: " + itemsError.message);
-        setIsProcessingCheckout(false);
-        return;
-      }
+      if (itemsError) throw itemsError;
 
       // Deduct stock based on recipe
       const productIds = cart.map(item => item.product.id);
       const { data: recipes } = await supabase.from('product_ingredients').select('*').in('product_id', productIds);
       
       if (recipes && recipes.length > 0) {
-        // Collect all required stock deductions
         const stockDeductions: Record<string, number> = {};
         for (const cartItem of cart) {
           const itemRecipes = recipes.filter(r => r.product_id === cartItem.product.id);
@@ -424,12 +526,10 @@ export default function POSPage() {
           }
         }
 
-        // Fetch current stock levels to deduct from
         const stockIds = Object.keys(stockDeductions);
         const { data: currentStocks } = await supabase.from('stocks').select('id, quantity').in('id', stockIds);
         
         if (currentStocks) {
-          // Update each stock sequentially
           for (const stock of currentStocks) {
             const amountToDeduct = stockDeductions[stock.id];
             if (amountToDeduct) {
@@ -439,10 +539,18 @@ export default function POSPage() {
           }
         }
       }
-
-      setIsProcessingCheckout(false);
-      setCheckoutStep('success');
+    } catch (error: any) {
+      console.warn("Failed to sync to Supabase, saving to offline queue:", error);
+      // Offline Queueing Logic
+      const offlineQueue = JSON.parse(localStorage.getItem('offline_transactions') || '[]');
+      offlineQueue.push({ transaction, itemsToInsert });
+      localStorage.setItem('offline_transactions', JSON.stringify(offlineQueue));
+      // Notify cashier indirectly via UI (you can add toast here if preferred)
+      alert("⚠️ Offline Mode: Transaksi disimpan secara lokal. Pastikan jangan me-refresh browser dan tunggu hingga koneksi kembali.");
     }
+
+    setIsProcessingCheckout(false);
+    setCheckoutStep('success');
   };
 
   const completeAndNewOrder = () => {
@@ -450,6 +558,7 @@ export default function POSPage() {
     setCheckoutStep('none');
     setPaymentMethod(null);
     setCashReceived('');
+    setCustomerName('');
     setOrderNumber(Math.floor(Math.random() * 10000).toString().padStart(4, '0'));
   };
 
@@ -457,7 +566,7 @@ export default function POSPage() {
   const total = subtotal;
   const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  const CartContent = () => (
+  const renderCartContent = () => (
     <>
       <div className="p-4 xl:p-6 border-b border-border flex items-center justify-between">
         <div>
@@ -556,7 +665,13 @@ export default function POSPage() {
 
       <div className="p-4 xl:p-6 bg-card border-t border-border mt-auto">
         <div className="space-y-3 mb-6">
-          <div className="flex justify-between text-muted-foreground text-sm">
+          <Input
+            placeholder="Nama Customer"
+            value={customerName}
+            onChange={(e) => setCustomerName(e.target.value)}
+            className="w-full bg-background border-border h-14 text-foreground font-bold text-2xl md:text-2xl placeholder:font-normal placeholder:text-xl placeholder:text-muted-foreground px-4"
+          />
+          <div className="flex justify-between text-muted-foreground text-sm mt-4">
             <span>Subtotal</span>
             <span>Rp {subtotal.toLocaleString('id-ID')}</span>
           </div>
@@ -580,7 +695,7 @@ export default function POSPage() {
         ) : (
           <Button 
             className="w-full h-14 text-lg font-bold bg-primary text-primary-foreground hover:bg-primary/90"
-            disabled={cart.length === 0}
+            disabled={cart.length === 0 || customerName.trim() === ''}
             onClick={() => setCheckoutStep('method')}
           >
             Charge / Checkout
@@ -593,7 +708,7 @@ export default function POSPage() {
   return (
     <MainLayout 
       onLogoutClick={handleCalculateEndShift} 
-      onLoginClick={() => setIsSelectCashierOpen(true)}
+      onLoginClick={() => window.dispatchEvent(new CustomEvent('shake-sidebar-profiles'))}
       title="Point of Sale"
       headerAction={
         <Sheet>
@@ -609,7 +724,7 @@ export default function POSPage() {
             <SheetHeader className="p-4 border-b border-border sr-only">
               <SheetTitle>Current Order</SheetTitle>
             </SheetHeader>
-            <CartContent />
+            {renderCartContent()}
           </SheetContent>
         </Sheet>
       }
@@ -731,8 +846,8 @@ export default function POSPage() {
 
       {/* Desktop Cart Sidebar */}
       {isCartOpen && (
-        <div className="hidden lg:flex w-80 xl:w-96 border-l border-border bg-card flex-col h-full shrink-0 transition-all duration-300">
-          <CartContent />
+        <div className="hidden lg:flex w-72 xl:w-80 border-l border-border bg-card flex-col h-full shrink-0 transition-all duration-300">
+          {renderCartContent()}
         </div>
       )}
 
@@ -881,13 +996,17 @@ export default function POSPage() {
               </DialogHeader>
               <div className="grid grid-cols-2 gap-4 py-6">
                 <button 
-                  onClick={() => { setPaymentMethod('QRIS'); setCheckoutStep('confirm'); }}
+                  onClick={() => { 
+                    setPaymentMethod('QRIS'); 
+                    setCheckoutStep('none'); 
+                    generateMidtransQR(); 
+                  }}
                   className="p-6 rounded-2xl bg-background border border-border hover:border-primary flex flex-col items-center justify-center gap-3 transition-all group"
                 >
                   <div className="p-3 bg-blue-500/10 text-blue-500 rounded-xl group-hover:scale-110 transition-transform">
                     <QrCode size={32} />
                   </div>
-                  <span className="font-bold">QRIS</span>
+                  <span className="font-bold">QRIS / E-Wallet</span>
                 </button>
                 <button 
                   onClick={() => { setPaymentMethod('Cash'); setCheckoutStep('confirm'); }}
@@ -911,10 +1030,10 @@ export default function POSPage() {
               <div className="py-4 space-y-4">
                 {paymentMethod === 'QRIS' && (
                   <div className="flex flex-col items-center justify-center p-6 bg-background rounded-2xl border border-border space-y-3">
-                    <div className="bg-white p-4 rounded-xl">
-                      <QrCode size={160} className="text-black" />
+                    <div className="p-4 rounded-xl bg-blue-500/10 text-blue-500">
+                      <QrCode size={64} />
                     </div>
-                    <p className="text-xs text-muted-foreground text-center">Scan QR Code above using any e-wallet or mobile banking app.</p>
+                    <p className="text-sm font-medium text-center">Tekan tombol di bawah untuk membuat kode QR otomatis dari Midtrans.</p>
                   </div>
                 )}
 
@@ -963,7 +1082,7 @@ export default function POSPage() {
                   className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
                   disabled={isProcessingCheckout || (paymentMethod === 'Cash' && (!cashReceived || parseInt(cashReceived.replace(/\./g, '')) < total))}
                 >
-                  {isProcessingCheckout ? "Processing..." : "Complete Payment"}
+                  {isProcessingCheckout ? "Processing..." : (paymentMethod === 'QRIS' ? "Generate QR Code" : "Complete Payment")}
                 </Button>
               </DialogFooter>
             </>
@@ -1156,6 +1275,66 @@ export default function POSPage() {
         </DialogContent>
       </Dialog>
       </div>
+      {/* QRIS Modal Premium */}
+      <Dialog open={isDANAModalOpen} onOpenChange={setIsDANAModalOpen}>
+        <DialogContent className="sm:max-w-[420px] p-0 bg-background/95 backdrop-blur-xl border border-white/10 rounded-[2rem] overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+          <div className="relative p-8">
+            {/* Ambient Background Glow */}
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-32 bg-primary/20 blur-[60px] pointer-events-none" />
+            
+            <DialogHeader className="space-y-1 p-0 text-center mb-8 relative z-10">
+              <div className="w-14 h-14 bg-gradient-to-br from-primary/20 to-primary/5 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-primary/20 shadow-inner">
+                <QrCode size={28} className="text-primary" />
+              </div>
+              <DialogTitle className="font-extrabold text-white text-2xl tracking-tight">Bayar dengan QRIS</DialogTitle>
+              <DialogDescription className="text-sm text-muted-foreground mt-2">
+                Scan QR di bawah menggunakan e-Wallet atau M-Banking
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex flex-col items-center space-y-8 relative z-10">
+              {/* QR Code Container */}
+              <div className="bg-white p-4 rounded-3xl shadow-[0_0_30px_rgba(255,255,255,0.1)] relative group w-full max-w-[280px] mx-auto aspect-square flex items-center justify-center">
+                {qrCodeUrl ? (
+                  <img src={qrCodeUrl} alt="QR Code" className="w-full h-full object-contain mix-blend-multiply" />
+                ) : (
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+                    <span className="text-[#888] text-sm font-medium">Generating QR...</span>
+                  </div>
+                )}
+                {/* Corner Scanner Accents */}
+                <div className="absolute top-0 left-0 w-10 h-10 border-t-4 border-l-4 border-primary rounded-tl-3xl pointer-events-none" />
+                <div className="absolute top-0 right-0 w-10 h-10 border-t-4 border-r-4 border-primary rounded-tr-3xl pointer-events-none" />
+                <div className="absolute bottom-0 left-0 w-10 h-10 border-b-4 border-l-4 border-primary rounded-bl-3xl pointer-events-none" />
+                <div className="absolute bottom-0 right-0 w-10 h-10 border-b-4 border-r-4 border-primary rounded-br-3xl pointer-events-none" />
+              </div>
+
+              {/* Total Tagihan */}
+              <div className="text-center w-full bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl py-5 px-6 shadow-inner">
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-[0.2em] mb-1">Total Tagihan</p>
+                <p className="text-4xl font-black text-primary tracking-tight">Rp {total.toLocaleString('id-ID')}</p>
+              </div>
+
+              {/* Timer */}
+              <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium bg-white/5 px-5 py-2.5 rounded-full border border-white/5">
+                <div className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+                Menunggu Pembayaran <span className="text-foreground w-6 text-right">{DANATimeLeft}s</span>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 mt-8 relative z-10">
+              <Button 
+                onClick={() => setIsDANAModalOpen(false)} 
+                className="w-full h-12 bg-destructive/10 hover:bg-destructive/20 text-destructive font-bold text-sm rounded-xl transition-all border border-destructive/20"
+              >
+                Batalkan Pembayaran
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }
