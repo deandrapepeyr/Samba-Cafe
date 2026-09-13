@@ -59,7 +59,7 @@ export default function LoginPage() {
 
       // 2. Jika username ada, cek kecocokan password
       // Negative case: Password salah
-      if (userData.password !== password) {
+      if (userData.password.trim() !== password.trim()) {
         setError('Password yang Anda masukkan salah.');
         setIsLoggingIn(false);
         return;

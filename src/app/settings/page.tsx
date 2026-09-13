@@ -242,7 +242,9 @@ export default function SettingsPage() {
     
     const userToInsert = {
       ...newUser,
-      email: `${newUser.username}@sambacafe.com`
+      username: newUser.username.trim(),
+      password: newUser.password.trim(),
+      email: `${newUser.username.trim()}@sambacafe.com`
     };
     
     const { data, error } = await supabase.from('users').insert([userToInsert]).select();
