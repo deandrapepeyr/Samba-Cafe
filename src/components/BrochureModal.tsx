@@ -159,7 +159,7 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
                   <div className={`inline-block p-5 rounded-full mb-6 shadow-xl border-4 ${theme === 'dark' ? 'bg-[#1a1a1a] border-[#ffb300]/20' : 'bg-white border-[#e65100]/20'}`}>
                     <Utensils size={64} className={theme === 'dark' ? 'text-[#ffb300]' : 'text-[#e65100]'} />
                   </div>
-                  <h1 className="text-7xl font-black tracking-tighter mb-4 leading-none">
+                  <h1 className="text-5xl font-black tracking-tighter mb-4 leading-none">
                     SAMBA <br/><span className={theme === 'dark' ? 'text-[#ffb300] italic font-serif' : 'text-[#e65100] italic font-serif'}>CAFE</span>
                   </h1>
                   <p className={`text-xl uppercase tracking-[0.25em] font-bold ${theme === 'dark' ? 'text-zinc-500' : 'text-[#5d4037]'}`}>
@@ -224,7 +224,7 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
 
                 <div className={`inline-block py-2 px-6 rounded-full mb-8 self-start border-2 ${theme === 'dark' ? 'border-[#ffb300] text-[#ffb300]' : 'border-[#e65100] text-[#e65100] bg-white'}`}>
                   <h2 className="text-2xl font-black uppercase tracking-widest">
-                    Minuman & Manis
+                    Minuman & Dessert
                   </h2>
                 </div>
                 
