@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { X, Printer, Palette, Image as ImageIcon, Utensils } from 'lucide-react';
+import { X, Printer, Palette, Utensils } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 
@@ -28,6 +28,8 @@ interface BrochureModalProps {
 export function BrochureModal({ isOpen, onClose, products, categories }: BrochureModalProps) {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const printRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
 
   const handlePrint = () => {
     window.print();
@@ -42,16 +44,35 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
   const foodAndSnacks = getProductsByCatName(['food', 'snack']);
   const drinksAndDesserts = getProductsByCatName(['minuman', 'drink', 'dessert']);
 
-  // Extract a hero image for the cover
   const heroProduct = products.find(p => p.name.toLowerCase().includes('katsu') && p.image_url) || products.find(p => p.image_url);
+
+  useEffect(() => {
+    const updateScale = () => {
+      if (containerRef.current) {
+        // A4 Landscape width is approx 1122px (297mm)
+        const containerWidth = containerRef.current.clientWidth - 64; // subtract padding
+        const targetWidth = 1122;
+        if (containerWidth < targetWidth) {
+          setScale(containerWidth / targetWidth);
+        } else {
+          setScale(1);
+        }
+      }
+    };
+    
+    updateScale();
+    window.addEventListener('resize', updateScale);
+    return () => window.removeEventListener('resize', updateScale);
+  }, [isOpen]);
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-[100vw] h-[100vh] w-full p-0 bg-zinc-950 border-none flex flex-col m-0 rounded-none overflow-hidden print:bg-transparent">
+      {/* max-w-[100vw] sm:max-w-[100vw] ensures it breaks out of the default max-w-lg */}
+      <DialogContent className="max-w-[100vw] sm:max-w-[100vw] md:max-w-[100vw] lg:max-w-[100vw] h-[100vh] w-full p-0 bg-zinc-950 border-none flex flex-col m-0 rounded-none overflow-hidden print:bg-transparent">
         <DialogTitle className="sr-only">Cetak Brosur Menu</DialogTitle>
         
-        {/* Top Action Bar (Hidden in Print) */}
-        <div className="flex items-center justify-between p-4 bg-zinc-900 border-b border-white/10 print:hidden z-50 shadow-xl">
+        {/* Top Action Bar */}
+        <div className="flex items-center justify-between p-4 bg-zinc-900 border-b border-white/10 print:hidden z-50 shadow-xl shrink-0">
           <div className="flex items-center gap-4">
             <h2 className="text-xl font-semibold text-white flex items-center gap-2">
               <Printer className="text-primary" size={20} />
@@ -81,32 +102,18 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
         </div>
 
         {/* Canvas Container */}
-        <div className="flex-1 overflow-auto p-8 bg-zinc-950 flex items-center justify-center print:p-0 print:bg-transparent print:block print:overflow-visible relative">
+        <div 
+          ref={containerRef}
+          className="flex-1 overflow-auto p-4 sm:p-8 bg-zinc-950 flex items-start justify-center print:p-0 print:bg-transparent print:block print:overflow-visible relative"
+        >
           
           <style dangerouslySetInnerHTML={{__html: `
             @media print {
-              body {
-                background: none !important;
-                background-color: transparent !important;
-              }
-              body > *:not([role="dialog"]) {
-                display: none !important;
-              }
-              .print-wrapper {
-                position: absolute;
-                left: 0;
-                top: 0;
-                width: 297mm;
-                height: 210mm;
-              }
-              @page {
-                size: A4 landscape;
-                margin: 0mm;
-              }
-              * {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-              }
+              body { background: none !important; background-color: transparent !important; }
+              body > *:not([role="dialog"]) { display: none !important; }
+              .print-wrapper { position: absolute; left: 0; top: 0; transform: none !important; }
+              @page { size: A4 landscape; margin: 0mm; }
+              * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             }
             .menu-leader {
               flex: 1;
@@ -115,20 +122,26 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
               position: relative;
               top: -6px;
             }
+            .a4-canvas {
+              width: 297mm;
+              height: 210mm;
+              transform-origin: top center;
+            }
           `}} />
 
-          {/* The A4 Canvas */}
-          <div className="print-wrapper w-full flex justify-center">
+          {/* The A4 Canvas with dynamic scaling */}
+          <div 
+            className="print-wrapper w-full flex justify-center transition-transform duration-300 ease-out" 
+            style={{ transform: `scale(${scale})` }}
+          >
             <div 
               ref={printRef}
-              className={`brochure-canvas relative shadow-2xl shrink-0 overflow-hidden print:shadow-none ${
+              className={`a4-canvas relative shadow-2xl shrink-0 overflow-hidden print:shadow-none ${
                 theme === 'dark' 
-                  ? 'bg-[#0f0f0f] text-zinc-200' 
-                  : 'bg-[#fdfbf6] text-[#2c3e2d]'
+                  ? 'bg-[#151515] text-zinc-200' 
+                  : 'bg-[#f4ebd0] text-[#3e2723]'
               }`}
               style={{
-                width: '297mm',
-                height: '210mm',
                 display: 'grid',
                 gridTemplateColumns: 'repeat(3, 1fr)',
                 fontFamily: "'Inter', sans-serif"
@@ -136,31 +149,33 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
             >
               
               {/* === COLUMN 1: COVER & BRANDING === */}
-              <div className={`p-10 flex flex-col justify-between border-r ${theme === 'dark' ? 'border-white/5' : 'border-[#2c3e2d]/10'} relative overflow-hidden`}>
-                {/* Decorative background element */}
-                <div className={`absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none ${theme === 'dark' ? '' : 'bg-[url("https://www.transparenttextures.com/patterns/rice-paper.png")]'}`} style={{ backgroundImage: theme === 'dark' ? 'radial-gradient(circle at 0% 0%, currentColor 1px, transparent 1px)' : '', backgroundSize: '20px 20px' }}></div>
+              <div className={`p-10 flex flex-col justify-between border-r-2 ${theme === 'dark' ? 'border-[#ffb300]/20 bg-[#0d0d0d]' : 'border-[#4e342e]/10 bg-[#fff8e1]'} relative overflow-hidden`}>
                 
+                {/* Decorative border top/bottom */}
+                <div className={`absolute top-0 left-0 w-full h-4 ${theme === 'dark' ? 'bg-[#ffb300]' : 'bg-[#e65100]'}`}></div>
+                <div className={`absolute bottom-0 left-0 w-full h-4 ${theme === 'dark' ? 'bg-[#ffb300]' : 'bg-[#e65100]'}`}></div>
+
                 <div className="text-center mt-12 relative z-10">
-                  <div className={`inline-block p-5 rounded-full mb-6 shadow-xl ${theme === 'dark' ? 'bg-[#1a1a1a] border border-primary/20' : 'bg-white border border-[#2c3e2d]/10'}`}>
-                    <Utensils size={56} className={theme === 'dark' ? 'text-primary' : 'text-[#d97706]'} />
+                  <div className={`inline-block p-5 rounded-full mb-6 shadow-xl border-4 ${theme === 'dark' ? 'bg-[#1a1a1a] border-[#ffb300]/20' : 'bg-white border-[#e65100]/20'}`}>
+                    <Utensils size={64} className={theme === 'dark' ? 'text-[#ffb300]' : 'text-[#e65100]'} />
                   </div>
-                  <h1 className="text-6xl font-black tracking-tighter mb-3 leading-none">
-                    SAMBA <span className={theme === 'dark' ? 'text-primary italic font-serif' : 'text-[#d97706] italic font-serif'}>CAFE</span>
+                  <h1 className="text-7xl font-black tracking-tighter mb-4 leading-none">
+                    SAMBA <br/><span className={theme === 'dark' ? 'text-[#ffb300] italic font-serif' : 'text-[#e65100] italic font-serif'}>CAFE</span>
                   </h1>
-                  <p className={`text-xl uppercase tracking-[0.2em] font-medium ${theme === 'dark' ? 'text-zinc-500' : 'text-[#5a6b5a]'}`}>
-                    Mari Makan Enak!
+                  <p className={`text-xl uppercase tracking-[0.25em] font-bold ${theme === 'dark' ? 'text-zinc-500' : 'text-[#5d4037]'}`}>
+                    Premium Taste
                   </p>
                 </div>
 
                 {heroProduct?.image_url && (
-                  <div className="w-56 h-56 mx-auto rounded-full overflow-hidden border-8 border-transparent relative shadow-2xl z-10" style={{ borderColor: theme === 'dark' ? '#eab308' : '#d97706' }}>
+                  <div className={`w-56 h-56 mx-auto rounded-full overflow-hidden border-8 relative shadow-2xl z-10 ${theme === 'dark' ? 'border-[#ffb300]' : 'border-[#e65100]'}`}>
                     <img src={heroProduct.image_url} alt="Signature" className="w-full h-full object-cover scale-110" />
                   </div>
                 )}
 
                 <div className="text-center mb-8 relative z-10">
-                  <h3 className={`font-bold mb-3 text-lg ${theme === 'dark' ? 'text-primary' : 'text-[#d97706]'}`}>📍 Lokasi Kami</h3>
-                  <p className={`text-base leading-relaxed ${theme === 'dark' ? 'text-zinc-400' : 'text-[#5a6b5a]'}`}>
+                  <h3 className={`font-black mb-3 text-2xl uppercase tracking-widest ${theme === 'dark' ? 'text-[#ffb300]' : 'text-[#e65100]'}`}>Lokasi Kami</h3>
+                  <p className={`text-lg leading-relaxed font-medium ${theme === 'dark' ? 'text-zinc-400' : 'text-[#5d4037]'}`}>
                     Jl. Samba No. 123, Kota Bahagia<br/>
                     Telp. 0812-3456-7890<br/>
                     @sambacafe_id
@@ -169,18 +184,23 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
               </div>
 
               {/* === COLUMN 2: FOOD & SNACKS === */}
-              <div className={`p-10 border-r ${theme === 'dark' ? 'border-white/5' : 'border-[#2c3e2d]/10'} relative`}>
-                <h2 className={`text-4xl font-black mb-8 uppercase tracking-wider ${theme === 'dark' ? 'text-primary' : 'text-[#2c3e2d]'}`}>
-                  Makanan
-                </h2>
+              <div className={`p-10 border-r-2 ${theme === 'dark' ? 'border-[#ffb300]/20' : 'border-[#4e342e]/10'} relative flex flex-col`}>
+                <div className={`absolute top-0 left-0 w-full h-4 ${theme === 'dark' ? 'bg-[#222]' : 'bg-[#d7ccc8]'}`}></div>
+                <div className={`absolute bottom-0 left-0 w-full h-4 ${theme === 'dark' ? 'bg-[#222]' : 'bg-[#d7ccc8]'}`}></div>
+
+                <div className={`inline-block py-2 px-6 rounded-full mb-8 self-start border-2 ${theme === 'dark' ? 'border-[#ffb300] text-[#ffb300]' : 'border-[#e65100] text-[#e65100] bg-white'}`}>
+                  <h2 className="text-2xl font-black uppercase tracking-widest">
+                    Makanan & Snack
+                  </h2>
+                </div>
                 
-                <div className="space-y-6">
+                <div className="space-y-6 flex-1">
                   {foodAndSnacks.map(product => (
                     <div key={product.id} className="flex flex-col">
-                      <div className="flex items-end justify-between font-medium">
-                        <span className={`text-lg whitespace-nowrap ${theme === 'dark' ? 'text-zinc-100' : 'text-[#2c3e2d] font-bold'}`}>{product.name}</span>
+                      <div className="flex items-end justify-between font-bold">
+                        <span className={`text-xl whitespace-nowrap ${theme === 'dark' ? 'text-zinc-100' : 'text-[#3e2723]'}`}>{product.name}</span>
                         <div className="menu-leader"></div>
-                        <span className={`text-lg font-bold ${theme === 'dark' ? 'text-zinc-300' : 'text-[#d97706]'}`}>
+                        <span className={`text-xl ${theme === 'dark' ? 'text-[#ffb300]' : 'text-[#e65100]'}`}>
                           {product.price / 1000}K
                         </span>
                       </div>
@@ -188,10 +208,9 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
                   ))}
                 </div>
 
-                {/* Decorative Images inside Col 2 */}
-                <div className="mt-16 flex gap-6 justify-center">
+                <div className="mt-8 flex gap-6 justify-center">
                   {foodAndSnacks.filter(p => p.image_url).slice(0, 2).map((p, i) => (
-                    <div key={p.id} className="w-32 h-32 rounded-full overflow-hidden shadow-2xl border-4" style={{ borderColor: theme === 'dark' ? 'rgba(255,255,255,0.05)' : '#ffffff' }}>
+                    <div key={p.id} className={`w-36 h-36 rounded-full overflow-hidden shadow-2xl border-4 ${theme === 'dark' ? 'border-[#333]' : 'border-white'}`}>
                       <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
                     </div>
                   ))}
@@ -199,18 +218,23 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
               </div>
 
               {/* === COLUMN 3: DRINKS & DESSERT === */}
-              <div className="p-10 relative">
-                <h2 className={`text-4xl font-black mb-8 uppercase tracking-wider ${theme === 'dark' ? 'text-primary' : 'text-[#2c3e2d]'}`}>
-                  Minuman
-                </h2>
+              <div className="p-10 relative flex flex-col">
+                <div className={`absolute top-0 left-0 w-full h-4 ${theme === 'dark' ? 'bg-[#222]' : 'bg-[#d7ccc8]'}`}></div>
+                <div className={`absolute bottom-0 left-0 w-full h-4 ${theme === 'dark' ? 'bg-[#222]' : 'bg-[#d7ccc8]'}`}></div>
+
+                <div className={`inline-block py-2 px-6 rounded-full mb-8 self-start border-2 ${theme === 'dark' ? 'border-[#ffb300] text-[#ffb300]' : 'border-[#e65100] text-[#e65100] bg-white'}`}>
+                  <h2 className="text-2xl font-black uppercase tracking-widest">
+                    Minuman & Manis
+                  </h2>
+                </div>
                 
-                <div className="space-y-6">
+                <div className="space-y-6 flex-1">
                   {drinksAndDesserts.map(product => (
                     <div key={product.id} className="flex flex-col">
-                      <div className="flex items-end justify-between font-medium">
-                        <span className={`text-lg whitespace-nowrap ${theme === 'dark' ? 'text-zinc-100' : 'text-[#2c3e2d] font-bold'}`}>{product.name}</span>
+                      <div className="flex items-end justify-between font-bold">
+                        <span className={`text-xl whitespace-nowrap ${theme === 'dark' ? 'text-zinc-100' : 'text-[#3e2723]'}`}>{product.name}</span>
                         <div className="menu-leader"></div>
-                        <span className={`text-lg font-bold ${theme === 'dark' ? 'text-zinc-300' : 'text-[#d97706]'}`}>
+                        <span className={`text-xl ${theme === 'dark' ? 'text-[#ffb300]' : 'text-[#e65100]'}`}>
                           {product.price / 1000}K
                         </span>
                       </div>
@@ -218,19 +242,16 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
                   ))}
                 </div>
 
-                {/* Decorative Images inside Col 3 */}
-                <div className="mt-16 flex gap-6 justify-center">
+                <div className="mt-8 flex gap-6 justify-center">
                   {drinksAndDesserts.filter(p => p.image_url).slice(0, 2).map((p, i) => (
-                    <div key={p.id} className="w-32 h-32 rounded-full overflow-hidden shadow-2xl border-4" style={{ borderColor: theme === 'dark' ? 'rgba(255,255,255,0.05)' : '#ffffff' }}>
+                    <div key={p.id} className={`w-36 h-36 rounded-full overflow-hidden shadow-2xl border-4 ${theme === 'dark' ? 'border-[#333]' : 'border-white'}`}>
                       <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
                     </div>
                   ))}
                 </div>
 
-                {/* Footer note in Col 3 */}
-                <div className={`mt-auto pt-16 text-center text-sm font-medium ${theme === 'dark' ? 'text-zinc-600' : 'text-[#5a6b5a]/60'}`}>
-                  Harga dapat berubah sewaktu-waktu.<br/>
-                  *Gambar hanya ilustrasi.
+                <div className={`mt-auto pt-10 text-center text-sm font-bold tracking-widest uppercase ${theme === 'dark' ? 'text-zinc-600' : 'text-[#8d6e63]'}`}>
+                  Terima Kasih Atas Kunjungan Anda!
                 </div>
               </div>
 
