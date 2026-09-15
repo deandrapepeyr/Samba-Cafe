@@ -266,6 +266,13 @@ export function Sidebar({ onLogoutClick, onLoginClick }: { onLogoutClick?: () =>
                   </Link>
                 </>
               )}
+              
+              <div className="my-2 border-t border-border"></div>
+              
+              <a href="/menu" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 px-3 py-3 rounded-lg text-primary hover:bg-primary/10 transition-all font-semibold">
+                <ChefHat size={20} className="shrink-0" />
+                <span className={cn("font-medium", isExpanded ? "block" : "hidden")}>E-Menu Customer</span>
+              </a>
             </>
           ) : (
             <div className={cn("flex flex-col gap-2 mt-2", shakeAccounts ? "animate-shake" : "")}>
