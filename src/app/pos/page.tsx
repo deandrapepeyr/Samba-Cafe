@@ -23,6 +23,7 @@ export type Product = {
   is_available: boolean;
   is_titipan: boolean;
   titipan_name: string | null;
+  supplier_price?: number;
 };
 
 export type Category = {

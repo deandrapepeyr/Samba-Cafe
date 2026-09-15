@@ -21,7 +21,8 @@ import {
   RotateCcw,
   Utensils,
   PackageCheck,
-  Printer
+  Printer,
+  FileEdit
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
