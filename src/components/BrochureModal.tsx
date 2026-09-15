@@ -116,8 +116,9 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
           <style dangerouslySetInnerHTML={{__html: `
             @media print {
               body { background: none !important; background-color: transparent !important; }
-              body > *:not([role="dialog"]) { display: none !important; }
-              .print-wrapper { position: absolute; left: 0; top: 0; transform: none !important; }
+              body > * { display: none !important; }
+              body > [data-radix-portal] { display: block !important; }
+              .print-wrapper { position: absolute; left: 0; top: 0; transform: none !important; width: 100%; height: 100%; }
               @page { size: A5 landscape; margin: 0mm; }
               * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             }
