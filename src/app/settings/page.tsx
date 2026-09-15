@@ -429,7 +429,7 @@ export default function SettingsPage() {
                                   </div>
                                   {cat.id !== '1' && (
                                     <div 
-                                      className="w-8 h-8 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-red-500 hover:text-white transition-all duration-300"
+                                      className="w-8 h-8 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center opacity-100 hover:bg-red-500 hover:text-white transition-all duration-300"
                                       onClick={async (e) => {
                                         e.stopPropagation();
                                         if (confirm(`Yakin ingin menghapus kategori ${cat.name}?`)) {
@@ -450,7 +450,7 @@ export default function SettingsPage() {
                                   <h3 className="text-lg font-medium text-zinc-100 group-hover:text-primary transition-colors">{cat.name}</h3>
                                   <p className="text-sm text-zinc-500 mt-0.5">{itemCount} Menu Items</p>
                                 </div>
-                                <div className="absolute right-5 bottom-5 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
+                                <div className="absolute right-5 bottom-5 opacity-100 transition-all duration-300 translate-x-0">
                                   <ChevronLeft className="w-5 h-5 text-primary rotate-180" />
                                 </div>
                               </div>
