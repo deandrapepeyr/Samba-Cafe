@@ -513,7 +513,7 @@ export default function SettingsPage() {
                                           </div>
                                         </div>
                                       </div>
-                                      <div className="flex gap-2 w-full sm:w-auto opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                      <div className="flex gap-2 w-full sm:w-auto opacity-100 transition-opacity duration-300">
                                         <Button 
                                           variant="outline" 
                                           className="flex-1 sm:flex-none border-white/10 hover:bg-white/5 transition-colors rounded-xl"
@@ -535,11 +535,13 @@ export default function SettingsPage() {
                                           variant="destructive" 
                                           className="flex-1 sm:flex-none rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20 transition-all duration-300"
                                           onClick={async () => {
-                                            const { error } = await supabase.from('products').delete().eq('id', product.id);
-                                            if (error) {
-                                              alert("Failed to delete product: " + error.message);
-                                            } else {
-                                              setProducts(products.filter(p => p.id !== product.id));
+                                            if (window.confirm(`Yakin ingin menghapus menu ${product.name}?`)) {
+                                              const { error } = await supabase.from('products').delete().eq('id', product.id);
+                                              if (error) {
+                                                alert("Failed to delete product: " + error.message);
+                                              } else {
+                                                setProducts(products.filter(p => p.id !== product.id));
+                                              }
                                             }
                                           }}
                                         >
