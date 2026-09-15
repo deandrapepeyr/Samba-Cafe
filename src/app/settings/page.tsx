@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { supabase } from '@/lib/supabase';
-import { Layers, Loader2, Plus } from 'lucide-react';
+import { Search, Plus, Trash2, Edit2, Check, X, Tag, DollarSign, Image as ImageIcon, Box, Utensils, Loader2, Layers, ChevronLeft } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
@@ -61,13 +61,18 @@ export default function SettingsPage() {
   const [isAddUserDialogOpen, setIsAddUserDialogOpen] = useState(false);
   const [isEditUserDialogOpen, setIsEditUserDialogOpen] = useState(false);
   
-  const [activeCategoryFilter, setActiveCategoryFilter] = useState('1'); // '1' is 'All'
+  const [viewMode, setViewMode] = useState<'categories' | 'items'>('categories');
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [activeItemTab, setActiveItemTab] = useState<string>('my-item');
 
   const [newItem, setNewItem] = useState({
     name: '',
     price: '',
     category_id: '1',
-    image_url: 'https://images.unsplash.com/photo-1510591509098-f4fdc6d0ff04?auto=format&fit=crop&q=80&w=400&h=300'
+    image_url: 'https://images.unsplash.com/photo-1510591509098-f4fdc6d0ff04?auto=format&fit=crop&q=80&w=400&h=300',
+    is_titipan: false,
+    titipan_name: '',
+    supplier_price: ''
   });
   const [newIngredients, setNewIngredients] = useState<{stock_id: string, quantity_required: string}[]>([]);
 
@@ -93,6 +98,30 @@ export default function SettingsPage() {
   const [newImageFile, setNewImageFile] = useState<File | null>(null);
   const [editImageFile, setEditImageFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleResetTransactions = async () => {
+    setIsResetting(true);
+    try {
+      // Menghapus semua item transaksi
+      await supabase.from('transaction_items').delete().not('id', 'is', null);
+      
+      // Menghapus semua transaksi
+      const { error } = await supabase.from('transactions').delete().not('id', 'is', null);
+      
+      if (error) {
+        alert("Gagal mereset data transaksi: " + error.message);
+      } else {
+        setIsResetDialogOpen(false);
+        alert("Data transaksi berhasil direset.");
+      }
+    } catch (err: any) {
+      alert("Terjadi kesalahan: " + err.message);
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   const uploadImage = async (file: File) => {
     const fileExt = file.name.split('.').pop();
@@ -115,8 +144,10 @@ export default function SettingsPage() {
   };
 
   const filteredProducts = products.filter(p => 
-    activeCategoryFilter === '1' || p.category_id === activeCategoryFilter
+    selectedCategoryId === '1' || p.category_id === selectedCategoryId
   );
+  
+  const selectedCategoryName = categories.find(c => c.id === selectedCategoryId)?.name || 'Items';
 
   const handleAddItem = async () => {
     if (!newItem.name || !newItem.price) return;
@@ -134,7 +165,10 @@ export default function SettingsPage() {
         price: parseInt(newItem.price),
         category_id: newItem.category_id,
         image_url: imageUrl,
-        is_available: true
+        is_available: true,
+        is_titipan: newItem.is_titipan,
+        titipan_name: newItem.is_titipan ? newItem.titipan_name : null,
+        supplier_price: newItem.is_titipan ? parseInt(newItem.supplier_price.toString()) || 0 : 0
       };
       
       const { error } = await supabase.from('products').insert([product]);
@@ -159,7 +193,10 @@ export default function SettingsPage() {
           name: '',
           price: '',
           category_id: categories.length > 1 ? categories[1].id : '1',
-          image_url: 'https://images.unsplash.com/photo-1510591509098-f4fdc6d0ff04?auto=format&fit=crop&q=80&w=400&h=300'
+          image_url: 'https://images.unsplash.com/photo-1510591509098-f4fdc6d0ff04?auto=format&fit=crop&q=80&w=400&h=300',
+          is_titipan: false,
+          titipan_name: '',
+          supplier_price: ''
         });
         setNewIngredients([]);
         setNewImageFile(null);
@@ -181,6 +218,10 @@ export default function SettingsPage() {
     
     try {
       let updatedItem = { ...editingItem };
+      if (!updatedItem.is_titipan) {
+        updatedItem.titipan_name = null;
+        updatedItem.supplier_price = 0;
+      }
       if (editImageFile) {
         const imageUrl = await uploadImage(editImageFile);
         updatedItem.image_url = imageUrl;
@@ -304,144 +345,222 @@ export default function SettingsPage() {
         </div>
 
         <Tabs defaultValue="menu" className="w-full flex-1 flex flex-col min-h-0">
-          <TabsList className="w-full lg:w-[400px] grid grid-cols-2 mb-6 bg-card border border-border flex-shrink-0">
-            <TabsTrigger value="menu" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Food and Drinks</TabsTrigger>
-            <TabsTrigger value="users" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">User Management</TabsTrigger>
+          <TabsList className="w-full lg:w-[600px] grid grid-cols-3 mb-6 bg-zinc-900/50 p-1.5 rounded-2xl border border-white/5 flex-shrink-0 h-auto min-h-[52px] items-stretch gap-1">
+            <TabsTrigger value="menu" className="h-full rounded-xl py-2.5 data-active:bg-zinc-800 data-active:text-primary data-[state=active]:bg-zinc-800 data-[state=active]:text-primary dark:data-active:bg-zinc-800 data-[state=active]:shadow-lg transition-all text-zinc-400">Food and Drinks</TabsTrigger>
+            <TabsTrigger value="users" className="h-full rounded-xl py-2.5 data-active:bg-zinc-800 data-active:text-primary data-[state=active]:bg-zinc-800 data-[state=active]:text-primary dark:data-active:bg-zinc-800 data-[state=active]:shadow-lg transition-all text-zinc-400">User Management</TabsTrigger>
+            <TabsTrigger value="system" className="h-full rounded-xl py-2.5 data-active:bg-zinc-800 data-active:text-primary data-[state=active]:bg-zinc-800 data-[state=active]:text-primary dark:data-active:bg-zinc-800 data-[state=active]:shadow-lg transition-all text-zinc-400">System</TabsTrigger>
           </TabsList>
           
           <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-border pr-2 pb-8">
             <TabsContent value="menu" className="m-0 border-none p-0 outline-none">
               
-              <Card className="bg-card border-border">
-                <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6">
+              <Card className="bg-zinc-950/50 border-white/10 backdrop-blur-xl shadow-2xl rounded-2xl overflow-hidden">
+                <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-white/5">
                   <div>
-                    <CardTitle className="text-xl">Menu Management</CardTitle>
-                    <CardDescription>Add, edit, or remove food and drinks from your catalog.</CardDescription>
+                    <CardTitle className="text-xl">
+                      {viewMode === 'categories' ? 'Menu Categories' : selectedCategoryName}
+                    </CardTitle>
+                    <CardDescription>
+                      {viewMode === 'categories' 
+                        ? 'Select a category to view or manage its items.'
+                        : 'Add, edit, or remove food and drinks from this category.'}
+                    </CardDescription>
                   </div>
                   <div className="flex gap-2 w-full sm:w-auto">
-                    <Button 
-                      variant="outline"
-                      className="flex-1 sm:flex-none border-border"
-                      onClick={() => setIsAddCategoryDialogOpen(true)}
-                    >
-                      <Layers size={16} className="mr-2" />
-                      Manage Categories
-                    </Button>
-                    <Button 
-                      className="bg-primary text-primary-foreground hover:bg-primary/90 w-full sm:w-auto"
-                      onClick={() => setIsAddItemDialogOpen(true)}
-                    >
-                      Add New Item
-                    </Button>
+                    {viewMode === 'categories' ? (
+                      <Button 
+                        className="bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-white/10 hover:border-primary/50 transition-all duration-300 rounded-xl shadow-sm hover:shadow-primary/10 hover:-translate-y-0.5"
+                        onClick={() => setIsAddCategoryDialogOpen(true)}
+                      >
+                        <Plus size={16} className="mr-2 text-primary" />
+                        Add Category
+                      </Button>
+                    ) : (
+                      <>
+                        <Button 
+                          variant="outline"
+                          className="flex-1 sm:flex-none border-white/10 hover:bg-white/5 transition-all duration-300 rounded-xl"
+                          onClick={() => { setViewMode('categories'); setSelectedCategoryId(null); }}
+                        >
+                          <ChevronLeft size={16} className="mr-2" />
+                          Back
+                        </Button>
+                        <Button 
+                          className="bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-white/10 hover:border-primary/50 transition-all duration-300 rounded-xl shadow-sm hover:shadow-primary/10 hover:-translate-y-0.5"
+                          onClick={() => {
+                            setNewItem(prev => ({ ...prev, category_id: selectedCategoryId && selectedCategoryId !== '1' ? selectedCategoryId : (categories.length > 1 ? categories[1].id : '1') }));
+                            setIsAddItemDialogOpen(true);
+                          }}
+                        >
+                          <Plus size={16} className="mr-2 text-primary" />
+                          Add New Item
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent>
                   
-                  {/* Category Filter Chips */}
-                  <div className="flex gap-2 overflow-x-auto pb-4 mb-2 scrollbar-hide">
-                    {isLoadingData ? (
-                      <div className="flex gap-2">
-                        {[1, 2, 3].map(i => (
-                          <div key={i} className="w-24 h-9 rounded-full bg-muted animate-pulse"></div>
-                        ))}
-                      </div>
-                    ) : (
-                      categories.length > 0 && categories.map(cat => {
-                        const itemCount = cat.id === '1' 
-                          ? products.length 
-                          : products.filter(p => p.category_id === cat.id).length;
-                          
-                        return (
-                        <button
-                          key={cat.id}
-                          onClick={() => setActiveCategoryFilter(cat.id)}
-                          className={`px-5 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all flex items-center gap-2 ${
-                            activeCategoryFilter === cat.id 
-                              ? 'bg-primary text-primary-foreground shadow-sm' 
-                              : 'bg-background text-muted-foreground hover:bg-muted border border-border'
-                          }`}
-                        >
-                          {cat.name}
-                          <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                            activeCategoryFilter === cat.id 
-                              ? 'bg-primary-foreground/20 text-primary-foreground' 
-                              : 'bg-muted-foreground/30 text-muted-foreground'
-                          }`}>
-                            {itemCount}
-                          </span>
-                        </button>
-                      );
-                      })
-                    )}
-                  </div>
-
-                  <div className="space-y-4">
-                    {isLoadingData ? (
-                      <div className="flex flex-col items-center justify-center p-12 text-muted-foreground space-y-4">
-                        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                        <p>Memuat data menu...</p>
-                      </div>
-                    ) : (
-                      <>
-                        {filteredProducts.map(product => (
-                          <div key={product.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 border border-border rounded-lg bg-background">
-                            <div className="flex items-center gap-4">
-                              <div className="w-16 h-16 rounded-md overflow-hidden bg-muted flex-shrink-0">
-                                <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
-                              </div>
-                              <div>
-                                <h3 className="font-semibold">{product.name}</h3>
-                                <div className="flex items-center gap-2 mt-1">
-                                  <p className="text-primary font-medium text-sm">Rp {product.price.toLocaleString('id-ID')}</p>
-                                  <span className="text-muted-foreground text-xs bg-muted px-2 py-0.5 rounded-full border border-border">
-                                    {categories.find(c => c.id === product.category_id)?.name || 'Unknown'}
-                                  </span>
+                  {isLoadingData ? (
+                    <div className="flex flex-col items-center justify-center p-12 text-muted-foreground space-y-4">
+                      <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                      <p>Memuat data...</p>
+                    </div>
+                  ) : (
+                    <>
+                      {viewMode === 'categories' ? (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5 p-2">
+                          {categories.map(cat => {
+                            const itemCount = cat.id === '1' 
+                              ? products.length 
+                              : products.filter(p => p.category_id === cat.id).length;
+                            return (
+                              <div 
+                                key={cat.id} 
+                                className="cursor-pointer group relative overflow-hidden p-6 rounded-2xl bg-zinc-900/40 border border-white/5 hover:border-primary/50 hover:bg-zinc-900/80 transition-all duration-300 flex flex-col items-start gap-4 hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/5"
+                                onClick={() => { 
+                                  setSelectedCategoryId(cat.id); 
+                                  setViewMode('items'); 
+                                }}
+                              >
+                                <div className="flex justify-between items-start w-full">
+                                  <div className="w-12 h-12 rounded-xl bg-white/5 text-zinc-400 flex items-center justify-center group-hover:bg-primary/10 group-hover:text-primary transition-colors duration-300">
+                                    {cat.id === '1' ? <Layers size={22} strokeWidth={1.5} /> : <Utensils size={22} strokeWidth={1.5} />}
+                                  </div>
+                                  {cat.id !== '1' && (
+                                    <div 
+                                      className="w-8 h-8 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-red-500 hover:text-white transition-all duration-300"
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        if (confirm(`Yakin ingin menghapus kategori ${cat.name}?`)) {
+                                          const { error } = await supabase.from('categories').delete().eq('id', cat.id);
+                                          if (error) {
+                                            alert("Failed to delete category: " + error.message);
+                                          } else {
+                                            setCategories(categories.filter(c => c.id !== cat.id));
+                                          }
+                                        }
+                                      }}
+                                    >
+                                      <Trash2 size={14} />
+                                    </div>
+                                  )}
+                                </div>
+                                <div>
+                                  <h3 className="text-lg font-medium text-zinc-100 group-hover:text-primary transition-colors">{cat.name}</h3>
+                                  <p className="text-sm text-zinc-500 mt-0.5">{itemCount} Menu Items</p>
+                                </div>
+                                <div className="absolute right-5 bottom-5 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
+                                  <ChevronLeft className="w-5 h-5 text-primary rotate-180" />
                                 </div>
                               </div>
-                            </div>
-                            <div className="flex gap-2 w-full sm:w-auto">
-                              <Button 
-                                variant="outline" 
-                                className="flex-1 sm:flex-none border-border"
-                                onClick={async () => {
-                                  // Fetch recipe
-                                  const { data } = await supabase.from('product_ingredients').select('*').eq('product_id', product.id);
-                                  if (data) {
-                                    setEditIngredients(data.map(d => ({ stock_id: d.stock_id, quantity_required: d.quantity_required.toString() })));
-                                  } else {
-                                    setEditIngredients([]);
-                                  }
-                                  setEditingItem(product);
-                                  setIsEditItemDialogOpen(true);
-                                }}
-                              >
-                                Edit
-                              </Button>
-                              <Button 
-                                variant="destructive" 
-                                className="flex-1 sm:flex-none"
-                                onClick={async () => {
-                                  const { error } = await supabase.from('products').delete().eq('id', product.id);
-                                  if (error) {
-                                    alert("Failed to delete product: " + error.message);
-                                  } else {
-                                    setProducts(products.filter(p => p.id !== product.id));
-                                  }
-                                }}
-                              >
-                                Delete
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                        {filteredProducts.length === 0 && (
-                          <div className="text-center p-8 border border-dashed border-border rounded-lg text-muted-foreground">
-                            No products found in this category.
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-500 p-2">
+                          {(() => {
+                            const titipanNames = Array.from(new Set(filteredProducts.filter(p => p.is_titipan && p.titipan_name).map(p => p.titipan_name as string)));
+                            
+                            const finalProducts = filteredProducts.filter(p => {
+                              if (activeItemTab === 'my-item' || !titipanNames.includes(activeItemTab)) {
+                                return !p.is_titipan;
+                              }
+                              return p.is_titipan && p.titipan_name === activeItemTab;
+                            });
+
+                            return (
+                              <>
+                                {titipanNames.length > 0 && (
+                                  <div className="flex flex-wrap gap-2 mb-4 p-1.5 bg-zinc-900/40 rounded-2xl border border-white/5 w-fit shadow-inner">
+                                    <button 
+                                      onClick={() => setActiveItemTab('my-item')}
+                                      className={`px-5 py-2 rounded-xl text-sm font-medium transition-all duration-300 ${activeItemTab === 'my-item' || !titipanNames.includes(activeItemTab) ? 'bg-zinc-800 text-primary shadow-lg shadow-primary/5' : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5'}`}
+                                    >
+                                      My Item
+                                    </button>
+                                    {titipanNames.map(name => (
+                                      <button 
+                                        key={name}
+                                        onClick={() => setActiveItemTab(name)}
+                                        className={`px-5 py-2 rounded-xl text-sm font-medium transition-all duration-300 ${activeItemTab === name ? 'bg-zinc-800 text-primary shadow-lg shadow-primary/5' : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5'}`}
+                                      >
+                                        {name}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                                <div className="space-y-3">
+                                  {finalProducts.map(product => (
+                                    <div key={product.id} className="group flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-2xl bg-zinc-900/40 border border-white/5 hover:bg-zinc-900/80 hover:border-white/10 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5">
+                                      <div className="flex items-center gap-5">
+                                        <div className="w-16 h-16 rounded-xl overflow-hidden bg-gradient-to-br from-zinc-800 to-zinc-900 border border-white/10 flex-shrink-0 flex items-center justify-center shadow-inner">
+                                          {product.image_url ? (
+                                            <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+                                          ) : (
+                                            <Utensils size={24} className="text-zinc-500 opacity-50" />
+                                          )}
+                                        </div>
+                                        <div>
+                                          <h3 className="font-medium text-zinc-100 group-hover:text-primary transition-colors">{product.name}</h3>
+                                          <div className="flex items-center gap-3 mt-1.5">
+                                            <p className="text-primary font-semibold text-sm">Rp {product.price.toLocaleString('id-ID')}</p>
+                                            {selectedCategoryId === '1' && (
+                                              <span className="text-zinc-400 text-xs bg-white/5 px-2.5 py-0.5 rounded-full border border-white/10">
+                                                {categories.find(c => c.id === product.category_id)?.name || 'Unknown'}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="flex gap-2 w-full sm:w-auto opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                        <Button 
+                                          variant="outline" 
+                                          className="flex-1 sm:flex-none border-white/10 hover:bg-white/5 transition-colors rounded-xl"
+                                          onClick={async () => {
+                                            // Fetch recipe
+                                            const { data } = await supabase.from('product_ingredients').select('*').eq('product_id', product.id);
+                                            if (data) {
+                                              setEditIngredients(data.map(d => ({ stock_id: d.stock_id, quantity_required: d.quantity_required.toString() })));
+                                            } else {
+                                              setEditIngredients([]);
+                                            }
+                                            setEditingItem(product);
+                                            setIsEditItemDialogOpen(true);
+                                          }}
+                                        >
+                                          Edit
+                                        </Button>
+                                        <Button 
+                                          variant="destructive" 
+                                          className="flex-1 sm:flex-none rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20 transition-all duration-300"
+                                          onClick={async () => {
+                                            const { error } = await supabase.from('products').delete().eq('id', product.id);
+                                            if (error) {
+                                              alert("Failed to delete product: " + error.message);
+                                            } else {
+                                              setProducts(products.filter(p => p.id !== product.id));
+                                            }
+                                          }}
+                                        >
+                                          Delete
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                  {finalProducts.length === 0 && (
+                                    <div className="text-center p-8 border border-dashed border-white/10 rounded-2xl text-zinc-500 bg-zinc-900/20">
+                                      No products found in this section.
+                                    </div>
+                                  )}
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </CardContent>
               </Card>
 
@@ -511,32 +630,60 @@ export default function SettingsPage() {
                 </CardContent>
               </Card>
             </TabsContent>
+
+            <TabsContent value="system" className="m-0 border-none p-0 outline-none">
+              <Card className="bg-card border-border border-red-500/20">
+                <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6">
+                  <div>
+                    <CardTitle className="text-xl text-destructive">Danger Zone</CardTitle>
+                    <CardDescription>System actions like resetting dummy data.</CardDescription>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 border border-destructive/20 rounded-lg bg-destructive/5">
+                      <div>
+                        <h3 className="font-semibold text-destructive">Reset Data Transaksi</h3>
+                        <p className="text-sm text-muted-foreground mt-1">Tindakan ini akan menghapus semua riwayat transaksi secara permanen.</p>
+                      </div>
+                      <Button 
+                        variant="destructive" 
+                        className="w-full sm:w-auto"
+                        onClick={() => setIsResetDialogOpen(true)}
+                      >
+                        Reset Data
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
           </div>
         </Tabs>
       </div>
 
       {/* Add Item Dialog */}
       <Dialog open={isAddItemDialogOpen} onOpenChange={setIsAddItemDialogOpen}>
-        <DialogContent className="bg-card border-border sm:max-w-[425px]">
+        <DialogContent className="bg-zinc-950 border-white/10 sm:max-w-[450px] rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Add New Menu Item</DialogTitle>
+            <DialogTitle className="text-xl text-zinc-100">Add New Menu Item</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="name" className="text-right text-sm font-medium">Name</label>
+          <div className="grid gap-5 py-4 max-h-[70vh] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/10">
+            <div className="grid gap-2">
+              <label htmlFor="name" className="text-sm font-medium text-zinc-400">Name</label>
               <Input 
                 id="name" 
-                className="col-span-3 bg-background border-border" 
+                className="bg-zinc-900/50 border-white/10 text-zinc-100 focus-visible:ring-primary h-11 rounded-xl" 
                 value={newItem.name}
                 onChange={(e) => setNewItem({...newItem, name: e.target.value})}
               />
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="price" className="text-right text-sm font-medium">Price (Rp)</label>
+            <div className="grid gap-2">
+              <label htmlFor="price" className="text-sm font-medium text-zinc-400">Price (Rp)</label>
               <Input 
                 id="price" 
                 type="text"
-                className="col-span-3 bg-background border-border" 
+                className="bg-zinc-900/50 border-white/10 text-zinc-100 focus-visible:ring-primary h-11 rounded-xl" 
                 placeholder="15.000"
                 value={newItem.price ? parseInt(newItem.price).toLocaleString('id-ID') : ''}
                 onChange={(e) => {
@@ -547,26 +694,26 @@ export default function SettingsPage() {
                 }}
               />
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="category" className="text-right text-sm font-medium">Category</label>
+            <div className="grid gap-2">
+              <label htmlFor="category" className="text-sm font-medium text-zinc-400">Category</label>
               <select 
                 id="category"
-                className="col-span-3 flex h-10 w-full items-center justify-between rounded-md border border-border bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                className="flex h-11 w-full items-center justify-between rounded-xl border border-white/10 bg-zinc-900/50 px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-0"
                 value={newItem.category_id}
                 onChange={(e) => setNewItem({...newItem, category_id: e.target.value})}
               >
                 {categories.filter(c => c.name !== 'All').map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
+                  <option key={c.id} value={c.id} className="bg-zinc-900">{c.name}</option>
                 ))}
               </select>
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="image" className="text-right text-sm font-medium">Foto Menu</label>
+            <div className="grid gap-2">
+              <label htmlFor="image" className="text-sm font-medium text-zinc-400">Foto Menu</label>
               <Input 
                 id="image" 
                 type="file"
                 accept="image/*"
-                className="col-span-3 bg-background border-border" 
+                className="bg-zinc-900/50 border-white/10 text-zinc-100 focus-visible:ring-primary h-11 rounded-xl file:text-primary file:bg-primary/10 file:rounded-md file:border-0 file:mr-4 file:px-4 file:py-1 hover:file:bg-primary/20 transition-all cursor-pointer" 
                 onChange={(e) => {
                   if (e.target.files && e.target.files[0]) {
                     setNewImageFile(e.target.files[0]);
@@ -575,45 +722,95 @@ export default function SettingsPage() {
               />
             </div>
             
-            {/* Ingredients Section */}
-            <div className="mt-2">
-              <h4 className="text-sm font-medium mb-3 border-b border-border pb-2 text-muted-foreground">Resep / Bahan Baku (Opsional)</h4>
-              {newIngredients.map((ing, idx) => (
-                <div key={idx} className="flex gap-2 mb-3 items-center animate-in fade-in">
-                  <select 
-                    className="flex-1 h-9 rounded-md border border-border bg-background px-2 py-1 text-sm"
-                    value={ing.stock_id}
-                    onChange={(e) => {
-                      const newIngs = [...newIngredients];
-                      newIngs[idx].stock_id = e.target.value;
-                      setNewIngredients(newIngs);
-                    }}
-                  >
-                    <option value="" disabled>Pilih bahan...</option>
-                    {stocks.map(s => <option key={s.id} value={s.id}>{s.name} ({s.unit})</option>)}
-                  </select>
+            {/* Titipan Section */}
+            <div className="flex items-center space-x-3 p-4 rounded-xl bg-white/[0.02] border border-white/5 mt-2">
+              <input 
+                type="checkbox"
+                id="is_titipan"
+                checked={newItem.is_titipan}
+                onChange={(e) => setNewItem({...newItem, is_titipan: e.target.checked})}
+                className="w-5 h-5 text-primary bg-zinc-900 border-white/10 rounded focus:ring-primary focus:ring-2 accent-primary cursor-pointer"
+              />
+              <label htmlFor="is_titipan" className="text-sm font-medium text-zinc-300 cursor-pointer select-none">Ini adalah barang Titipan?</label>
+            </div>
+            {newItem.is_titipan && (
+              <div className="grid gap-4 animate-in fade-in slide-in-from-top-2 p-4 bg-primary/5 border border-primary/10 rounded-xl">
+                <div className="grid gap-2">
+                  <label htmlFor="titipan_name" className="text-sm font-bold text-primary">Nama Penitip</label>
                   <Input 
-                    className="w-24 h-9 bg-background border-border" 
-                    placeholder="Takaran" 
-                    type="number" step="any"
-                    value={ing.quantity_required}
+                    id="titipan_name" 
+                    className="bg-zinc-900/80 border-white/10 text-zinc-100 focus-visible:ring-primary h-11 rounded-xl" 
+                    placeholder="Contoh: Ibu Sari"
+                    value={newItem.titipan_name}
+                    onChange={(e) => setNewItem({...newItem, titipan_name: e.target.value})}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <label htmlFor="supplier_price" className="text-sm font-bold text-primary">Harga Setoran (Modal Titipan)</label>
+                  <Input 
+                    id="supplier_price" 
+                    type="text"
+                    className="bg-zinc-900/80 border-white/10 text-zinc-100 focus-visible:ring-primary h-11 rounded-xl" 
+                    placeholder="Misal: 10000"
+                    value={newItem.supplier_price ? parseInt(newItem.supplier_price.toString()).toLocaleString('id-ID') : ''}
                     onChange={(e) => {
-                      const newIngs = [...newIngredients];
-                      newIngs[idx].quantity_required = e.target.value;
-                      setNewIngredients(newIngs);
+                      const rawValue = e.target.value.replace(/\./g, '');
+                      if (/^\d*$/.test(rawValue)) {
+                        setNewItem({...newItem, supplier_price: rawValue});
+                      }
                     }}
                   />
-                  <Button variant="ghost" size="sm" className="h-9 px-2 text-destructive hover:bg-destructive/10" onClick={() => setNewIngredients(newIngredients.filter((_, i) => i !== idx))}>✕</Button>
+                  <p className="text-[10px] text-zinc-500 font-medium mt-1">Uang ini tidak akan dihitung sebagai Laba Bersih.</p>
                 </div>
-              ))}
-              <Button variant="outline" size="sm" className="w-full border-dashed" onClick={() => setNewIngredients([...newIngredients, {stock_id: '', quantity_required: ''}])}>
-                <Plus size={14} className="mr-1" /> Tambah Bahan
-              </Button>
+              </div>
+            )}
+            
+            {/* Ingredients Section */}
+            <div className="mt-4 pt-4 border-t border-white/10">
+              <h4 className="text-sm font-medium mb-3 text-zinc-300 flex items-center gap-2">
+                <Utensils size={16} className="text-primary"/> 
+                Resep / Bahan Baku (Opsional)
+              </h4>
+              <div className="space-y-3">
+                {newIngredients.map((ing, idx) => (
+                  <div key={idx} className="flex gap-2 items-center animate-in fade-in">
+                    <select 
+                      className="flex-1 h-10 rounded-xl border border-white/10 bg-zinc-900/50 px-2 py-1 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-primary"
+                      value={ing.stock_id}
+                      onChange={(e) => {
+                        const newIngs = [...newIngredients];
+                        newIngs[idx].stock_id = e.target.value;
+                        setNewIngredients(newIngs);
+                      }}
+                    >
+                      <option value="" disabled className="bg-zinc-900">Pilih bahan...</option>
+                      {stocks.map(s => <option key={s.id} value={s.id} className="bg-zinc-900">{s.name} ({s.unit})</option>)}
+                    </select>
+                    <Input 
+                      className="w-24 h-10 bg-zinc-900/50 border-white/10 text-zinc-100 rounded-xl text-center" 
+                      placeholder="Takaran" 
+                      type="number" step="any"
+                      value={ing.quantity_required}
+                      onChange={(e) => {
+                        const newIngs = [...newIngredients];
+                        newIngs[idx].quantity_required = e.target.value;
+                        setNewIngredients(newIngs);
+                      }}
+                    />
+                    <Button variant="ghost" size="icon" className="h-10 w-10 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-xl" onClick={() => setNewIngredients(newIngredients.filter((_, i) => i !== idx))}>
+                      <Trash2 size={16} />
+                    </Button>
+                  </div>
+                ))}
+                <Button variant="outline" size="sm" className="w-full border-dashed border-white/20 text-zinc-400 hover:text-zinc-100 hover:bg-white/5 h-10 rounded-xl transition-colors" onClick={() => setNewIngredients([...newIngredients, {stock_id: '', quantity_required: ''}])}>
+                  <Plus size={16} className="mr-2" /> Tambah Bahan
+                </Button>
+              </div>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddItemDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleAddItem} disabled={isUploading} className="bg-primary text-primary-foreground hover:bg-primary/90">
+          <DialogFooter className="pt-4 mt-2 border-t border-white/5">
+            <Button variant="outline" className="border-white/10 hover:bg-white/5 rounded-xl" onClick={() => setIsAddItemDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleAddItem} disabled={isUploading} className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl shadow-lg shadow-primary/20">
               {isUploading ? "Menyimpan..." : "Save Item"}
             </Button>
           </DialogFooter>
@@ -622,27 +819,27 @@ export default function SettingsPage() {
 
       {/* Edit Item Dialog */}
       <Dialog open={isEditItemDialogOpen} onOpenChange={setIsEditItemDialogOpen}>
-        <DialogContent className="bg-card border-border sm:max-w-[425px]">
+        <DialogContent className="bg-zinc-950 border-white/10 sm:max-w-[450px] rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Edit Menu Item</DialogTitle>
+            <DialogTitle className="text-xl text-zinc-100">Edit Menu Item</DialogTitle>
           </DialogHeader>
           {editingItem && (
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <label htmlFor="editName" className="text-right text-sm font-medium">Name</label>
+            <div className="grid gap-5 py-4 max-h-[70vh] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/10">
+              <div className="grid gap-2">
+                <label htmlFor="editName" className="text-sm font-medium text-zinc-400">Name</label>
                 <Input 
                   id="editName" 
-                  className="col-span-3 bg-background border-border" 
+                  className="bg-zinc-900/50 border-white/10 text-zinc-100 focus-visible:ring-primary h-11 rounded-xl" 
                   value={editingItem.name}
                   onChange={(e) => setEditingItem({...editingItem, name: e.target.value})}
                 />
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <label htmlFor="editPrice" className="text-right text-sm font-medium">Price (Rp)</label>
+              <div className="grid gap-2">
+                <label htmlFor="editPrice" className="text-sm font-medium text-zinc-400">Price (Rp)</label>
                 <Input 
                   id="editPrice" 
                   type="text"
-                  className="col-span-3 bg-background border-border" 
+                  className="bg-zinc-900/50 border-white/10 text-zinc-100 focus-visible:ring-primary h-11 rounded-xl" 
                   value={editingItem.price ? parseInt(editingItem.price.toString()).toLocaleString('id-ID') : ''}
                   onChange={(e) => {
                     const rawValue = e.target.value.replace(/\./g, '');
@@ -652,26 +849,26 @@ export default function SettingsPage() {
                   }}
                 />
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <label htmlFor="editCategory" className="text-right text-sm font-medium">Category</label>
+              <div className="grid gap-2">
+                <label htmlFor="editCategory" className="text-sm font-medium text-zinc-400">Category</label>
                 <select 
                   id="editCategory"
-                  className="col-span-3 flex h-10 w-full items-center justify-between rounded-md border border-border bg-background px-3 py-2 text-sm ring-offset-background"
+                  className="flex h-11 w-full items-center justify-between rounded-xl border border-white/10 bg-zinc-900/50 px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-primary"
                   value={editingItem.category_id}
                   onChange={(e) => setEditingItem({...editingItem, category_id: e.target.value})}
                 >
                   {categories.filter(c => c.name !== 'All').map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                    <option key={c.id} value={c.id} className="bg-zinc-900">{c.name}</option>
                   ))}
                 </select>
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <label htmlFor="editImage" className="text-right text-sm font-medium">Ubah Foto</label>
+              <div className="grid gap-2">
+                <label htmlFor="editImage" className="text-sm font-medium text-zinc-400">Ubah Foto</label>
                 <Input 
                   id="editImage" 
                   type="file"
                   accept="image/*"
-                  className="col-span-3 bg-background border-border" 
+                  className="bg-zinc-900/50 border-white/10 text-zinc-100 focus-visible:ring-primary h-11 rounded-xl file:text-primary file:bg-primary/10 file:rounded-md file:border-0 file:mr-4 file:px-4 file:py-1 hover:file:bg-primary/20 transition-all cursor-pointer" 
                   onChange={(e) => {
                     if (e.target.files && e.target.files[0]) {
                       setEditImageFile(e.target.files[0]);
@@ -680,100 +877,134 @@ export default function SettingsPage() {
                 />
               </div>
               
-              {/* Ingredients Section */}
-              <div className="mt-2">
-                <h4 className="text-sm font-medium mb-3 border-b border-border pb-2 text-muted-foreground">Resep / Bahan Baku (Opsional)</h4>
-                {editIngredients.map((ing, idx) => (
-                  <div key={idx} className="flex gap-2 mb-3 items-center animate-in fade-in">
-                    <select 
-                      className="flex-1 h-9 rounded-md border border-border bg-background px-2 py-1 text-sm"
-                      value={ing.stock_id}
-                      onChange={(e) => {
-                        const newIngs = [...editIngredients];
-                        newIngs[idx].stock_id = e.target.value;
-                        setEditIngredients(newIngs);
-                      }}
-                    >
-                      <option value="" disabled>Pilih bahan...</option>
-                      {stocks.map(s => <option key={s.id} value={s.id}>{s.name} ({s.unit})</option>)}
-                    </select>
+              {/* Titipan Section */}
+              <div className="flex items-center space-x-3 p-4 rounded-xl bg-white/[0.02] border border-white/5 mt-2">
+                <input 
+                  type="checkbox"
+                  id="edit_is_titipan"
+                  checked={editingItem.is_titipan || false}
+                  onChange={(e) => setEditingItem({...editingItem, is_titipan: e.target.checked})}
+                  className="w-5 h-5 text-primary bg-zinc-900 border-white/10 rounded focus:ring-primary focus:ring-2 accent-primary cursor-pointer"
+                />
+                <label htmlFor="edit_is_titipan" className="text-sm font-medium text-zinc-300 cursor-pointer select-none">Ini adalah barang Titipan?</label>
+              </div>
+              {editingItem.is_titipan && (
+                <div className="grid gap-4 animate-in fade-in slide-in-from-top-2 p-4 bg-primary/5 border border-primary/10 rounded-xl">
+                  <div className="grid gap-2">
+                    <label htmlFor="edit_titipan_name" className="text-sm font-bold text-primary">Nama Penitip</label>
                     <Input 
-                      className="w-24 h-9 bg-background border-border" 
-                      placeholder="Takaran" 
-                      type="number" step="any"
-                      value={ing.quantity_required}
+                      id="edit_titipan_name" 
+                      className="bg-zinc-900/80 border-white/10 text-zinc-100 focus-visible:ring-primary h-11 rounded-xl" 
+                      placeholder="Contoh: Ibu Sari"
+                      value={editingItem.titipan_name || ''}
+                      onChange={(e) => setEditingItem({...editingItem, titipan_name: e.target.value})}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <label htmlFor="edit_supplier_price" className="text-sm font-bold text-primary">Harga Setoran (Modal Titipan)</label>
+                    <Input 
+                      id="edit_supplier_price" 
+                      type="text"
+                      className="bg-zinc-900/80 border-white/10 text-zinc-100 focus-visible:ring-primary h-11 rounded-xl" 
+                      placeholder="Misal: 10000"
+                      value={editingItem.supplier_price ? parseInt(editingItem.supplier_price.toString()).toLocaleString('id-ID') : ''}
                       onChange={(e) => {
-                        const newIngs = [...editIngredients];
-                        newIngs[idx].quantity_required = e.target.value;
-                        setEditIngredients(newIngs);
+                        const rawValue = e.target.value.replace(/\./g, '');
+                        if (/^\d*$/.test(rawValue)) {
+                          setEditingItem({...editingItem, supplier_price: rawValue});
+                        }
                       }}
                     />
-                    <Button variant="ghost" size="sm" className="h-9 px-2 text-destructive hover:bg-destructive/10" onClick={() => setEditIngredients(editIngredients.filter((_, i) => i !== idx))}>✕</Button>
+                    <p className="text-[10px] text-zinc-500 font-medium mt-1">Uang ini tidak akan dihitung sebagai Laba Bersih.</p>
                   </div>
-                ))}
-                <Button variant="outline" size="sm" className="w-full border-dashed" onClick={() => setEditIngredients([...editIngredients, {stock_id: '', quantity_required: ''}])}>
-                  <Plus size={14} className="mr-1" /> Tambah Bahan
-                </Button>
+                </div>
+              )}
+              
+              {/* Ingredients Section */}
+              <div className="mt-4 pt-4 border-t border-white/10">
+                <h4 className="text-sm font-medium mb-3 text-zinc-300 flex items-center gap-2">
+                  <Utensils size={16} className="text-primary"/> 
+                  Resep / Bahan Baku (Opsional)
+                </h4>
+                <div className="space-y-3">
+                  {editIngredients.map((ing, idx) => (
+                    <div key={idx} className="flex gap-2 items-center animate-in fade-in">
+                      <select 
+                        className="flex-1 h-10 rounded-xl border border-white/10 bg-zinc-900/50 px-2 py-1 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-primary"
+                        value={ing.stock_id}
+                        onChange={(e) => {
+                          const newIngs = [...editIngredients];
+                          newIngs[idx].stock_id = e.target.value;
+                          setEditIngredients(newIngs);
+                        }}
+                      >
+                        <option value="" disabled className="bg-zinc-900">Pilih bahan...</option>
+                        {stocks.map(s => <option key={s.id} value={s.id} className="bg-zinc-900">{s.name} ({s.unit})</option>)}
+                      </select>
+                      <Input 
+                        className="w-24 h-10 bg-zinc-900/50 border-white/10 text-zinc-100 rounded-xl text-center" 
+                        placeholder="Takaran" 
+                        type="number" step="any"
+                        value={ing.quantity_required}
+                        onChange={(e) => {
+                          const newIngs = [...editIngredients];
+                          newIngs[idx].quantity_required = e.target.value;
+                          setEditIngredients(newIngs);
+                        }}
+                      />
+                      <Button variant="ghost" size="icon" className="h-10 w-10 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-xl" onClick={() => setEditIngredients(editIngredients.filter((_, i) => i !== idx))}>
+                        <Trash2 size={16} />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button variant="outline" size="sm" className="w-full border-dashed border-white/20 text-zinc-400 hover:text-zinc-100 hover:bg-white/5 h-10 rounded-xl transition-colors" onClick={() => setEditIngredients([...editIngredients, {stock_id: '', quantity_required: ''}])}>
+                    <Plus size={16} className="mr-2" /> Tambah Bahan
+                  </Button>
+                </div>
               </div>
             </div>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditItemDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleEditItemSave} disabled={isUploading} className="bg-primary text-primary-foreground hover:bg-primary/90">
+          <DialogFooter className="pt-4 mt-2 border-t border-white/5">
+            <Button variant="outline" className="border-white/10 hover:bg-white/5 rounded-xl" onClick={() => setIsEditItemDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleEditItemSave} disabled={isUploading} className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl shadow-lg shadow-primary/20">
               {isUploading ? "Menyimpan..." : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Manage Category Dialog */}
+      {/* Add Category Dialog */}
       <Dialog open={isAddCategoryDialogOpen} onOpenChange={setIsAddCategoryDialogOpen}>
-        <DialogContent className="bg-card border-border sm:max-w-[425px]">
+        <DialogContent className="bg-zinc-950 border-white/10 sm:max-w-[425px] rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Manage Categories</DialogTitle>
+            <DialogTitle className="text-zinc-100">Add New Category</DialogTitle>
           </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="flex gap-2">
-              <Input 
-                placeholder="New category name..."
-                className="bg-background border-border flex-1" 
-                value={newCategoryName}
-                onChange={(e) => setNewCategoryName(e.target.value)}
-              />
-              <Button onClick={handleAddCategory} className="bg-primary text-primary-foreground hover:bg-primary/90">Add</Button>
-            </div>
-            
-            <div className="pt-2">
-              <h4 className="text-sm font-medium mb-2 text-muted-foreground">Existing Categories</h4>
-              <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-border">
-                {categories.filter(c => c.name !== 'All').map(cat => (
-                  <div key={cat.id} className="flex justify-between items-center p-2.5 bg-background border border-border rounded-lg">
-                    <span className="text-sm font-medium">{cat.name}</span>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
-                      onClick={async () => {
-                        const { error } = await supabase.from('categories').delete().eq('id', cat.id);
-                        if (error) {
-                          alert("Failed to delete category: " + error.message);
-                        } else {
-                          setCategories(categories.filter(c => c.id !== cat.id));
-                        }
-                      }}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                ))}
-                {categories.length <= 1 && (
-                  <p className="text-xs text-muted-foreground text-center py-2">No categories found.</p>
-                )}
-              </div>
-            </div>
+          <div className="py-4">
+            <label className="text-sm font-medium text-zinc-400 mb-2 block">Category Name</label>
+            <Input 
+              placeholder="e.g., Dessert, Coffee..."
+              className="bg-zinc-900/50 border-white/10 text-zinc-100 focus-visible:ring-primary h-11" 
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleAddCategory();
+                  setIsAddCategoryDialogOpen(false);
+                }
+              }}
+            />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddCategoryDialogOpen(false)}>Close</Button>
+            <Button variant="outline" className="border-white/10 hover:bg-white/5 rounded-xl" onClick={() => setIsAddCategoryDialogOpen(false)}>Cancel</Button>
+            <Button 
+              onClick={() => {
+                handleAddCategory();
+                setIsAddCategoryDialogOpen(false);
+              }} 
+              className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl"
+            >
+              Save Category
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -893,6 +1124,33 @@ export default function SettingsPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditUserDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleEditUser} className="bg-primary text-primary-foreground hover:bg-primary/90">Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset Data Dialog */}
+      <Dialog open={isResetDialogOpen} onOpenChange={setIsResetDialogOpen}>
+        <DialogContent className="bg-card border-border sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="text-destructive">Reset Data Transaksi</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 text-sm text-muted-foreground space-y-4">
+            <p>
+              Apakah Anda yakin ingin menghapus semua data transaksi? Tindakan ini akan menghapus permanen:
+            </p>
+            <ul className="list-disc pl-5">
+              <li>Semua riwayat transaksi</li>
+              <li>Semua item transaksi yang terjual</li>
+            </ul>
+            <p className="font-medium text-foreground">
+              Tindakan ini tidak dapat dibatalkan.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsResetDialogOpen(false)}>Batal</Button>
+            <Button variant="destructive" onClick={handleResetTransactions} disabled={isResetting}>
+              {isResetting ? "Mereset..." : "Ya, Reset Semua Data"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

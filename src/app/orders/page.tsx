@@ -247,64 +247,64 @@ export default function OrdersPage() {
   const renderOrderCard = (order: Order) => (
     <div 
       key={order.id} 
-      className={`relative rounded-xl overflow-hidden transition-all duration-200 hover:shadow-md ${
-        order.status === 'preparing' ? 'bg-[#1a1a1a] border border-[#2a2a2a]' :
-        order.status === 'ready' ? 'bg-[#0f1a14] border border-emerald-500/20' :
-        'bg-[#161616] border border-[#222] opacity-80'
+      className={`group relative rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${
+        order.status === 'preparing' ? 'bg-zinc-900/60 backdrop-blur-md border border-white/10 hover:border-amber-500/50 hover:shadow-amber-500/10' :
+        order.status === 'ready' ? 'bg-emerald-950/20 backdrop-blur-md border border-emerald-500/20 hover:border-emerald-500/50 hover:shadow-emerald-500/10' :
+        'bg-zinc-900/30 backdrop-blur-md border border-white/5 opacity-70 hover:opacity-100'
       }`}
     >
-      {/* Thin accent top line */}
-      <div className={`h-[2px] w-full ${
-        order.status === 'preparing' ? 'bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500' :
-        order.status === 'ready' ? 'bg-gradient-to-r from-emerald-500 via-emerald-400 to-emerald-500' : 'bg-[#333]'
+      {/* Glow accent */}
+      <div className={`absolute top-0 left-0 right-0 h-1 ${
+        order.status === 'preparing' ? 'bg-gradient-to-r from-amber-500/0 via-amber-500 to-amber-500/0 opacity-50' :
+        order.status === 'ready' ? 'bg-gradient-to-r from-emerald-500/0 via-emerald-500 to-emerald-500/0 opacity-50' : 'hidden'
       }`} />
 
-      <div className="p-4 space-y-3">
+      <div className="p-5 space-y-4">
         {/* Header row */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <span className="font-mono font-bold text-[15px] text-white">#{order.id}</span>
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-full border ${getTimerBadgeStyle(order.createdAt)}`}>
-              <Clock size={10} />
+          <div className="flex items-center gap-3">
+            <span className="font-mono font-bold text-lg text-zinc-100">#{order.id}</span>
+            <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-full border ${getTimerBadgeStyle(order.createdAt)}`}>
+              <Clock size={12} />
               {getElapsedTimeText(order.createdAt)}
             </span>
           </div>
-          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
-            order.method === 'QRIS' ? 'bg-blue-500/10 text-blue-400' : 'bg-emerald-500/10 text-emerald-400'
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border ${
+            order.method === 'QRIS' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
           }`}>
             {order.method}
           </span>
         </div>
 
         {/* Cashier & Customer info */}
-        <div className="flex flex-col gap-0.5">
+        <div className="flex flex-col gap-1">
           {order.customer_name && (
-            <p className="text-[13px] font-semibold text-white">
+            <p className="text-sm font-semibold text-zinc-200">
               Pelanggan: <span className="text-primary">{order.customer_name}</span>
             </p>
           )}
-          <p className="text-[11px] text-[#666]">
-            {order.cashier_name} · {order.date}
+          <p className="text-xs text-zinc-500 font-medium">
+            Kasir: {order.cashier_name} · {order.date}
           </p>
         </div>
 
         {/* Items */}
-        <div className="space-y-1.5">
+        <div className="space-y-2.5 bg-black/20 p-3 rounded-xl border border-white/5">
           {order.items.map((item, idx) => (
             <div key={idx}>
-              <div className="flex justify-between items-baseline text-[13px]">
-                <span className="text-[#ccc]">
-                  <span className="text-primary font-semibold mr-1">{item.qty}×</span>
+              <div className="flex justify-between items-baseline text-sm">
+                <span className="text-zinc-300">
+                  <span className="text-primary font-bold mr-2">{item.qty}x</span>
                   {item.name}
                 </span>
-                <span className="text-[11px] text-[#555] font-mono ml-2 shrink-0">
+                <span className="text-xs text-zinc-500 font-mono ml-2 shrink-0">
                   {(item.price * item.qty).toLocaleString('id-ID')}
                 </span>
               </div>
               {item.notes && (
-                <div className="mt-1 pl-4 flex items-center gap-1.5">
-                  <span className="text-xs text-amber-400 bg-amber-500/15 px-2 py-0.5 rounded-md font-medium">
-                    📝 {item.notes}
+                <div className="mt-1.5 pl-6 flex items-center gap-1.5">
+                  <span className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-md font-medium flex items-center gap-1">
+                    <FileEdit size={10} /> {item.notes}
                   </span>
                 </div>
               )}
@@ -313,21 +313,21 @@ export default function OrdersPage() {
         </div>
 
         {/* Divider */}
-        <div className="border-t border-[#222]" />
+        <div className="border-t border-white/5" />
 
         {/* Total + Actions */}
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-[10px] text-[#555] uppercase tracking-wider">Total</p>
-            <p className="text-sm font-bold text-primary">Rp {order.total.toLocaleString('id-ID')}</p>
+            <p className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">Total Pembayaran</p>
+            <p className="text-base font-bold text-primary">Rp {order.total.toLocaleString('id-ID')}</p>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setSelectedOrder(order)}
-              className="h-8 px-3 text-[11px] font-medium text-[#888] bg-[#222] hover:bg-[#2a2a2a] hover:text-white rounded-lg border border-[#333] transition-all flex items-center gap-1.5"
+              className="h-9 px-3 text-xs font-medium text-zinc-400 bg-zinc-900/50 hover:bg-zinc-800 hover:text-zinc-100 rounded-xl border border-white/10 transition-all flex items-center gap-1.5 hover:shadow-lg"
             >
-              <Receipt size={12} />
+              <Receipt size={14} />
               Detail
             </button>
 
@@ -335,11 +335,11 @@ export default function OrdersPage() {
               <button
                 disabled={updatingId === order.id}
                 onClick={() => updateOrderStatus(order.id, 'ready')}
-                className="h-8 px-3 text-[11px] font-semibold text-black bg-amber-500 hover:bg-amber-400 disabled:opacity-50 rounded-lg transition-all flex items-center gap-1.5"
+                className="h-9 px-4 text-xs font-bold text-black bg-amber-500 hover:bg-amber-400 hover:shadow-lg hover:shadow-amber-500/20 disabled:opacity-50 rounded-xl transition-all flex items-center gap-2"
               >
-                {updatingId === order.id ? <RefreshCw size={12} className="animate-spin" /> : (
+                {updatingId === order.id ? <RefreshCw size={14} className="animate-spin" /> : (
                   <>
-                    <Bell size={12} />
+                    <Bell size={14} />
                     Siap
                   </>
                 )}
@@ -350,11 +350,11 @@ export default function OrdersPage() {
               <button
                 disabled={updatingId === order.id}
                 onClick={() => updateOrderStatus(order.id, 'completed')}
-                className="h-8 px-3 text-[11px] font-semibold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg transition-all flex items-center gap-1.5"
+                className="h-9 px-4 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 hover:shadow-lg hover:shadow-emerald-500/20 disabled:opacity-50 rounded-xl transition-all flex items-center gap-2"
               >
-                {updatingId === order.id ? <RefreshCw size={12} className="animate-spin" /> : (
+                {updatingId === order.id ? <RefreshCw size={14} className="animate-spin" /> : (
                   <>
-                    <CheckCircle2 size={12} />
+                    <CheckCircle2 size={14} />
                     Serahkan
                   </>
                 )}
@@ -365,9 +365,9 @@ export default function OrdersPage() {
               <button
                 disabled={updatingId === order.id}
                 onClick={() => updateOrderStatus(order.id, 'ready')}
-                className="h-8 px-3 text-[11px] font-medium text-[#666] hover:text-white bg-transparent hover:bg-[#222] rounded-lg transition-all flex items-center gap-1.5"
+                className="h-9 px-3 text-xs font-medium text-zinc-500 hover:text-zinc-300 bg-transparent hover:bg-zinc-900 rounded-xl transition-all flex items-center gap-1.5"
               >
-                <RotateCcw size={11} />
+                <RotateCcw size={12} />
                 Reset
               </button>
             )}
@@ -412,108 +412,114 @@ export default function OrdersPage() {
         </div>
 
         {/* Status Counters */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-4">
           <button 
-            className={`text-left p-4 rounded-xl transition-all ${
+            className={`group text-left p-5 rounded-2xl transition-all duration-300 relative overflow-hidden ${
               statusFilter === 'preparing' 
-                ? 'bg-amber-500/10 border border-amber-500/30 ring-1 ring-amber-500/20' 
-                : 'bg-[#141414] border border-[#222] hover:border-[#333]'
-            }`}
+                ? 'bg-amber-500/10 border-amber-500/30 ring-1 ring-amber-500/20 shadow-lg shadow-amber-500/5' 
+                : 'bg-zinc-900/40 border-white/5 hover:bg-zinc-900/60 hover:border-white/10'
+            } border backdrop-blur-md`}
             onClick={() => setStatusFilter(statusFilter === 'preparing' ? 'all' : 'preparing')}
           >
-            <p className="text-[10px] font-medium text-[#666] uppercase tracking-wider">Antrean</p>
-            <div className="flex items-end justify-between mt-1">
-              <span className="text-2xl font-black text-amber-500">{preparingOrders.length}</span>
-              <Utensils size={16} className="text-amber-500/40" />
+            {statusFilter === 'preparing' && <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 to-transparent" />}
+            <p className="relative text-[11px] font-bold text-zinc-400 uppercase tracking-widest group-hover:text-amber-500/70 transition-colors">Antrean</p>
+            <div className="relative flex items-end justify-between mt-2">
+              <span className={`text-4xl font-black tracking-tighter ${statusFilter === 'preparing' ? 'text-amber-500' : 'text-zinc-100 group-hover:text-amber-500 transition-colors'}`}>{preparingOrders.length}</span>
+              <Utensils size={24} className={statusFilter === 'preparing' ? 'text-amber-500' : 'text-zinc-600 group-hover:text-amber-500/50 transition-colors'} strokeWidth={1.5} />
             </div>
           </button>
 
           <button 
-            className={`text-left p-4 rounded-xl transition-all ${
+            className={`group text-left p-5 rounded-2xl transition-all duration-300 relative overflow-hidden ${
               statusFilter === 'ready' 
-                ? 'bg-emerald-500/10 border border-emerald-500/30 ring-1 ring-emerald-500/20' 
-                : 'bg-[#141414] border border-[#222] hover:border-[#333]'
-            }`}
+                ? 'bg-emerald-500/10 border-emerald-500/30 ring-1 ring-emerald-500/20 shadow-lg shadow-emerald-500/5' 
+                : 'bg-zinc-900/40 border-white/5 hover:bg-zinc-900/60 hover:border-white/10'
+            } border backdrop-blur-md`}
             onClick={() => setStatusFilter(statusFilter === 'ready' ? 'all' : 'ready')}
           >
-            <p className="text-[10px] font-medium text-[#666] uppercase tracking-wider">Siap</p>
-            <div className="flex items-end justify-between mt-1">
-              <span className="text-2xl font-black text-emerald-500">{readyOrders.length}</span>
-              <Bell size={16} className="text-emerald-500/40" />
+            {statusFilter === 'ready' && <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent" />}
+            <p className="relative text-[11px] font-bold text-zinc-400 uppercase tracking-widest group-hover:text-emerald-500/70 transition-colors">Siap Disajikan</p>
+            <div className="relative flex items-end justify-between mt-2">
+              <span className={`text-4xl font-black tracking-tighter ${statusFilter === 'ready' ? 'text-emerald-500' : 'text-zinc-100 group-hover:text-emerald-500 transition-colors'}`}>{readyOrders.length}</span>
+              <Bell size={24} className={statusFilter === 'ready' ? 'text-emerald-500' : 'text-zinc-600 group-hover:text-emerald-500/50 transition-colors'} strokeWidth={1.5} />
             </div>
           </button>
 
           <button 
-            className={`text-left p-4 rounded-xl transition-all ${
+            className={`group text-left p-5 rounded-2xl transition-all duration-300 relative overflow-hidden ${
               statusFilter === 'completed' 
-                ? 'bg-[#222] border border-[#444] ring-1 ring-[#333]' 
-                : 'bg-[#141414] border border-[#222] hover:border-[#333]'
-            }`}
+                ? 'bg-zinc-800 border-zinc-600 ring-1 ring-zinc-500 shadow-lg' 
+                : 'bg-zinc-900/40 border-white/5 hover:bg-zinc-900/60 hover:border-white/10'
+            } border backdrop-blur-md`}
             onClick={() => setStatusFilter(statusFilter === 'completed' ? 'all' : 'completed')}
           >
-            <p className="text-[10px] font-medium text-[#666] uppercase tracking-wider">Selesai</p>
-            <div className="flex items-end justify-between mt-1">
-              <span className="text-2xl font-black text-[#999]">{completedOrders.length}</span>
-              <PackageCheck size={16} className="text-[#444]" />
+            {statusFilter === 'completed' && <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent" />}
+            <p className="relative text-[11px] font-bold text-zinc-400 uppercase tracking-widest group-hover:text-zinc-300 transition-colors">Selesai</p>
+            <div className="relative flex items-end justify-between mt-2">
+              <span className={`text-4xl font-black tracking-tighter ${statusFilter === 'completed' ? 'text-zinc-300' : 'text-zinc-100 group-hover:text-zinc-300 transition-colors'}`}>{completedOrders.length}</span>
+              <PackageCheck size={24} className={statusFilter === 'completed' ? 'text-zinc-400' : 'text-zinc-600 group-hover:text-zinc-400 transition-colors'} strokeWidth={1.5} />
             </div>
           </button>
         </div>
 
         {/* Filter Controls & Search */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#555]" size={15} />
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+          <div className="relative flex-1 max-w-xl group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-primary transition-colors" size={18} />
             <input
-              placeholder="Cari order atau item..."
-              className="w-full h-9 pl-9 pr-4 bg-[#141414] border border-[#222] rounded-lg text-sm text-white placeholder:text-[#444] outline-none focus:border-[#444] transition-all"
+              placeholder="Cari Order ID atau item..."
+              className="w-full h-12 pl-12 pr-4 bg-zinc-900/50 border border-white/10 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-500 outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all shadow-inner hover:bg-zinc-900/80"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
 
-          <div className="flex items-center gap-1 bg-[#141414] border border-[#222] rounded-lg p-0.5">
+          <div className="flex items-center gap-1 bg-zinc-900/50 border border-white/5 rounded-xl p-1 shadow-inner h-12">
             <button 
               onClick={() => setActiveTab('kanban')}
-              className={`px-3 h-8 text-[11px] font-medium rounded-md transition-all ${
-                activeTab === 'kanban' ? 'bg-[#222] text-white' : 'text-[#666] hover:text-[#999]'
+              className={`px-6 h-full text-[13px] font-semibold rounded-lg transition-all duration-300 ${
+                activeTab === 'kanban' ? 'bg-zinc-800 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-300'
               }`}
             >
-              Board
+              Board Mode
             </button>
             <button 
               onClick={() => setActiveTab('list')}
-              className={`px-3 h-8 text-[11px] font-medium rounded-md transition-all ${
-                activeTab === 'list' ? 'bg-[#222] text-white' : 'text-[#666] hover:text-[#999]'
+              className={`px-6 h-full text-[13px] font-semibold rounded-lg transition-all duration-300 ${
+                activeTab === 'list' ? 'bg-zinc-800 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-300'
               }`}
             >
-              List
+              List Mode
             </button>
           </div>
         </div>
 
         {/* Main Content View */}
         {isLoadingData ? (
-          <div className="py-20 text-center space-y-3">
-            <RefreshCw size={24} className="animate-spin text-[#555] mx-auto" />
-            <p className="text-xs text-[#555]">Memuat pesanan...</p>
+          <div className="py-20 text-center space-y-4">
+            <RefreshCw size={28} className="animate-spin text-primary mx-auto" />
+            <p className="text-sm text-zinc-500 font-medium">Sinkronisasi data pesanan...</p>
           </div>
         ) : activeTab === 'kanban' ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             
             {/* Column 1: Sedang Dibuat */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between px-1 pb-2 border-b border-amber-500/20">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                  <h2 className="font-semibold text-xs text-[#999] uppercase tracking-wider">Antrean</h2>
+            <div className="bg-black/20 rounded-3xl p-5 border border-white/5 shadow-inner min-h-[500px]">
+              <div className="flex items-center justify-between px-2 pb-4 mb-4 border-b border-white/10">
+                <div className="flex items-center gap-2.5">
+                  <div className="relative flex items-center justify-center w-3 h-3">
+                    <span className="absolute w-full h-full rounded-full bg-amber-500 animate-ping opacity-75" />
+                    <span className="relative w-2 h-2 rounded-full bg-amber-500" />
+                  </div>
+                  <h2 className="font-bold text-sm text-zinc-300 uppercase tracking-widest">Antrean</h2>
                 </div>
-                <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full">{preparingOrders.length}</span>
+                <span className="text-xs font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-full">{preparingOrders.length}</span>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {preparingOrders.length === 0 ? (
-                  <div className="border border-dashed border-[#222] rounded-xl p-8 text-center text-[#444] text-xs">
-                    Tidak ada antrean
+                  <div className="border border-dashed border-white/10 rounded-2xl p-10 text-center text-zinc-500 text-sm font-medium">
+                    Belum ada antrean masuk
                   </div>
                 ) : (
                   preparingOrders.map(renderOrderCard)
@@ -522,19 +528,19 @@ export default function OrdersPage() {
             </div>
 
             {/* Column 2: Siap Disajikan */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between px-1 pb-2 border-b border-emerald-500/20">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <h2 className="font-semibold text-xs text-[#999] uppercase tracking-wider">Siap</h2>
+            <div className="bg-black/20 rounded-3xl p-5 border border-white/5 shadow-inner min-h-[500px]">
+              <div className="flex items-center justify-between px-2 pb-4 mb-4 border-b border-white/10">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
+                  <h2 className="font-bold text-sm text-zinc-300 uppercase tracking-widest">Siap Disajikan</h2>
                 </div>
-                <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full">{readyOrders.length}</span>
+                <span className="text-xs font-bold text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full">{readyOrders.length}</span>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {readyOrders.length === 0 ? (
-                  <div className="border border-dashed border-[#222] rounded-xl p-8 text-center text-[#444] text-xs">
-                    Belum ada pesanan siap
+                  <div className="border border-dashed border-white/10 rounded-2xl p-10 text-center text-zinc-500 text-sm font-medium">
+                    Belum ada pesanan siap saji
                   </div>
                 ) : (
                   readyOrders.map(renderOrderCard)
@@ -543,22 +549,22 @@ export default function OrdersPage() {
             </div>
 
             {/* Column 3: Selesai */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between px-1 pb-2 border-b border-[#222]">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[#555]" />
-                  <h2 className="font-semibold text-xs text-[#999] uppercase tracking-wider">Selesai</h2>
+            <div className="bg-black/20 rounded-3xl p-5 border border-white/5 shadow-inner min-h-[500px]">
+              <div className="flex items-center justify-between px-2 pb-4 mb-4 border-b border-white/10">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-zinc-600" />
+                  <h2 className="font-bold text-sm text-zinc-400 uppercase tracking-widest">Selesai</h2>
                 </div>
-                <span className="text-[10px] font-bold text-[#666] bg-[#1a1a1a] px-2 py-0.5 rounded-full">{completedOrders.length}</span>
+                <span className="text-xs font-bold text-zinc-400 bg-zinc-800 border border-zinc-700 px-3 py-1 rounded-full">{completedOrders.length}</span>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {completedOrders.length === 0 ? (
-                  <div className="border border-dashed border-[#222] rounded-xl p-8 text-center text-[#444] text-xs">
+                  <div className="border border-dashed border-white/10 rounded-2xl p-10 text-center text-zinc-500 text-sm font-medium">
                     Belum ada pesanan selesai
                   </div>
                 ) : (
-                  completedOrders.slice(0, 10).map(renderOrderCard)
+                  completedOrders.slice(0, 15).map(renderOrderCard)
                 )}
               </div>
             </div>
@@ -566,9 +572,9 @@ export default function OrdersPage() {
           </div>
         ) : (
           /* List Mode View */
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {filteredAllOrders.length === 0 ? (
-              <div className="col-span-full border border-dashed border-[#222] rounded-xl p-12 text-center text-[#444] text-sm">
+              <div className="col-span-full border border-dashed border-white/10 rounded-2xl p-16 text-center text-zinc-500 text-sm font-medium">
                 Tidak ada pesanan yang sesuai filter
               </div>
             ) : (

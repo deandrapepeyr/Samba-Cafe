@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Sidebar } from './Sidebar';
-import { Menu, X, Home, Clock, LayoutDashboard, ChefHat, Bot, Send, Sparkles } from 'lucide-react';
+import { Menu, X, Home, Clock, LayoutDashboard, ChefHat, Bot, Send, Sparkles, Upload, Image as ImageIcon } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
@@ -81,6 +81,21 @@ export function MainLayout({ children, onLogoutClick, onLoginClick, title, heade
   }]);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // Add Menu Feature State
+  const [showAddMenuForm, setShowAddMenuForm] = useState(false);
+  const [categories, setCategories] = useState<{id: string, name: string}[]>([]);
+  const [newMenu, setNewMenu] = useState({ name: '', price: '', category_id: '' });
+  const [newMenuImage, setNewMenuImage] = useState<File | null>(null);
+  const [isSubmittingMenu, setIsSubmittingMenu] = useState(false);
+
+  useEffect(() => {
+    if (isManager) {
+      supabase.from('categories').select('*').then(({ data }) => {
+        if (data) setCategories(data);
+      });
+    }
+  }, [isManager]);
+
   useEffect(() => {
     if (chatEndRef.current) {
       chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -92,6 +107,13 @@ export function MainLayout({ children, onLogoutClick, onLoginClick, title, heade
 
     setAiInput('');
     const newChat = [...aiChat, { role: 'user', content: text }];
+    
+    if (text.toLowerCase().includes('tambah menu')) {
+      setAiChat([...newChat, { role: 'assistant', content: 'Silakan isi form berikut untuk menambahkan menu baru:' }]);
+      setShowAddMenuForm(true);
+      return;
+    }
+
     setAiChat(newChat);
     setIsAiLoading(true);
 
@@ -107,6 +129,53 @@ export function MainLayout({ children, onLogoutClick, onLoginClick, title, heade
       setAiChat([...newChat, { role: 'assistant', content: 'Gagal terhubung ke AI.' }]);
     } finally {
       setIsAiLoading(false);
+    }
+  };
+
+  const handleMenuSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMenu.name || !newMenu.price || !newMenu.category_id) {
+      alert("Mohon lengkapi nama, harga, dan kategori!");
+      return;
+    }
+
+    setIsSubmittingMenu(true);
+    try {
+      let finalImageUrl: string | null = null;
+      
+      if (newMenuImage) {
+        const formData = new FormData();
+        formData.append('file', newMenuImage);
+
+        const uploadRes = await fetch('/api/upload-image', { method: 'POST', body: formData });
+        const uploadData = await uploadRes.json();
+        
+        if (!uploadRes.ok) throw new Error(uploadData.error || 'Gagal upload foto');
+        finalImageUrl = uploadData.imageUrl;
+      }
+
+      const { error } = await supabase.from('products').insert([{
+        id: crypto.randomUUID(),
+        name: newMenu.name,
+        price: parseInt(newMenu.price),
+        category_id: newMenu.category_id,
+        image_url: finalImageUrl,
+        is_available: true
+      }]);
+
+      if (error) throw error;
+
+      setShowAddMenuForm(false);
+      setNewMenu({ name: '', price: '', category_id: '' });
+      setNewMenuImage(null);
+      setAiChat(prev => [...prev, { role: 'assistant', content: `Menu "${newMenu.name}" berhasil ditambahkan dan siap dijual!` }]);
+      
+      // Trigger a refresh event for the POS and other pages to update their lists
+      window.dispatchEvent(new CustomEvent('refresh-products'));
+    } catch (err: any) {
+      alert("Gagal menambah menu: " + err.message);
+    } finally {
+      setIsSubmittingMenu(false);
     }
   };
 
@@ -190,41 +259,89 @@ export function MainLayout({ children, onLogoutClick, onLoginClick, title, heade
           </button>
 
           <Dialog open={isAiOpen} onOpenChange={setIsAiOpen}>
-            <DialogContent className="bg-card border-border sm:max-w-md h-[80vh] flex flex-col p-0 overflow-hidden">
-              <DialogHeader className="p-4 border-b border-border bg-indigo-600/10 shrink-0">
-                <DialogTitle className="flex items-center gap-2 text-indigo-500 text-lg">
-                  <Bot size={24} /> Manager Assistant
+            <DialogContent className="bg-zinc-950/80 backdrop-blur-2xl border-white/10 sm:max-w-md h-[80vh] flex flex-col p-0 overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.5)] rounded-2xl">
+              <DialogHeader className="p-5 border-b border-white/5 bg-transparent shrink-0">
+                <DialogTitle className="flex items-center gap-3 text-white text-lg font-medium tracking-tight">
+                  <div className="p-2 bg-indigo-500/20 rounded-xl">
+                    <Bot size={20} className="text-indigo-400" />
+                  </div>
+                  Manager Assistant
                 </DialogTitle>
               </DialogHeader>
               
-              <ScrollArea className="flex-1 p-4">
-                <div className="flex flex-col gap-4 pb-4">
+              <ScrollArea className="flex-1 p-5">
+                <div className="flex flex-col gap-5 pb-4">
                   {aiChat.map((msg, i) => (
                     <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-sm' : 'bg-muted border border-border text-foreground rounded-tl-sm'}`}>
+                      <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-indigo-500 text-white rounded-tr-sm' : 'bg-white/5 border border-white/5 text-zinc-200 rounded-tl-sm backdrop-blur-sm'}`}>
                         {msg.content}
                       </div>
                     </div>
                   ))}
                   {isAiLoading && (
                     <div className="flex justify-start">
-                      <div className="bg-muted border border-border text-foreground rounded-2xl rounded-tl-sm px-4 py-2 text-sm flex gap-1">
-                        <span className="animate-bounce">.</span>
-                        <span className="animate-bounce delay-100">.</span>
-                        <span className="animate-bounce delay-200">.</span>
+                      <div className="bg-white/5 border border-white/5 text-zinc-400 rounded-2xl rounded-tl-sm px-4 py-3 text-sm flex gap-1 items-center backdrop-blur-sm">
+                        <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce"></span>
+                        <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce delay-100"></span>
+                        <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce delay-200"></span>
                       </div>
+                    </div>
+                  )}
+                  {showAddMenuForm && (
+                    <div className="bg-white/[0.03] border border-white/10 backdrop-blur-md rounded-2xl p-5 mt-2 shadow-inner">
+                      <h4 className="font-medium text-white mb-4 text-sm flex items-center gap-2">
+                        <ChefHat size={16} className="text-indigo-400" /> Form Tambah Menu
+                      </h4>
+                      <form onSubmit={handleMenuSubmit} className="flex flex-col gap-4">
+                        <div>
+                          <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Nama Menu</label>
+                          <Input required placeholder="Mis: Nasi Goreng Spesial" className="h-9 text-sm bg-black/20 border-white/10 text-white placeholder:text-zinc-600 focus-visible:ring-1 focus-visible:ring-indigo-500/50 rounded-lg" value={newMenu.name} onChange={e => setNewMenu({...newMenu, name: e.target.value})} />
+                        </div>
+                        <div>
+                          <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Harga (Rp)</label>
+                          <Input required type="text" placeholder="Mis: 25.000" className="h-9 text-sm bg-black/20 border-white/10 text-white placeholder:text-zinc-600 focus-visible:ring-1 focus-visible:ring-indigo-500/50 rounded-lg" value={newMenu.price ? parseInt(newMenu.price).toLocaleString('id-ID') : ''} onChange={e => { const num = e.target.value.replace(/\D/g, ''); setNewMenu({...newMenu, price: num}); }} />
+                        </div>
+                        <div>
+                          <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Kategori</label>
+                          <select required className="w-full h-9 text-sm rounded-lg border border-white/10 bg-black/20 text-white px-3 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 appearance-none" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'%23a1a1aa\'%3E%3Cpath stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M19 9l-7 7-7-7\'%3E%3C/path%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center', backgroundSize: '1rem' }} value={newMenu.category_id} onChange={e => setNewMenu({...newMenu, category_id: e.target.value})}>
+                            <option value="" className="bg-zinc-900 text-zinc-400">Pilih Kategori...</option>
+                            {categories.map(c => (
+                              <option key={c.id} value={c.id} className="bg-zinc-900 text-white">{c.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-xs text-zinc-400 font-medium mb-1.5 flex items-center justify-between block">
+                            <span>Foto Menu</span>
+                            <span className="text-zinc-500 font-normal opacity-70">(Opsional)</span>
+                          </label>
+                          <div className="flex items-center gap-3">
+                            <label className="flex-1 cursor-pointer flex items-center justify-center gap-2 border border-dashed border-white/20 bg-black/20 hover:bg-white/5 transition-colors rounded-lg py-2.5 text-zinc-400 hover:text-zinc-300 text-xs font-medium">
+                              <Upload size={14} /> {newMenuImage ? 'Ganti Foto' : 'Pilih Foto'}
+                              <input type="file" accept="image/*" className="hidden" onChange={e => setNewMenuImage(e.target.files?.[0] || null)} />
+                            </label>
+                            {newMenuImage && <div className="text-xs text-emerald-400 font-medium flex items-center bg-emerald-400/10 px-3 py-2 rounded-lg border border-emerald-400/20"><ImageIcon size={14} className="mr-1.5"/>Terpilih</div>}
+                          </div>
+                        </div>
+                        <div className="flex gap-3 mt-2">
+                          <Button type="button" variant="ghost" className="flex-1 h-9 text-xs border border-white/10 text-zinc-300 hover:bg-white/5 hover:text-white rounded-lg" onClick={() => setShowAddMenuForm(false)}>Batal</Button>
+                          <Button type="submit" disabled={isSubmittingMenu} className="flex-1 h-9 text-xs bg-indigo-500 hover:bg-indigo-400 text-white shadow-[0_0_15px_rgba(99,102,241,0.2)] hover:shadow-[0_0_20px_rgba(99,102,241,0.4)] transition-all rounded-lg border-0">
+                            {isSubmittingMenu ? 'Menyimpan...' : 'Simpan Menu'}
+                          </Button>
+                        </div>
+                      </form>
                     </div>
                   )}
                   <div ref={chatEndRef} />
                 </div>
               </ScrollArea>
 
-              <div className="p-4 border-t border-border bg-card shrink-0">
+              <div className="p-4 border-t border-white/5 bg-transparent shrink-0">
                 <div className="flex gap-2 overflow-x-auto pb-3 scrollbar-hide">
                   {["Penjualan hari ini", "Laporan minggu ini", "Bulan ini gimana?"].map(q => (
                     <button 
                       key={q} 
-                      className="whitespace-nowrap rounded-full border border-indigo-500/30 bg-indigo-500/5 text-indigo-500 px-3 py-1.5 text-xs hover:bg-indigo-500 hover:text-white transition-colors"
+                      className="whitespace-nowrap rounded-full border border-white/10 bg-white/5 text-zinc-300 px-3.5 py-1.5 text-xs hover:bg-white/10 hover:text-white transition-all font-medium"
                       onClick={() => handleAiSubmit(q)}
                       disabled={isAiLoading}
                     >
@@ -234,18 +351,18 @@ export function MainLayout({ children, onLogoutClick, onLoginClick, title, heade
                 </div>
                 <form 
                   onSubmit={(e) => { e.preventDefault(); handleAiSubmit(aiInput); }} 
-                  className="flex gap-2"
+                  className="flex gap-2 relative"
                 >
                   <Input
-                    placeholder='Tanya laporan...'
+                    placeholder='Tanya sesuatu atau "tambah menu"...'
                     value={aiInput}
                     onChange={(e) => setAiInput(e.target.value)}
                     disabled={isAiLoading}
-                    className="bg-background border-border rounded-full"
+                    className="bg-white/5 border-white/10 text-white placeholder:text-zinc-500 rounded-full h-11 pl-4 pr-12 focus-visible:ring-1 focus-visible:ring-indigo-500/50 shadow-inner"
                     autoFocus
                   />
-                  <Button type="submit" disabled={isAiLoading || !aiInput.trim()} className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full w-10 h-10 p-0 shrink-0 flex items-center justify-center">
-                    <Send size={16} className="-ml-0.5" />
+                  <Button type="submit" disabled={isAiLoading || !aiInput.trim()} className="absolute right-1 top-1 bottom-1 bg-indigo-500 hover:bg-indigo-400 text-white rounded-full w-9 h-9 p-0 flex items-center justify-center transition-transform hover:scale-105 active:scale-95 shadow-md">
+                    <Send size={14} className="-ml-0.5" />
                   </Button>
                 </form>
               </div>

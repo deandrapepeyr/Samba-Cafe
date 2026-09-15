@@ -22,12 +22,13 @@ export async function POST(req: Request) {
     const weekStr = weekStart.toISOString();
 
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const yearStart = new Date(now.getFullYear(), 0, 1).toISOString();
 
-    // Fetch all transactions from the start of the month to avoid multiple queries
+    // Fetch all transactions from the start of the year to avoid multiple queries
     const { data: transactions, error } = await supabase
       .from('transactions')
-      .select('total, created_at, method')
-      .gte('created_at', monthStart);
+      .select('id, total, created_at, method, cashier_name')
+      .gte('created_at', yearStart);
 
     if (error) {
       console.error("Supabase fetch error:", error);
@@ -36,17 +37,29 @@ export async function POST(req: Request) {
 
     let todayTotal = 0;
     let todayCount = 0;
+    let todayCash = 0;
+    let todayQRIS = 0;
+    const activeCashiersToday = new Set<string>();
+
     let weekTotal = 0;
     let weekCount = 0;
     let monthTotal = 0;
     let monthCount = 0;
+    let yearTotal = 0;
+    let yearCount = 0;
 
     transactions?.forEach(tx => {
       const txDate = new Date(tx.created_at);
       
+      // Year
+      yearTotal += tx.total;
+      yearCount++;
+
       // Month
-      monthTotal += tx.total;
-      monthCount++;
+      if (txDate >= new Date(monthStart)) {
+        monthTotal += tx.total;
+        monthCount++;
+      }
 
       // Week
       if (txDate >= weekStart) {
@@ -58,22 +71,63 @@ export async function POST(req: Request) {
       if (txDate >= new Date(todayStr)) {
         todayTotal += tx.total;
         todayCount++;
+        
+        if (tx.cashier_name) activeCashiersToday.add(tx.cashier_name);
+        
+        if (tx.method?.toLowerCase() === 'cash') {
+          todayCash += tx.total;
+        } else if (tx.method?.toLowerCase() === 'qris') {
+          todayQRIS += tx.total;
+        }
       }
     });
+
+    const cashiersList = Array.from(activeCashiersToday).join(', ') || 'Belum ada';
+
+    // Top items for the month
+    const currentMonthTxIds = transactions?.filter(tx => new Date(tx.created_at) >= new Date(monthStart)).map(tx => tx.id) || [];
+    let topItemsList = '';
+    
+    if (currentMonthTxIds.length > 0) {
+      const idsToFetch = currentMonthTxIds.slice(0, 1000); // supabase .in limit safeguard
+      const { data: itemsData } = await supabase
+        .from('transaction_items')
+        .select('product_name, quantity')
+        .in('transaction_id', idsToFetch);
+
+      if (itemsData) {
+        const itemMap: Record<string, number> = {};
+        itemsData.forEach(item => {
+          if (!itemMap[item.product_name]) itemMap[item.product_name] = 0;
+          itemMap[item.product_name] += item.quantity;
+        });
+
+        const sortedItems = Object.entries(itemMap)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5); // top 5
+
+        topItemsList = sortedItems.map((item, idx) => `${idx + 1}. ${item[0]} (${item[1]} porsi)`).join('\n  ');
+      }
+    }
 
     const systemPrompt = `You are an AI Manager Assistant for Samba Cafe.
 You are talking to the Cafe Manager. Your job is to answer questions about the cafe's sales performance based on the following real-time data context.
 
 === REAL-TIME DATA CONTEXT ===
 - Penjualan Hari Ini: Rp ${todayTotal.toLocaleString('id-ID')} (${todayCount} transaksi)
+  - Via Cash: Rp ${todayCash.toLocaleString('id-ID')}
+  - Via QRIS: Rp ${todayQRIS.toLocaleString('id-ID')}
+- Kasir yang Bertugas Hari Ini: ${cashiersList}
 - Penjualan Minggu Ini (sejak Minggu): Rp ${weekTotal.toLocaleString('id-ID')} (${weekCount} transaksi)
 - Penjualan Bulan Ini: Rp ${monthTotal.toLocaleString('id-ID')} (${monthCount} transaksi)
+  - 5 Menu Terlaris Bulan Ini:
+  ${topItemsList || 'Belum ada data'}
+- Penjualan Tahun Ini: Rp ${yearTotal.toLocaleString('id-ID')} (${yearCount} transaksi)
 ==============================
 
 Rules:
 - Answer nicely and professionally in Indonesian.
 - Keep your answers concise, don't hallucinate numbers that are not in the context.
-- If asked about top products or things not in the context, politely apologize and say you only have access to total sales data right now.
 - DO NOT use markdown code blocks or JSON formatting. Just reply with a normal friendly text message.`;
 
     const groqApiKey = process.env.GROQ_API_KEY;
@@ -94,7 +148,7 @@ Rules:
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'llama3-70b-8192', 
+        model: 'qwen/qwen3.8-27b', 
         messages: messages,
         temperature: 0.5,
       })
@@ -102,8 +156,8 @@ Rules:
 
     if (!response.ok) {
       const errorData = await response.text();
-      console.error('Groq API Error:', errorData);
-      return NextResponse.json({ error: 'Failed to communicate with AI service' }, { status: 500 });
+      console.error('Groq API Error Details:', errorData, 'Status:', response.status);
+      return NextResponse.json({ error: 'Failed to communicate with AI service: ' + errorData }, { status: response.status || 500 });
     }
 
     const data = await response.json();

@@ -18,6 +18,9 @@ type DailyReport = {
   totalTransactions: number;
   qrisRevenue: number;
   cashRevenue: number;
+  titipanRevenue: number;
+  titipanBreakdown: Record<string, number>;
+  regularRevenue: number;
   totalRevenue: number;
 };
 
@@ -40,6 +43,7 @@ type Transaction = {
   total: number;
   status: string;
   cashier_name: string;
+  transaction_items?: { product_name: string; price: number; quantity: number }[];
 };
 
 export default function ReportsPage() {
@@ -51,6 +55,7 @@ export default function ReportsPage() {
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [filterType, setFilterType] = useState<'daily'|'weekly'|'monthly'|'yearly'>('daily');
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [titipanProductNames, setTitipanProductNames] = useState<Map<string, string | null>>(new Map());
 
   // States for Details Dialog
   const [selectedDailyReport, setSelectedDailyReport] = useState<DailyReport | null>(null);
@@ -70,10 +75,22 @@ export default function ReportsPage() {
   const fetchReports = async () => {
     setIsLoadingData(true);
     
+    const productsRes = await supabase.from('products').select('*'); // fetch all products even unavailable ones
+    
+    if (productsRes.data) {
+      const titipanMap = new Map<string, string | null>();
+      productsRes.data.forEach(p => {
+        if (p.is_titipan) {
+          titipanMap.set(p.name, p.titipan_name);
+        }
+      });
+      setTitipanProductNames(titipanMap);
+    }
+    
     // Fetch Transactions for Daily Report
     const { data: txData } = await supabase
       .from('transactions')
-      .select('id, created_at, method, total, status, cashier_name')
+      .select('id, created_at, method, total, status, cashier_name, transaction_items(product_name, price, quantity)')
       .order('created_at', { ascending: false });
 
     if (txData) {
@@ -159,6 +176,9 @@ export default function ReportsPage() {
             totalTransactions: 0,
             qrisRevenue: 0,
             cashRevenue: 0,
+            titipanRevenue: 0,
+            titipanBreakdown: {},
+            regularRevenue: 0,
             totalRevenue: 0
           };
         }
@@ -169,6 +189,24 @@ export default function ReportsPage() {
         if (tx.method === 'QRIS') acc[groupKey].qrisRevenue += tx.total;
         if (tx.method === 'Cash') acc[groupKey].cashRevenue += tx.total;
         
+        let txTitipan = 0;
+        if (tx.transaction_items) {
+          tx.transaction_items.forEach(item => {
+            if (titipanProductNames.has(item.product_name)) {
+              const itemTotal = item.price * item.quantity;
+              txTitipan += itemTotal;
+              
+              const titipanName = titipanProductNames.get(item.product_name) || 'Tanpa Nama';
+              if (!acc[groupKey].titipanBreakdown[titipanName]) {
+                acc[groupKey].titipanBreakdown[titipanName] = 0;
+              }
+              acc[groupKey].titipanBreakdown[titipanName] += itemTotal;
+            }
+          });
+        }
+        acc[groupKey].titipanRevenue += txTitipan;
+        acc[groupKey].regularRevenue += (tx.total - txTitipan);
+        
         return acc;
       }, {});
       
@@ -177,7 +215,7 @@ export default function ReportsPage() {
     } else {
       setDailyReports([]);
     }
-  }, [allTransactions, filterType]);
+  }, [allTransactions, filterType, titipanProductNames]);
 
   if (role !== 'manager') return null;
 
@@ -263,8 +301,29 @@ export default function ReportsPage() {
                           </div>
                         </div>
 
+                        <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground mt-2">
+                          <div className="bg-emerald-500/10 p-2 rounded border border-emerald-500/20">
+                            <p className="text-[10px] uppercase font-semibold text-emerald-500">Pendapatan Kafe</p>
+                            <p className="font-bold text-emerald-400 mt-0.5">Rp {report.regularRevenue.toLocaleString('id-ID')}</p>
+                          </div>
+                          <div className="bg-orange-500/10 p-2 rounded border border-orange-500/20">
+                            <p className="text-[10px] uppercase font-semibold text-orange-500">Uang Titipan</p>
+                            <p className="font-bold text-orange-400 mt-0.5">Rp {report.titipanRevenue.toLocaleString('id-ID')}</p>
+                            {Object.keys(report.titipanBreakdown).length > 0 && (
+                              <div className="mt-1 pt-1 border-t border-orange-500/20 text-[10px] space-y-0.5 text-orange-500/80">
+                                {Object.entries(report.titipanBreakdown).map(([name, amount]) => (
+                                  <div key={name} className="flex justify-between">
+                                    <span>{name}:</span>
+                                    <span>Rp {amount.toLocaleString('id-ID')}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
                         <div className="flex justify-between items-center pt-2 border-t border-border/40 text-xs">
-                          <span className="text-muted-foreground font-medium">Total Pendapatan:</span>
+                          <span className="text-muted-foreground font-medium">Total Omzet:</span>
                           <span className="font-bold text-sm text-primary">Rp {report.totalRevenue.toLocaleString('id-ID')}</span>
                         </div>
                       </div>
@@ -280,14 +339,15 @@ export default function ReportsPage() {
                         <th className="font-medium p-5 pl-8">Tanggal</th>
                         <th className="font-medium p-5 text-center">Total Pesanan</th>
                         <th className="font-medium p-5 text-right">Pendapatan QRIS</th>
-                        <th className="font-medium p-5 text-right">Pendapatan Cash</th>
-                        <th className="font-bold p-5 text-right pr-8 text-primary">Total Pendapatan</th>
+                        <th className="font-semibold p-5 text-right">Pendapatan Kafe</th>
+                        <th className="font-semibold p-5 text-right text-orange-400">Uang Titipan</th>
+                        <th className="font-bold p-5 text-right pr-8 text-primary">Total Omzet</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
                       {isLoadingData ? (
                         <tr>
-                          <td colSpan={5} className="p-12 text-center text-muted-foreground">
+                          <td colSpan={6} className="p-12 text-center text-muted-foreground">
                             <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
                           </td>
                         </tr>
@@ -305,14 +365,24 @@ export default function ReportsPage() {
                                   {report.totalTransactions}
                                 </span>
                               </td>
-                              <td className="p-5 text-right text-muted-foreground group-hover:text-foreground transition-colors">Rp {report.qrisRevenue.toLocaleString('id-ID')}</td>
-                              <td className="p-5 text-right text-muted-foreground group-hover:text-foreground transition-colors">Rp {report.cashRevenue.toLocaleString('id-ID')}</td>
-                              <td className="p-5 text-right pr-8 font-bold text-lg">Rp {report.totalRevenue.toLocaleString('id-ID')}</td>
+                              <td className="p-5 text-right font-medium">Rp {report.qrisRevenue.toLocaleString('id-ID')}</td>
+                              <td className="p-5 text-right font-medium text-emerald-400 transition-colors">Rp {report.regularRevenue.toLocaleString('id-ID')}</td>
+                              <td className="p-5 text-right font-medium text-orange-400 transition-colors">
+                                <div>Rp {report.titipanRevenue.toLocaleString('id-ID')}</div>
+                                {Object.keys(report.titipanBreakdown).length > 0 && (
+                                  <div className="text-[10px] text-orange-500/70 mt-1 flex flex-col items-end space-y-0.5">
+                                    {Object.entries(report.titipanBreakdown).map(([name, amount]) => (
+                                      <div key={name} className="whitespace-nowrap">{name}: Rp {amount.toLocaleString('id-ID')}</div>
+                                    ))}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="p-5 text-right pr-8 font-bold text-lg text-primary">Rp {report.totalRevenue.toLocaleString('id-ID')}</td>
                             </tr>
                           ))}
                           {dailyReports.length === 0 && (
                             <tr>
-                              <td colSpan={5} className="p-12 text-center text-muted-foreground">
+                              <td colSpan={6} className="p-12 text-center text-muted-foreground">
                                 Belum ada data transaksi.
                               </td>
                             </tr>

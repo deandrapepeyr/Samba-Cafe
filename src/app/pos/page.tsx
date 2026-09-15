@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { supabase } from '@/lib/supabase';
-import { Search, Plus, Minus, FileEdit, Menu, X, QrCode, Banknote, CheckCircle2, ShoppingCart, LockKeyhole, UserCircle, LogIn, Lock, LogOut, Eye, EyeOff, KeyRound, ShieldCheck } from 'lucide-react';
+import { Search, Plus, Minus, FileEdit, Menu, X, QrCode, Banknote, CheckCircle2, ShoppingCart, LockKeyhole, UserCircle, LogIn, Lock, LogOut, Eye, EyeOff, KeyRound, ShieldCheck, Utensils } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +21,8 @@ export type Product = {
   price: number;
   image_url: string;
   is_available: boolean;
+  is_titipan: boolean;
+  titipan_name: string | null;
 };
 
 export type Category = {
@@ -63,10 +65,8 @@ export default function POSPage() {
   const [cashReceived, setCashReceived] = useState<string>('');
   const [customerName, setCustomerName] = useState('');
 
-  // DANA State
-  const [isDANAModalOpen, setIsDANAModalOpen] = useState(false);
-  const [DANATimeLeft, setDANATimeLeft] = useState(60);
-  const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
+  // QRIS State
+  const [isQRISModalOpen, setIsQRISModalOpen] = useState(false);
 
   // Auth & Shift Management
   const { userName, role, isLoading, login, logout } = useAuth();
@@ -95,6 +95,8 @@ export default function POSPage() {
   const [orderNumber, setOrderNumber] = useState('');
   const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(true);
+  
+  const cartEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setOrderNumber(Math.floor(Math.random() * 10000).toString().padStart(4, '0'));
@@ -136,20 +138,26 @@ export default function POSPage() {
     }
 
     initPageData();
+
+    const handleRefreshProducts = async () => {
+      const { data } = await supabase.from('products').select('*').eq('is_available', true);
+      if (data) {
+        // Find newly added products or updated products and ensure state is fresh
+        setProducts(data);
+      }
+    };
+    
+    window.addEventListener('refresh-products', handleRefreshProducts);
+    return () => window.removeEventListener('refresh-products', handleRefreshProducts);
   }, [userName]);
 
-  // DANA Timer logic
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isDANAModalOpen && DANATimeLeft > 0) {
-      interval = setInterval(() => {
-        setDANATimeLeft(prev => prev - 1);
-      }, 1000);
-    } else if (DANATimeLeft === 0) {
-      setIsDANAModalOpen(false);
+    if (cartEndRef.current) {
+      cartEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-    return () => clearInterval(interval);
-  }, [isDANAModalOpen, DANATimeLeft]);
+  }, [cart.length]);
+
+  // No more DANA Timer logic needed
 
   const handleLockActionClick = () => {
     if (!role || !userName) {
@@ -385,90 +393,15 @@ export default function POSPage() {
   const handleCheckoutProcess = async () => {
     if (checkoutStep === 'confirm') {
       if (paymentMethod === 'QRIS') {
-        await generateMidtransQR();
+        setIsQRISModalOpen(true);
       } else {
         await finalizeTransaction();
       }
     }
   };
 
-  const generateMidtransQR = async () => {
-    setIsDANAModalOpen(true);
-    setQrCodeUrl(null);
-    setDANATimeLeft(60);
-
-    const transactionId = orderNumber + '-' + Date.now();
-    const transaction = {
-      id: transactionId,
-      method: paymentMethod || 'QRIS', // Fallback karena setPaymentMethod adalah async
-      total: total,
-      cashier_name: userName || 'Unknown',
-      status: 'pending_payment',
-      cash_received: null,
-      customer_name: customerName || null
-    };
-
-    const itemsToInsert = cart.map(item => ({
-      transaction_id: transactionId,
-      product_name: item.product.name,
-      price: item.product.price,
-      quantity: item.quantity,
-      notes: item.notes || null
-    }));
-
-    try {
-      if (!navigator.onLine) throw new Error("Offline Mode");
-
-      // Save to Supabase as pending_payment
-      const { error: txError } = await supabase.from('transactions').insert([transaction]);
-      if (txError) throw txError;
-      const { error: itemsError } = await supabase.from('transaction_items').insert(itemsToInsert);
-      if (itemsError) throw itemsError;
-
-      // Call Midtrans API
-      const res = await fetch('/api/midtrans/charge', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          order_id: transactionId, 
-          gross_amount: total,
-          customer_name: customerName || 'Pelanggan'
-        })
-      });
-      const data = await res.json();
-      
-      if (data.qr_url) {
-        setQrCodeUrl(data.qr_url);
-        
-        // Listen to Supabase Realtime
-        const channel = supabase.channel('tx_changes_' + transactionId)
-          .on('postgres_changes', { 
-            event: 'UPDATE', 
-            schema: 'public', 
-            table: 'transactions', 
-            filter: `id=eq.${transactionId}` 
-          }, (payload) => {
-            if (payload.new.status === 'preparing' || payload.new.status === 'paid') {
-              // Payment Success from Webhook!
-              setIsDANAModalOpen(false);
-              setIsProcessingCheckout(false);
-              setCheckoutStep('success');
-              channel.unsubscribe();
-            }
-          }).subscribe();
-      } else {
-        alert("Gagal mendapatkan QR dari Midtrans: " + (data.error || JSON.stringify(data)));
-        setIsDANAModalOpen(false);
-      }
-    } catch (err: any) {
-      console.error(err);
-      alert("Error: " + (err.message || err.error || JSON.stringify(err)));
-      setIsDANAModalOpen(false);
-    }
-  };
-
-  const handleSimulateDANASuccess = async () => {
-    setIsDANAModalOpen(false);
+  const handleQRISPaymentSuccess = async () => {
+    setIsQRISModalOpen(false);
     await finalizeTransaction();
   };
 
@@ -491,7 +424,8 @@ export default function POSPage() {
       product_name: item.product.name,
       price: item.product.price,
       quantity: item.quantity,
-      notes: item.notes || null
+      notes: item.notes || null,
+      supplier_price: item.product.supplier_price || 0
     }));
 
     try {
@@ -651,42 +585,52 @@ export default function POSPage() {
                 </div>
               </div>
             ))}
+            <div ref={cartEndRef} />
           </div>
         )}
       </div>
 
-      <div className="p-4 xl:p-6 bg-card border-t border-border mt-auto">
-        <div className="space-y-3 mb-6">
-          <Input
-            placeholder="Nama Customer"
-            value={customerName}
-            onChange={(e) => setCustomerName(e.target.value)}
-            className="w-full bg-background border-border h-14 text-foreground font-bold text-2xl md:text-2xl placeholder:font-normal placeholder:text-xl placeholder:text-muted-foreground px-4"
-          />
-          <div className="flex justify-between text-muted-foreground text-sm mt-4">
-            <span>Subtotal</span>
-            <span>Rp {subtotal.toLocaleString('id-ID')}</span>
+      <div className="p-4 xl:p-6 bg-zinc-950 border-t border-white/5 mt-auto relative shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.5)]">
+        <div className="space-y-4 mb-6 relative z-10">
+          <div className="relative">
+            <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={24} strokeWidth={1.5} />
+            <Input
+              placeholder="Nama Customer"
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              className="w-full bg-zinc-900/50 border-white/10 h-14 pl-12 text-zinc-100 font-semibold text-lg md:text-xl placeholder:font-normal placeholder:text-base placeholder:text-zinc-500 rounded-xl focus-visible:ring-1 focus-visible:ring-primary shadow-inner transition-all hover:bg-zinc-900/80"
+            />
           </div>
-          <Separator className="bg-border" />
-          <div className="flex justify-between text-xl font-bold text-foreground">
-            <span>Total</span>
-            <span className="text-primary">Rp {total.toLocaleString('id-ID')}</span>
+          <div className="bg-zinc-900/40 rounded-xl p-4 border border-white/5 space-y-3">
+            <div className="flex justify-between text-zinc-400 text-sm">
+              <span>Subtotal</span>
+              <span>Rp {subtotal.toLocaleString('id-ID')}</span>
+            </div>
+            <div className="flex justify-between text-zinc-400 text-sm">
+              <span>Tax & Service</span>
+              <span>Rp 0</span>
+            </div>
+            <Separator className="bg-white/10" />
+            <div className="flex justify-between text-2xl font-bold text-zinc-100 items-center pt-1">
+              <span>Total</span>
+              <span className="text-primary tracking-tight">Rp {total.toLocaleString('id-ID')}</span>
+            </div>
           </div>
         </div>
         {isPageLoading ? (
-          <Button className="w-full h-14 text-lg font-bold bg-muted text-muted-foreground" disabled>
-            Memuat Status Kasir...
+          <Button className="w-full h-14 rounded-xl text-lg font-bold bg-zinc-800 text-zinc-500 border border-white/5" disabled>
+            Memuat Status...
           </Button>
         ) : isLocked ? (
           <Button 
-            className="w-full h-14 text-lg font-bold bg-amber-500 text-black hover:bg-amber-400"
+            className="w-full h-14 rounded-xl text-lg font-bold bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white border border-amber-500/20 hover:border-amber-500 transition-all duration-300 shadow-lg shadow-amber-500/10"
             onClick={handleLockActionClick}
           >
-            <LockKeyhole size={20} className="mr-2" /> {role ? 'Buka Shift Kasir' : 'Log In Kasir / Buka Shift'}
+            <LockKeyhole size={20} className="mr-2" /> {role ? 'Buka Shift Kasir' : 'Log In Kasir'}
           </Button>
         ) : (
           <Button 
-            className="w-full h-14 text-lg font-bold bg-primary text-primary-foreground hover:bg-primary/90"
+            className="w-full h-14 rounded-xl text-lg font-bold bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 shadow-xl shadow-primary/20 hover:shadow-primary/30 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none"
             disabled={cart.length === 0 || customerName.trim() === ''}
             onClick={() => setCheckoutStep('method')}
           >
@@ -733,12 +677,12 @@ export default function POSPage() {
             </div>
           )}
 
-          <header className="px-4 md:px-6 py-4 md:py-6 border-b border-border flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
+          <header className="px-4 md:px-6 py-4 md:py-6 flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between sticky top-0 z-10 bg-background/80 backdrop-blur-xl border-b border-white/5">
           <div className="flex items-center gap-4 flex-1">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={20} />
+            <div className="relative flex-1 max-w-2xl group">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-primary transition-colors" size={20} />
               <Input 
-                className="pl-10 h-12 bg-card border-border text-base md:text-lg focus-visible:ring-primary rounded-xl"
+                className="pl-12 h-14 bg-zinc-900/50 border-white/10 text-base md:text-lg focus-visible:ring-1 focus-visible:ring-primary rounded-2xl transition-all shadow-inner hover:bg-zinc-900/80"
                 placeholder="Search menu items..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -749,21 +693,21 @@ export default function POSPage() {
             {activeShift && (
               <Button 
                 variant="outline" 
-                className="h-12 border-rose-500/30 text-rose-500 hover:bg-rose-500 hover:text-white transition-colors gap-2 rounded-xl text-xs font-semibold"
+                className="h-14 border-rose-500/20 text-rose-500 hover:bg-rose-500 hover:text-white transition-all duration-300 gap-2 rounded-2xl text-sm font-semibold bg-rose-500/5 hover:border-rose-500"
                 onClick={handleCalculateEndShift}
                 title="Tutup Shift & Rekapitulasi Kasir"
               >
-                <LogOut size={16} />
+                <LogOut size={18} />
                 <span className="hidden sm:inline">Tutup Shift</span>
               </Button>
             )}
 
             {/* Desktop Cart Toggle */}
-            <Button variant="outline" className="hidden md:flex items-center gap-2 h-12" onClick={() => setIsCartOpen(!isCartOpen)}>
-              <ShoppingCart size={20} />
+            <Button variant="outline" className="hidden md:flex items-center gap-2 h-14 rounded-2xl border-white/10 bg-zinc-900/50 hover:bg-zinc-800 hover:border-primary/50 transition-all duration-300" onClick={() => setIsCartOpen(!isCartOpen)}>
+              <ShoppingCart size={20} className={cartItemCount > 0 ? 'text-primary' : ''} />
               <span className="hidden lg:inline">{isCartOpen ? 'Hide Cart' : 'Show Cart'}</span>
               {cartItemCount > 0 && (
-                <div className="bg-primary text-primary-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                <div className="bg-primary text-primary-foreground text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center shadow-lg shadow-primary/20">
                   {cartItemCount}
                 </div>
               )}
@@ -771,21 +715,23 @@ export default function POSPage() {
           </div>
         </header>
 
-        <div className="px-4 md:px-6 pt-4">
-          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-            {categories.map(cat => (
-              <button
-                key={cat.id}
-                onClick={() => setActiveCategory(cat.id)}
-                className={`px-5 py-2.5 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
-                  activeCategory === cat.id 
-                    ? 'bg-primary text-primary-foreground shadow-md' 
-                    : 'bg-card text-muted-foreground hover:bg-muted border border-border'
-                }`}
-              >
-                {cat.name}
-              </button>
-            ))}
+        <div className="px-4 md:px-6 pt-6 pb-2">
+          <div className="flex flex-wrap gap-2">
+            <div className="flex bg-zinc-900/50 p-1.5 rounded-2xl border border-white/5 w-fit shadow-inner overflow-x-auto scrollbar-hide">
+              {categories.map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => setActiveCategory(cat.id)}
+                  className={`px-6 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all duration-300 ${
+                    activeCategory === cat.id 
+                      ? 'bg-zinc-800 text-primary shadow-lg shadow-primary/5' 
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5'
+                  }`}
+                >
+                  {cat.name}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -797,40 +743,63 @@ export default function POSPage() {
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 pb-20 md:pb-0">
-              {filteredProducts.map(product => (
-                <div 
-                  key={product.id}
-                  onClick={() => addToCart(product)}
-                  className={`group bg-card border rounded-2xl overflow-hidden transition-all duration-200 flex flex-col justify-between ${
-                    isLocked
-                      ? 'border-border opacity-90 cursor-pointer hover:border-amber-500/50'
-                      : 'border-border hover:border-primary/50 hover:shadow-lg cursor-pointer'
-                  }`}
-                >
-                  <div className="aspect-square relative overflow-hidden bg-muted">
-                    <img 
-                      src={product.image_url || '/placeholder.svg'} 
-                      alt={product.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                    {isLocked && (
-                      <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-md text-amber-400 p-1.5 rounded-lg border border-amber-500/30">
-                        <LockKeyhole size={14} />
+              {filteredProducts.map(product => {
+                const cartItem = cart.find(c => c.product.id === product.id);
+                const qtyInCart = cartItem ? cartItem.quantity : 0;
+                
+                return (
+                  <div 
+                    key={product.id}
+                    onClick={() => addToCart(product)}
+                    className={`group relative bg-zinc-900/60 backdrop-blur-md border rounded-[24px] overflow-hidden transition-all duration-500 flex flex-col justify-between ${
+                      isLocked
+                        ? 'border-white/5 opacity-90 cursor-pointer hover:border-amber-500/50'
+                        : `cursor-pointer ${qtyInCart > 0 ? 'border-primary/50 bg-primary/5 hover:border-primary' : 'border-white/5 hover:border-white/20 hover:bg-zinc-800/80 hover:shadow-2xl hover:shadow-primary/10'} hover:-translate-y-1.5`
+                    }`}
+                  >
+                    <div className="aspect-[4/3] relative overflow-hidden bg-gradient-to-b from-zinc-800/50 to-zinc-900/80">
+                      {product.image_url && !product.image_url.includes('placehold.co') ? (
+                        <>
+                          <div className={`absolute inset-0 transition-colors duration-500 z-10 ${qtyInCart > 0 ? 'bg-black/10' : 'bg-black/30 group-hover:bg-black/10'}`} />
+                          <img 
+                            src={product.image_url} 
+                            alt={product.name}
+                            className={`w-full h-full object-cover transition-transform duration-700 ease-out ${qtyInCart > 0 ? 'scale-105' : 'group-hover:scale-110'}`}
+                          />
+                        </>
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center text-zinc-600 group-hover:text-primary/70 group-hover:scale-110 transition-all duration-500">
+                          <Utensils size={40} strokeWidth={1} className="opacity-40 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                      )}
+                      
+                      {!isLocked && (
+                        <div className={`absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-0 transition-opacity duration-300 z-20 flex items-end justify-end p-4 ${qtyInCart > 0 ? 'opacity-100 from-black/60' : 'group-hover:opacity-100'}`}>
+                          <div className={`text-primary-foreground rounded-full flex items-center justify-center shadow-lg transform transition-all duration-300 ease-out hover:scale-110 hover:bg-primary ${qtyInCart > 0 ? 'w-11 h-11 bg-primary text-base font-bold shadow-[0_0_20px_rgba(234,179,8,0.4)] translate-y-0 ring-2 ring-background' : 'w-11 h-11 bg-primary/90 translate-y-4 group-hover:translate-y-0'}`}>
+                            {qtyInCart > 0 ? `${qtyInCart}x` : <Plus size={24} strokeWidth={2.5} />}
+                          </div>
+                        </div>
+                      )}
+
+                      {isLocked && (
+                        <div className="absolute top-3 right-3 bg-black/70 backdrop-blur-md text-amber-400 p-2 rounded-xl border border-amber-500/30 z-20">
+                          <LockKeyhole size={16} />
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-5 flex flex-col justify-between flex-1 relative z-30">
+                      <div>
+                        <h3 className={`font-semibold transition-colors line-clamp-2 leading-tight tracking-tight ${qtyInCart > 0 ? 'text-primary' : 'text-zinc-100 group-hover:text-primary/80'}`}>
+                          {product.name}
+                        </h3>
+                        <p className={`text-base font-bold mt-2 ${qtyInCart > 0 ? 'text-zinc-100' : 'text-primary/90'}`}>
+                          Rp {product.price.toLocaleString('id-ID')}
+                        </p>
                       </div>
-                    )}
-                  </div>
-                  <div className="p-4 flex flex-col justify-between flex-1">
-                    <div>
-                      <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-1">
-                        {product.name}
-                      </h3>
-                      <p className="text-sm font-bold text-primary mt-1">
-                        Rp {product.price.toLocaleString('id-ID')}
-                      </p>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -990,8 +959,7 @@ export default function POSPage() {
                 <button 
                   onClick={() => { 
                     setPaymentMethod('QRIS'); 
-                    setCheckoutStep('none'); 
-                    generateMidtransQR(); 
+                    setCheckoutStep('confirm'); 
                   }}
                   className="p-6 rounded-2xl bg-background border border-border hover:border-primary flex flex-col items-center justify-center gap-3 transition-all group"
                 >
@@ -1025,7 +993,7 @@ export default function POSPage() {
                     <div className="p-4 rounded-xl bg-blue-500/10 text-blue-500">
                       <QrCode size={64} />
                     </div>
-                    <p className="text-sm font-medium text-center">Tekan tombol di bawah untuk membuat kode QR otomatis dari Midtrans.</p>
+                    <p className="text-sm font-medium text-center">Tampilkan gambar QRIS kepada pelanggan.</p>
                   </div>
                 )}
 
@@ -1074,7 +1042,7 @@ export default function POSPage() {
                   className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
                   disabled={isProcessingCheckout || (paymentMethod === 'Cash' && (!cashReceived || parseInt(cashReceived.replace(/\./g, '')) < total))}
                 >
-                  {isProcessingCheckout ? "Processing..." : (paymentMethod === 'QRIS' ? "Generate QR Code" : "Complete Payment")}
+                  {isProcessingCheckout ? "Processing..." : (paymentMethod === 'QRIS' ? "Tampilkan QRIS" : "Complete Payment")}
                 </Button>
               </DialogFooter>
             </>
@@ -1268,7 +1236,7 @@ export default function POSPage() {
       </Dialog>
       </div>
       {/* QRIS Modal Premium */}
-      <Dialog open={isDANAModalOpen} onOpenChange={setIsDANAModalOpen}>
+      <Dialog open={isQRISModalOpen} onOpenChange={setIsQRISModalOpen}>
         <DialogContent className="sm:max-w-[420px] p-0 bg-background/95 backdrop-blur-xl border border-white/10 rounded-[2rem] overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]">
           <div className="relative p-8">
             {/* Ambient Background Glow */}
@@ -1280,21 +1248,14 @@ export default function POSPage() {
               </div>
               <DialogTitle className="font-extrabold text-white text-2xl tracking-tight">Bayar dengan QRIS</DialogTitle>
               <DialogDescription className="text-sm text-muted-foreground mt-2">
-                Scan QR di bawah menggunakan e-Wallet atau M-Banking
+                Arahkan pelanggan untuk men-scan QRIS di bawah ini.
               </DialogDescription>
             </DialogHeader>
 
-            <div className="flex flex-col items-center space-y-8 relative z-10">
+            <div className="flex flex-col items-center space-y-6 relative z-10">
               {/* QR Code Container */}
-              <div className="bg-white p-4 rounded-3xl shadow-[0_0_30px_rgba(255,255,255,0.1)] relative group w-full max-w-[280px] mx-auto aspect-square flex items-center justify-center">
-                {qrCodeUrl ? (
-                  <img src={qrCodeUrl} alt="QR Code" className="w-full h-full object-contain mix-blend-multiply" />
-                ) : (
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-                    <span className="text-[#888] text-sm font-medium">Generating QR...</span>
-                  </div>
-                )}
+              <div className="bg-white p-4 rounded-3xl shadow-[0_0_30px_rgba(255,255,255,0.1)] relative group w-full max-w-[280px] mx-auto aspect-square flex items-center justify-center overflow-hidden">
+                <img src="/qris-static.jpg" alt="QRIS" className="w-full h-full object-contain mix-blend-multiply" onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x300?text=Upload\\nqris-static.jpg\\nke+folder+public'; }} />
                 {/* Corner Scanner Accents */}
                 <div className="absolute top-0 left-0 w-10 h-10 border-t-4 border-l-4 border-primary rounded-tl-3xl pointer-events-none" />
                 <div className="absolute top-0 right-0 w-10 h-10 border-t-4 border-r-4 border-primary rounded-tr-3xl pointer-events-none" />
@@ -1303,23 +1264,25 @@ export default function POSPage() {
               </div>
 
               {/* Total Tagihan */}
-              <div className="text-center w-full bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl py-5 px-6 shadow-inner">
-                <p className="text-xs text-muted-foreground font-medium uppercase tracking-[0.2em] mb-1">Total Tagihan</p>
+              <div className="text-center w-full bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl py-5 px-6 shadow-inner animate-pulse">
+                <p className="text-xs text-amber-500 font-bold uppercase tracking-[0.1em] mb-1">⚠️ Pastikan Pelanggan Input Nominal:</p>
                 <p className="text-4xl font-black text-primary tracking-tight">Rp {total.toLocaleString('id-ID')}</p>
-              </div>
-
-              {/* Timer */}
-              <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium bg-white/5 px-5 py-2.5 rounded-full border border-white/5">
-                <div className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
-                Menunggu Pembayaran <span className="text-foreground w-6 text-right">{DANATimeLeft}s</span>
               </div>
             </div>
 
             {/* Actions */}
-            <div className="flex gap-3 mt-8 relative z-10">
+            <div className="flex flex-col gap-3 mt-8 relative z-10">
               <Button 
-                onClick={() => setIsDANAModalOpen(false)} 
+                onClick={handleQRISPaymentSuccess} 
+                className="w-full h-14 bg-green-500 hover:bg-green-600 text-white font-bold text-lg rounded-xl transition-all border-none shadow-lg shadow-green-500/20"
+                disabled={isProcessingCheckout}
+              >
+                {isProcessingCheckout ? "Processing..." : "✓ Konfirmasi Lunas"}
+              </Button>
+              <Button 
+                onClick={() => setIsQRISModalOpen(false)} 
                 className="w-full h-12 bg-destructive/10 hover:bg-destructive/20 text-destructive font-bold text-sm rounded-xl transition-all border border-destructive/20"
+                disabled={isProcessingCheckout}
               >
                 Batalkan Pembayaran
               </Button>
