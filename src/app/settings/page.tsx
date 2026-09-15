@@ -8,12 +8,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { supabase } from '@/lib/supabase';
-import { Search, Plus, Trash2, Edit2, Check, X, Tag, DollarSign, Image as ImageIcon, Box, Utensils, Loader2, Layers, ChevronLeft, ChevronUp, ChevronDown, Menu } from 'lucide-react';
+import { Search, Plus, Trash2, Edit2, Check, X, Tag, DollarSign, Image as ImageIcon, Box, Utensils, Loader2, Layers, ChevronLeft, ChevronUp, ChevronDown, Menu, Printer } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { BrochureModal } from '@/components/BrochureModal';
 
 export default function SettingsPage() {
+  const [isBrochureOpen, setIsBrochureOpen] = useState(false);
   const { role, userName, updateUserName, isLoading } = useAuth();
   const router = useRouter();
 
@@ -376,6 +378,14 @@ export default function SettingsPage() {
                         <Button 
                           variant="outline"
                           className="mr-2 border-white/10 hover:bg-white/5 transition-all duration-300 rounded-xl"
+                          onClick={() => setIsBrochureOpen(true)}
+                        >
+                          <Printer size={16} className="mr-2 text-primary" />
+                          Cetak Brosur A4
+                        </Button>
+                        <Button 
+                          variant="outline"
+                          className="mr-2 border-white/10 hover:bg-white/5 transition-all duration-300 rounded-xl"
                           onClick={() => setViewMode('list')}
                         >
                           <Menu size={16} className="mr-2" />
@@ -390,6 +400,15 @@ export default function SettingsPage() {
                         </Button>
                       </>
                     ) : viewMode === 'list' ? (
+                      <>
+                        <Button 
+                          variant="outline"
+                          className="mr-2 border-white/10 hover:bg-white/5 transition-all duration-300 rounded-xl"
+                          onClick={() => setIsBrochureOpen(true)}
+                        >
+                          <Printer size={16} className="mr-2 text-primary" />
+                          Cetak Brosur A4
+                        </Button>
                         <Button 
                           variant="outline"
                           className="flex-1 sm:flex-none border-white/10 hover:bg-white/5 transition-all duration-300 rounded-xl"
@@ -398,6 +417,7 @@ export default function SettingsPage() {
                           <ChevronLeft size={16} className="mr-2" />
                           Back
                         </Button>
+                      </>
                     ) : (
                       <>
                         <Button 
@@ -1289,6 +1309,13 @@ export default function SettingsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <BrochureModal 
+        isOpen={isBrochureOpen} 
+        onClose={() => setIsBrochureOpen(false)} 
+        products={products} 
+        categories={categories} 
+      />
     </MainLayout>
   );
 }
