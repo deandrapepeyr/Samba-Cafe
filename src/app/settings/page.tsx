@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { supabase } from '@/lib/supabase';
-import { Search, Plus, Trash2, Edit2, Check, X, Tag, DollarSign, Image as ImageIcon, Box, Utensils, Loader2, Layers, ChevronLeft, ChevronUp, ChevronDown } from 'lucide-react';
+import { Search, Plus, Trash2, Edit2, Check, X, Tag, DollarSign, Image as ImageIcon, Box, Utensils, Loader2, Layers, ChevronLeft, ChevronUp, ChevronDown, Menu } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
@@ -63,7 +63,7 @@ export default function SettingsPage() {
   const [isAddUserDialogOpen, setIsAddUserDialogOpen] = useState(false);
   const [isEditUserDialogOpen, setIsEditUserDialogOpen] = useState(false);
   
-  const [viewMode, setViewMode] = useState<'categories' | 'items'>('categories');
+  const [viewMode, setViewMode] = useState<'categories' | 'items' | 'list'>('categories');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [activeItemTab, setActiveItemTab] = useState<string>('my-item');
 
@@ -360,23 +360,44 @@ export default function SettingsPage() {
                 <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-white/5">
                   <div>
                     <CardTitle className="text-xl">
-                      {viewMode === 'categories' ? 'Menu Categories' : selectedCategoryName}
+                      {viewMode === 'categories' ? 'Menu Categories' : viewMode === 'list' ? 'Daftar Menu' : selectedCategoryName}
                     </CardTitle>
                     <CardDescription>
                       {viewMode === 'categories' 
                         ? 'Select a category to view or manage its items.'
+                        : viewMode === 'list'
+                        ? 'Arrange the global order of all menu items.'
                         : 'Add, edit, or remove food and drinks from this category.'}
                     </CardDescription>
                   </div>
                   <div className="flex gap-2 w-full sm:w-auto">
                     {viewMode === 'categories' ? (
-                      <Button 
-                        className="bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-white/10 hover:border-primary/50 transition-all duration-300 rounded-xl shadow-sm hover:shadow-primary/10 hover:-translate-y-0.5"
-                        onClick={() => setIsAddCategoryDialogOpen(true)}
-                      >
-                        <Plus size={16} className="mr-2 text-primary" />
-                        Add Category
-                      </Button>
+                      <>
+                        <Button 
+                          variant="outline"
+                          className="mr-2 border-white/10 hover:bg-white/5 transition-all duration-300 rounded-xl"
+                          onClick={() => setViewMode('list')}
+                        >
+                          <Menu size={16} className="mr-2" />
+                          Daftar Menu
+                        </Button>
+                        <Button 
+                          className="bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-white/10 hover:border-primary/50 transition-all duration-300 rounded-xl shadow-sm hover:shadow-primary/10 hover:-translate-y-0.5"
+                          onClick={() => setIsAddCategoryDialogOpen(true)}
+                        >
+                          <Plus size={16} className="mr-2 text-primary" />
+                          Add Category
+                        </Button>
+                      </>
+                    ) : viewMode === 'list' ? (
+                        <Button 
+                          variant="outline"
+                          className="flex-1 sm:flex-none border-white/10 hover:bg-white/5 transition-all duration-300 rounded-xl"
+                          onClick={() => setViewMode('categories')}
+                        >
+                          <ChevronLeft size={16} className="mr-2" />
+                          Back
+                        </Button>
                     ) : (
                       <>
                         <Button 
@@ -410,7 +431,65 @@ export default function SettingsPage() {
                     </div>
                   ) : (
                     <>
-                      {viewMode === 'categories' ? (
+                      {viewMode === 'list' ? (
+                        <div className="space-y-2 animate-in fade-in slide-in-from-right-4 duration-500 p-2 max-w-3xl mx-auto">
+                          {products.map((product, index) => (
+                            <div key={product.id} className="flex items-center justify-between p-3 rounded-xl bg-zinc-900/40 border border-white/5 hover:bg-zinc-900/80 transition-all duration-300">
+                              <div className="flex items-center gap-4">
+                                <div className="text-zinc-500 w-6 text-center font-mono text-sm">{index + 1}</div>
+                                <div>
+                                  <h3 className="font-medium text-zinc-100">{product.name}</h3>
+                                  <p className="text-xs text-zinc-500">{categories.find(c => c.id === product.category_id)?.name}</p>
+                                </div>
+                              </div>
+                              <div className="flex gap-1">
+                                <button 
+                                  onClick={async () => {
+                                    if (index === 0) return;
+                                    const newProducts = [...products];
+                                    const temp = newProducts[index];
+                                    newProducts[index] = newProducts[index - 1];
+                                    newProducts[index - 1] = temp;
+                                    
+                                    newProducts.forEach((p, idx) => p.sort_order = idx);
+                                    setProducts([...newProducts]);
+                                    
+                                    await Promise.all([
+                                      supabase.from('products').update({ sort_order: newProducts[index].sort_order }).eq('id', newProducts[index].id),
+                                      supabase.from('products').update({ sort_order: newProducts[index - 1].sort_order }).eq('id', newProducts[index - 1].id)
+                                    ]);
+                                  }}
+                                  disabled={index === 0}
+                                  className="p-1.5 text-zinc-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent transition-colors rounded-md"
+                                >
+                                  <ChevronUp size={20} />
+                                </button>
+                                <button 
+                                  onClick={async () => {
+                                    if (index === products.length - 1) return;
+                                    const newProducts = [...products];
+                                    const temp = newProducts[index];
+                                    newProducts[index] = newProducts[index + 1];
+                                    newProducts[index + 1] = temp;
+                                    
+                                    newProducts.forEach((p, idx) => p.sort_order = idx);
+                                    setProducts([...newProducts]);
+                                    
+                                    await Promise.all([
+                                      supabase.from('products').update({ sort_order: newProducts[index].sort_order }).eq('id', newProducts[index].id),
+                                      supabase.from('products').update({ sort_order: newProducts[index + 1].sort_order }).eq('id', newProducts[index + 1].id)
+                                    ]);
+                                  }}
+                                  disabled={index === products.length - 1}
+                                  className="p-1.5 text-zinc-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent transition-colors rounded-md"
+                                >
+                                  <ChevronDown size={20} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : viewMode === 'categories' ? (
                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5 p-2">
                           {categories.map(cat => {
                             const itemCount = cat.id === '1' 
