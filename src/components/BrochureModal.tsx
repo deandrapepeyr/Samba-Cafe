@@ -47,7 +47,7 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-[100vw] h-[100vh] w-full p-0 bg-zinc-950 border-none flex flex-col m-0 rounded-none overflow-hidden print:bg-transparent" onInteractOutside={(e) => e.preventDefault()}>
+      <DialogContent className="max-w-[100vw] h-[100vh] w-full p-0 bg-zinc-950 border-none flex flex-col m-0 rounded-none overflow-hidden print:bg-transparent">
         <DialogTitle className="sr-only">Cetak Brosur Menu</DialogTitle>
         
         {/* Top Action Bar (Hidden in Print) */}
