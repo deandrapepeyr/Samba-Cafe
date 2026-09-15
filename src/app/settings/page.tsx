@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { supabase } from '@/lib/supabase';
-import { Search, Plus, Trash2, Edit2, Check, X, Tag, DollarSign, Image as ImageIcon, Box, Utensils, Loader2, Layers, ChevronLeft } from 'lucide-react';
+import { Search, Plus, Trash2, Edit2, Check, X, Tag, DollarSign, Image as ImageIcon, Box, Utensils, Loader2, Layers, ChevronLeft, ChevronUp, ChevronDown } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
@@ -49,7 +49,9 @@ export default function SettingsPage() {
     if (productsRes.error) console.error("Error fetching products:", productsRes.error);
     
     if (categoriesRes.data) setCategories(categoriesRes.data);
-    if (productsRes.data) setProducts(productsRes.data);
+    if (productsRes.data) {
+      setProducts(productsRes.data.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
+    }
     if (stocksRes.data) setStocks(stocksRes.data);
     if (usersRes.data) setUsers(usersRes.data);
     setIsLoadingData(false);
@@ -491,9 +493,49 @@ export default function SettingsPage() {
                                   </div>
                                 )}
                                 <div className="space-y-3">
-                                  {finalProducts.map(product => (
+                                  {finalProducts.map((product, index) => (
                                     <div key={product.id} className="group flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-2xl bg-zinc-900/40 border border-white/5 hover:bg-zinc-900/80 hover:border-white/10 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5">
                                       <div className="flex items-center gap-5">
+                                        <div className="flex flex-col gap-1 mr-1">
+                                          <button 
+                                            onClick={async () => {
+                                              if (index === 0) return;
+                                              const newProducts = [...finalProducts];
+                                              const temp = newProducts[index];
+                                              newProducts[index] = newProducts[index - 1];
+                                              newProducts[index - 1] = temp;
+                                              
+                                              newProducts.forEach((p, idx) => p.sort_order = idx);
+                                              const updatedProducts = products.map(p => newProducts.find(np => np.id === p.id) || p);
+                                              setProducts(updatedProducts.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
+                                              
+                                              await Promise.all(newProducts.map((p, idx) => supabase.from('products').update({ sort_order: idx }).eq('id', p.id)));
+                                            }}
+                                            disabled={index === 0}
+                                            className="p-1 text-zinc-500 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent transition-colors rounded-md"
+                                          >
+                                            <ChevronUp size={18} />
+                                          </button>
+                                          <button 
+                                            onClick={async () => {
+                                              if (index === finalProducts.length - 1) return;
+                                              const newProducts = [...finalProducts];
+                                              const temp = newProducts[index];
+                                              newProducts[index] = newProducts[index + 1];
+                                              newProducts[index + 1] = temp;
+                                              
+                                              newProducts.forEach((p, idx) => p.sort_order = idx);
+                                              const updatedProducts = products.map(p => newProducts.find(np => np.id === p.id) || p);
+                                              setProducts(updatedProducts.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
+                                              
+                                              await Promise.all(newProducts.map((p, idx) => supabase.from('products').update({ sort_order: idx }).eq('id', p.id)));
+                                            }}
+                                            disabled={index === finalProducts.length - 1}
+                                            className="p-1 text-zinc-500 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent transition-colors rounded-md"
+                                          >
+                                            <ChevronDown size={18} />
+                                          </button>
+                                        </div>
                                         <div className="w-16 h-16 rounded-xl overflow-hidden bg-gradient-to-br from-zinc-800 to-zinc-900 border border-white/10 flex-shrink-0 flex items-center justify-center shadow-inner">
                                           {product.image_url ? (
                                             <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />

@@ -115,7 +115,9 @@ export default function POSPage() {
       if (categoriesRes.data) {
         setCategories([{ id: '1', name: 'All Menu' }, ...categoriesRes.data]);
       }
-      if (productsRes.data) setProducts(productsRes.data);
+      if (productsRes.data) {
+        setProducts(productsRes.data.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
+      }
       setIsLoadingData(false);
 
       if (userName) {
@@ -144,7 +146,7 @@ export default function POSPage() {
       const { data } = await supabase.from('products').select('*').eq('is_available', true);
       if (data) {
         // Find newly added products or updated products and ensure state is fresh
-        setProducts(data);
+        setProducts(data.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
       }
     };
     
