@@ -434,12 +434,24 @@ export default function SettingsPage() {
                       {viewMode === 'list' ? (
                         <div className="space-y-2 animate-in fade-in slide-in-from-right-4 duration-500 p-2 max-w-3xl mx-auto">
                           {products.map((product, index) => (
-                            <div key={product.id} className="flex items-center justify-between p-3 rounded-xl bg-zinc-900/40 border border-white/5 hover:bg-zinc-900/80 transition-all duration-300">
-                              <div className="flex items-center gap-4">
-                                <div className="text-zinc-500 w-6 text-center font-mono text-sm">{index + 1}</div>
-                                <div>
-                                  <h3 className="font-medium text-zinc-100">{product.name}</h3>
-                                  <p className="text-xs text-zinc-500">{categories.find(c => c.id === product.category_id)?.name}</p>
+                            <div key={product.id} className="flex items-center justify-between p-3.5 rounded-2xl bg-zinc-900/40 border border-white/5 hover:bg-zinc-900/80 transition-all duration-500 hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5 group">
+                              <div className="flex items-center gap-5 w-full">
+                                <div className="text-zinc-500/40 w-6 text-center font-serif italic text-lg">{index + 1}</div>
+                                <div className="w-16 h-12 rounded-xl overflow-hidden relative shadow-md shadow-black/50 border border-white/10 flex-shrink-0 group-hover:border-primary/30 transition-colors">
+                                  {product.image_url ? (
+                                    <img src={product.image_url} alt={product.name} className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-500" />
+                                  ) : (
+                                    <div className="w-full h-full bg-zinc-800 flex items-center justify-center">
+                                      <Utensils size={14} className="text-zinc-600" />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="font-semibold text-zinc-100 text-sm truncate tracking-wide group-hover:text-primary transition-colors">{product.name}</h3>
+                                  <p className="text-[11px] text-zinc-500 uppercase tracking-widest mt-0.5">{categories.find(c => c.id === product.category_id)?.name}</p>
+                                </div>
+                                <div className="text-primary/90 font-medium text-sm px-4 hidden sm:block whitespace-nowrap">
+                                  Rp {product.price.toLocaleString('id-ID')}
                                 </div>
                               </div>
                               <div className="flex gap-1">
