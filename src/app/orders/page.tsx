@@ -266,24 +266,24 @@ export default function OrdersPage() {
 
         <div className="p-3.5 space-y-3">
           {/* Header row */}
-          <div className="flex items-start justify-between mb-1">
-            <div className="flex flex-col gap-0.5">
-              <div className="flex items-center gap-2">
+          <div className="flex items-start justify-between gap-2 mb-1">
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <span className="font-mono font-bold text-sm text-zinc-100">#{order.id}</span>
-                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${
+                <span className={`shrink-0 whitespace-nowrap text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${
                   order.method === 'QRIS' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                 }`}>
                   {order.method}
                 </span>
               </div>
               {order.customer_name && (
-                <p className="text-[11px] font-medium text-zinc-300">
+                <p className="text-[11px] font-medium text-zinc-300 truncate">
                   Pelanggan: <span className="text-primary font-bold">{order.customer_name}</span>
                 </p>
               )}
             </div>
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-md border ${getTimerBadgeStyle(order.createdAt)}`}>
-              <Clock size={10} />
+            <span className={`shrink-0 whitespace-nowrap inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold rounded-md border ${getTimerBadgeStyle(order.createdAt)}`}>
+              <Clock size={10} className="shrink-0" />
               {getElapsedTimeText(order.createdAt)}
             </span>
           </div>
