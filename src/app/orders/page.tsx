@@ -245,145 +245,134 @@ export default function OrdersPage() {
     return matchesSearch && matchesStatus;
   });
 
-  const renderOrderCard = (order: Order) => (
-    <div 
-      key={order.id} 
-      className={`group relative rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${
-        order.status === 'preparing' ? 'bg-zinc-900/60 backdrop-blur-md border border-white/10 hover:border-amber-500/50 hover:shadow-amber-500/10' :
-        order.status === 'ready' ? 'bg-emerald-950/20 backdrop-blur-md border border-emerald-500/20 hover:border-emerald-500/50 hover:shadow-emerald-500/10' :
-        'bg-zinc-900/30 backdrop-blur-md border border-white/5 opacity-70 hover:opacity-100'
-      }`}
-    >
-      {/* Glow accent */}
-      <div className={`absolute top-0 left-0 right-0 h-1 ${
-        order.status === 'preparing' ? 'bg-gradient-to-r from-amber-500/0 via-amber-500 to-amber-500/0 opacity-50' :
-        order.status === 'ready' ? 'bg-gradient-to-r from-emerald-500/0 via-emerald-500 to-emerald-500/0 opacity-50' : 'hidden'
-      }`} />
+  const renderOrderCard = (order: Order) => {
+    const displayItems = order.items.slice(0, 2);
+    const remainingItems = order.items.length - 2;
 
-      <div className="p-5 space-y-4">
-        {/* Header row */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="font-mono font-bold text-lg text-zinc-100">#{order.id}</span>
-            <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-full border ${getTimerBadgeStyle(order.createdAt)}`}>
-              <Clock size={12} />
+    return (
+      <div 
+        key={order.id} 
+        className={`group relative rounded-xl overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5 ${
+          order.status === 'preparing' ? 'bg-zinc-900/60 backdrop-blur-md border border-white/10 hover:border-amber-500/50 hover:shadow-amber-500/10' :
+          order.status === 'ready' ? 'bg-emerald-950/20 backdrop-blur-md border border-emerald-500/20 hover:border-emerald-500/50 hover:shadow-emerald-500/10' :
+          'bg-zinc-900/30 backdrop-blur-md border border-white/5 opacity-70 hover:opacity-100'
+        }`}
+      >
+        {/* Glow accent */}
+        <div className={`absolute top-0 left-0 right-0 h-0.5 ${
+          order.status === 'preparing' ? 'bg-gradient-to-r from-amber-500/0 via-amber-500 to-amber-500/0 opacity-50' :
+          order.status === 'ready' ? 'bg-gradient-to-r from-emerald-500/0 via-emerald-500 to-emerald-500/0 opacity-50' : 'hidden'
+        }`} />
+
+        <div className="p-3.5 space-y-3">
+          {/* Header row */}
+          <div className="flex items-start justify-between mb-1">
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-center gap-2">
+                <span className="font-mono font-bold text-sm text-zinc-100">#{order.id}</span>
+                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${
+                  order.method === 'QRIS' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                }`}>
+                  {order.method}
+                </span>
+              </div>
+              {order.customer_name && (
+                <p className="text-[11px] font-medium text-zinc-300">
+                  Pelanggan: <span className="text-primary font-bold">{order.customer_name}</span>
+                </p>
+              )}
+            </div>
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-md border ${getTimerBadgeStyle(order.createdAt)}`}>
+              <Clock size={10} />
               {getElapsedTimeText(order.createdAt)}
             </span>
           </div>
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border ${
-            order.method === 'QRIS' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-          }`}>
-            {order.method}
-          </span>
-        </div>
 
-        {/* Cashier & Customer info */}
-        <div className="flex flex-col gap-1">
-          {order.customer_name && (
-            <p className="text-sm font-semibold text-zinc-200">
-              Pelanggan: <span className="text-primary">{order.customer_name}</span>
-            </p>
-          )}
-          <p className="text-xs text-zinc-500 font-medium">
-            Kasir: {order.cashier_name} · {order.date}
-          </p>
-        </div>
-
-        {/* Items */}
-        <div className="space-y-2.5 bg-black/20 p-3 rounded-xl border border-white/5">
-          {order.items.map((item, idx) => (
-            <div key={idx}>
-              <div className="flex justify-between items-baseline text-sm">
-                <span className="text-zinc-300">
-                  <span className="text-primary font-bold mr-2">{item.qty}x</span>
-                  {item.name}
-                </span>
-                <span className="text-xs text-zinc-500 font-mono ml-2 shrink-0">
-                  {(item.price * item.qty).toLocaleString('id-ID')}
-                </span>
+          {/* Items Summary */}
+          <div className="space-y-1 bg-black/20 p-2 rounded-lg border border-white/5">
+            {displayItems.map((item, idx) => (
+              <div key={idx} className="flex items-start text-[11px] leading-tight">
+                <span className="text-primary font-bold mr-1.5 shrink-0">{item.qty}x</span>
+                <span className="text-zinc-300 truncate">{item.name}</span>
               </div>
-              {item.notes && (
-                <div className="mt-1.5 pl-6 flex items-center gap-1.5">
-                  <span className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-md font-medium flex items-center gap-1">
-                    <FileEdit size={10} /> {item.notes}
-                  </span>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* Divider */}
-        <div className="border-t border-white/5" />
-
-        {/* Total + Actions */}
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">Total Pembayaran</p>
-            <p className="text-base font-bold text-primary">Rp {order.total.toLocaleString('id-ID')}</p>
+            ))}
+            {remainingItems > 0 && (
+              <p className="text-[10px] text-zinc-500 italic pt-0.5">+{remainingItems} item lainnya...</p>
+            )}
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setSelectedOrder(order)}
-              className="h-9 px-3 text-xs font-medium text-zinc-400 bg-zinc-900/50 hover:bg-zinc-800 hover:text-zinc-100 rounded-xl border border-white/10 transition-all flex items-center gap-1.5 hover:shadow-lg"
-            >
-              <Receipt size={14} />
-              Detail
-            </button>
+          {/* Divider */}
+          <div className="border-t border-white/5" />
 
-            {order.status === 'preparing' && (
-              <button
-                disabled={updatingId === order.id}
-                onClick={() => updateOrderStatus(order.id, 'ready')}
-                className="h-9 px-4 text-xs font-bold text-black bg-amber-500 hover:bg-amber-400 hover:shadow-lg hover:shadow-amber-500/20 disabled:opacity-50 rounded-xl transition-all flex items-center gap-2"
-              >
-                {updatingId === order.id ? <RefreshCw size={14} className="animate-spin" /> : (
-                  <>
-                    <Bell size={14} />
-                    Siap
-                  </>
-                )}
-              </button>
-            )}
+          {/* Total + Actions */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[9px] text-zinc-500 font-semibold uppercase tracking-wider">Total</p>
+              <p className="text-sm font-bold text-primary">Rp {order.total.toLocaleString('id-ID')}</p>
+            </div>
 
-            {order.status === 'ready' && (
+            <div className="flex items-center gap-1.5">
               <button
-                disabled={updatingId === order.id}
-                onClick={() => updateOrderStatus(order.id, 'completed')}
-                className="h-9 px-4 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 hover:shadow-lg hover:shadow-emerald-500/20 disabled:opacity-50 rounded-xl transition-all flex items-center gap-2"
+                onClick={() => setSelectedOrder(order)}
+                className="h-7 px-2.5 text-[10px] font-medium text-zinc-400 bg-zinc-900/50 hover:bg-zinc-800 hover:text-zinc-100 rounded-lg border border-white/10 transition-all flex items-center gap-1"
               >
-                {updatingId === order.id ? <RefreshCw size={14} className="animate-spin" /> : (
-                  <>
-                    <CheckCircle2 size={14} />
-                    Serahkan
-                  </>
-                )}
+                <Receipt size={12} />
+                Detail
               </button>
-            )}
 
-            {order.status === 'completed' && (
-              <button
-                disabled={updatingId === order.id}
-                onClick={() => updateOrderStatus(order.id, 'ready')}
-                className="h-9 px-3 text-xs font-medium text-zinc-500 hover:text-zinc-300 bg-transparent hover:bg-zinc-900 rounded-xl transition-all flex items-center gap-1.5"
-              >
-                <RotateCcw size={12} />
-                Reset
-              </button>
-            )}
+              {order.status === 'preparing' && (
+                <button
+                  disabled={updatingId === order.id}
+                  onClick={() => updateOrderStatus(order.id, 'ready')}
+                  className="h-7 px-3 text-[10px] font-bold text-black bg-amber-500 hover:bg-amber-400 disabled:opacity-50 rounded-lg transition-all flex items-center gap-1"
+                >
+                  {updatingId === order.id ? <RefreshCw size={12} className="animate-spin" /> : (
+                    <>
+                      <Bell size={12} />
+                      Siap
+                    </>
+                  )}
+                </button>
+              )}
+
+              {order.status === 'ready' && (
+                <button
+                  disabled={updatingId === order.id}
+                  onClick={() => updateOrderStatus(order.id, 'completed')}
+                  className="h-7 px-3 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg transition-all flex items-center gap-1"
+                >
+                  {updatingId === order.id ? <RefreshCw size={12} className="animate-spin" /> : (
+                    <>
+                      <CheckCircle2 size={12} />
+                      Serahkan
+                    </>
+                  )}
+                </button>
+              )}
+
+              {order.status === 'completed' && (
+                <button
+                  disabled={updatingId === order.id}
+                  onClick={() => updateOrderStatus(order.id, 'ready')}
+                  className="h-7 px-2 text-[10px] font-medium text-zinc-500 hover:text-zinc-300 bg-transparent hover:bg-zinc-900 rounded-lg transition-all flex items-center gap-1"
+                >
+                  <RotateCcw size={10} />
+                  Reset
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <MainLayout title="Order List & Status Pesanan">
-      <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6">
+      <div className="p-4 md:p-6 lg:p-8 max-w-[1400px] mx-auto w-full flex flex-col flex-1 min-h-0 space-y-5">
         
         {/* Header Bar */}
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shrink-0">
           <div>
             <h1 className="text-xl font-bold tracking-tight text-white">Pesanan</h1>
             <p className="text-xs text-[#666] mt-0.5">Pantau dan kelola status pesanan hari ini</p>
@@ -413,7 +402,7 @@ export default function OrdersPage() {
         </div>
 
         {/* Status Counters */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-3 md:gap-4 shrink-0">
           <button 
             className={`group text-left p-5 rounded-2xl transition-all duration-300 relative overflow-hidden ${
               statusFilter === 'preparing' 
@@ -464,7 +453,7 @@ export default function OrdersPage() {
         </div>
 
         {/* Filter Controls & Search */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 shrink-0">
           <div className="relative flex-1 max-w-xl group">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-primary transition-colors" size={18} />
             <input
@@ -502,11 +491,11 @@ export default function OrdersPage() {
             <p className="text-sm text-zinc-500 font-medium">Sinkronisasi data pesanan...</p>
           </div>
         ) : activeTab === 'kanban' ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6 flex-1 min-h-0 overflow-y-auto md:overflow-hidden">
             
             {/* Column 1: Sedang Dibuat */}
-            <div className="bg-black/20 rounded-3xl p-5 border border-white/5 shadow-inner min-h-[500px]">
-              <div className="flex items-center justify-between px-2 pb-4 mb-4 border-b border-white/10">
+            <div className="flex flex-col bg-black/20 rounded-3xl p-4 lg:p-5 border border-white/5 shadow-inner min-h-[400px] md:min-h-0 h-full">
+              <div className="flex items-center justify-between px-1 pb-4 mb-4 border-b border-white/10 shrink-0">
                 <div className="flex items-center gap-2.5">
                   <div className="relative flex items-center justify-center w-3 h-3">
                     <span className="absolute w-full h-full rounded-full bg-amber-500 animate-ping opacity-75" />
@@ -517,7 +506,7 @@ export default function OrdersPage() {
                 <span className="text-xs font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-full">{preparingOrders.length}</span>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-4 overflow-y-auto flex-1 pr-1 pb-4 scrollbar-hide">
                 {preparingOrders.length === 0 ? (
                   <div className="border border-dashed border-white/10 rounded-2xl p-10 text-center text-zinc-500 text-sm font-medium">
                     Belum ada antrean masuk
@@ -529,8 +518,8 @@ export default function OrdersPage() {
             </div>
 
             {/* Column 2: Siap Disajikan */}
-            <div className="bg-black/20 rounded-3xl p-5 border border-white/5 shadow-inner min-h-[500px]">
-              <div className="flex items-center justify-between px-2 pb-4 mb-4 border-b border-white/10">
+            <div className="flex flex-col bg-black/20 rounded-3xl p-4 lg:p-5 border border-white/5 shadow-inner min-h-[400px] md:min-h-0 h-full">
+              <div className="flex items-center justify-between px-1 pb-4 mb-4 border-b border-white/10 shrink-0">
                 <div className="flex items-center gap-2.5">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
                   <h2 className="font-bold text-sm text-zinc-300 uppercase tracking-widest">Siap Disajikan</h2>
@@ -538,7 +527,7 @@ export default function OrdersPage() {
                 <span className="text-xs font-bold text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full">{readyOrders.length}</span>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-4 overflow-y-auto flex-1 pr-1 pb-4 scrollbar-hide">
                 {readyOrders.length === 0 ? (
                   <div className="border border-dashed border-white/10 rounded-2xl p-10 text-center text-zinc-500 text-sm font-medium">
                     Belum ada pesanan siap saji
@@ -550,8 +539,8 @@ export default function OrdersPage() {
             </div>
 
             {/* Column 3: Selesai */}
-            <div className="bg-black/20 rounded-3xl p-5 border border-white/5 shadow-inner min-h-[500px]">
-              <div className="flex items-center justify-between px-2 pb-4 mb-4 border-b border-white/10">
+            <div className="flex flex-col bg-black/20 rounded-3xl p-4 lg:p-5 border border-white/5 shadow-inner min-h-[400px] md:min-h-0 h-full">
+              <div className="flex items-center justify-between px-1 pb-4 mb-4 border-b border-white/10 shrink-0">
                 <div className="flex items-center gap-2.5">
                   <span className="w-2.5 h-2.5 rounded-full bg-zinc-600" />
                   <h2 className="font-bold text-sm text-zinc-400 uppercase tracking-widest">Selesai</h2>
@@ -559,7 +548,7 @@ export default function OrdersPage() {
                 <span className="text-xs font-bold text-zinc-400 bg-zinc-800 border border-zinc-700 px-3 py-1 rounded-full">{completedOrders.length}</span>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-4 overflow-y-auto flex-1 pr-1 pb-4 scrollbar-hide">
                 {completedOrders.length === 0 ? (
                   <div className="border border-dashed border-white/10 rounded-2xl p-10 text-center text-zinc-500 text-sm font-medium">
                     Belum ada pesanan selesai
@@ -573,7 +562,7 @@ export default function OrdersPage() {
           </div>
         ) : (
           /* List Mode View */
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 flex-1 min-h-0 overflow-y-auto pb-4">
             {filteredAllOrders.length === 0 ? (
               <div className="col-span-full border border-dashed border-white/10 rounded-2xl p-16 text-center text-zinc-500 text-sm font-medium">
                 Tidak ada pesanan yang sesuai filter

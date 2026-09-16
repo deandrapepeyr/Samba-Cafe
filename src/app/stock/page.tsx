@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Package, Search, Plus, AlertTriangle, ArrowDownUp, Edit, Loader2, Trash2, MoreVertical } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -233,7 +232,7 @@ export default function StockPage() {
         </div>
 
         <Card className="flex-1 flex flex-col bg-card border-border overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between border-b border-border pb-6 flex-wrap gap-4">
+          <CardHeader className="flex flex-row items-center justify-between border-b border-border pb-6 flex-wrap gap-4 shrink-0">
             <div className="relative w-full max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
               <Input 
@@ -252,7 +251,7 @@ export default function StockPage() {
             </div>
           </CardHeader>
           
-          <ScrollArea className="flex-1">
+          <div className="flex-1 overflow-auto min-h-0">
             {/* Mobile Card List View */}
             <div className="md:hidden space-y-3 p-4">
               {isLoadingData ? (
@@ -353,12 +352,12 @@ export default function StockPage() {
                     <th className="font-medium p-4 pl-6">Nama Item</th>
                     <th className="font-medium p-4 text-center">Status Stok</th>
                     <th className="font-medium p-4 text-center">Stok Tersedia</th>
-                    <th className="font-medium p-4 text-center">Batas Minimum</th>
-                    <th className="font-medium p-4 text-center">Satuan</th>
-                    <th className="font-medium p-4 text-right">Harga Beli/Satuan</th>
+                    <th className="font-medium p-4 text-center hidden lg:table-cell">Batas Minimum</th>
+                    <th className="font-medium p-4 text-center hidden lg:table-cell">Satuan</th>
+                    <th className="font-medium p-4 text-right hidden xl:table-cell">Harga Beli/Satuan</th>
                     <th className="font-medium p-4 text-right">Total Nilai Stok</th>
                     <th className="font-medium p-4 text-center">Pembaruan Terakhir</th>
-                    <th className="font-medium p-4 text-right pr-6">Aksi</th>
+                    <th className="font-medium p-4 text-right pr-6 w-[80px]">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -399,12 +398,12 @@ export default function StockPage() {
                                 <span className="bg-green-500/10 text-green-600 text-xs font-bold px-2 py-1 rounded-md inline-block whitespace-nowrap">Aman</span>
                               )}
                             </td>
-                            <td className={`p-4 text-center font-bold ${isLowStock ? 'text-destructive' : ''}`}>{item.quantity}</td>
-                            <td className="p-4 text-center text-muted-foreground">{item.min_stock_alert}</td>
-                            <td className="p-4 text-center text-muted-foreground">{item.unit}</td>
-                            <td className="p-4 text-right">Rp {item.cost_per_unit.toLocaleString('id-ID')}</td>
+                            <td className="p-4 text-center font-bold">{item.quantity}</td>
+                            <td className="p-4 text-center text-muted-foreground hidden lg:table-cell">{item.min_stock_alert}</td>
+                            <td className="p-4 text-center text-muted-foreground hidden lg:table-cell">{item.unit}</td>
+                            <td className="p-4 text-right hidden xl:table-cell">Rp {item.cost_per_unit.toLocaleString('id-ID')}</td>
                             <td className="p-4 text-right font-bold text-primary">Rp {(item.quantity * item.cost_per_unit).toLocaleString('id-ID')}</td>
-                            <td className="p-4 text-center text-xs text-muted-foreground whitespace-nowrap">{formatDate(item.last_updated)}</td>
+                            <td className="p-4 text-center text-xs text-muted-foreground">{formatDate(item.last_updated)}</td>
                             <td className="p-4 pr-6">
                               <div className="flex items-center justify-end">
                                 <DropdownMenu>
@@ -458,7 +457,7 @@ export default function StockPage() {
                 </tbody>
               </table>
             </div>
-          </ScrollArea>
+          </div>
         </Card>
       </div>
 

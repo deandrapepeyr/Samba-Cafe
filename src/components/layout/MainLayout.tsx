@@ -218,7 +218,7 @@ export function MainLayout({ children, onLogoutClick, onLoginClick, title, heade
         </header>
 
         {/* Main Content Area */}
-        <div className="flex-1 overflow-y-auto pb-16 md:pb-0">
+        <div className="flex-1 overflow-y-auto pb-16 md:pb-0 flex flex-col">
           {children}
         </div>
 

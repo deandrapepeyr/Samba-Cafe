@@ -41,7 +41,20 @@ export function Sidebar({ onLogoutClick, onLoginClick }: { onLogoutClick?: () =>
     const saved = localStorage.getItem('sidebar_expanded');
     if (saved !== null) {
       setIsExpanded(saved === 'true');
+    } else if (window.innerWidth < 1024) {
+      setIsExpanded(false);
     }
+    
+    const handleResize = () => {
+      if (localStorage.getItem('sidebar_expanded') === null) {
+        if (window.innerWidth < 1024) {
+          setIsExpanded(false);
+        } else {
+          setIsExpanded(true);
+        }
+      }
+    };
+    window.addEventListener('resize', handleResize);
     const decoy = localStorage.getItem('samba_manager_decoy_name');
     if (decoy) {
       setManagerDecoyName(decoy);
@@ -50,7 +63,10 @@ export function Sidebar({ onLogoutClick, onLoginClick }: { onLogoutClick?: () =>
     const timer = setTimeout(() => {
       setMounted(true);
     }, 50);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', handleResize);
+    };
   }, []);
 
   useEffect(() => {
@@ -196,7 +212,7 @@ export function Sidebar({ onLogoutClick, onLoginClick }: { onLogoutClick?: () =>
       <div className={cn(
         "h-screen bg-background border-r border-border flex flex-col justify-between py-6 relative",
         mounted ? "transition-all duration-300" : "",
-        isExpanded ? "w-64" : "w-20"
+        isExpanded ? "w-56" : "w-20"
       )}>
       <button 
         onClick={() => {
