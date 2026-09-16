@@ -305,16 +305,16 @@ export default function OrdersPage() {
           <div className="border-t border-white/5" />
 
           {/* Total + Actions */}
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+            <div className="shrink-0">
               <p className="text-[9px] text-zinc-500 font-semibold uppercase tracking-wider">Total</p>
-              <p className="text-sm font-bold text-primary">Rp {order.total.toLocaleString('id-ID')}</p>
+              <p className="text-sm font-bold text-primary leading-none mt-1">Rp {order.total.toLocaleString('id-ID')}</p>
             </div>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 shrink-0">
               <button
                 onClick={() => setSelectedOrder(order)}
-                className="h-7 px-2.5 text-[10px] font-medium text-zinc-400 bg-zinc-900/50 hover:bg-zinc-800 hover:text-zinc-100 rounded-lg border border-white/10 transition-all flex items-center gap-1"
+                className="h-7 px-2.5 text-[10px] font-medium text-zinc-400 bg-zinc-900/50 hover:bg-zinc-800 hover:text-zinc-100 rounded-lg border border-white/10 transition-all flex items-center gap-1 shrink-0 whitespace-nowrap"
               >
                 <Receipt size={12} />
                 Detail
@@ -324,7 +324,7 @@ export default function OrdersPage() {
                 <button
                   disabled={updatingId === order.id}
                   onClick={() => updateOrderStatus(order.id, 'ready')}
-                  className="h-7 px-3 text-[10px] font-bold text-black bg-amber-500 hover:bg-amber-400 disabled:opacity-50 rounded-lg transition-all flex items-center gap-1"
+                  className="h-7 px-2.5 text-[10px] font-bold text-black bg-amber-500 hover:bg-amber-400 disabled:opacity-50 rounded-lg transition-all flex items-center gap-1 shrink-0 whitespace-nowrap"
                 >
                   {updatingId === order.id ? <RefreshCw size={12} className="animate-spin" /> : (
                     <>
@@ -339,7 +339,7 @@ export default function OrdersPage() {
                 <button
                   disabled={updatingId === order.id}
                   onClick={() => updateOrderStatus(order.id, 'completed')}
-                  className="h-7 px-3 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg transition-all flex items-center gap-1"
+                  className="h-7 px-2.5 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg transition-all flex items-center gap-1 shrink-0 whitespace-nowrap"
                 >
                   {updatingId === order.id ? <RefreshCw size={12} className="animate-spin" /> : (
                     <>
@@ -354,7 +354,7 @@ export default function OrdersPage() {
                 <button
                   disabled={updatingId === order.id}
                   onClick={() => updateOrderStatus(order.id, 'ready')}
-                  className="h-7 px-2 text-[10px] font-medium text-zinc-500 hover:text-zinc-300 bg-transparent hover:bg-zinc-900 rounded-lg transition-all flex items-center gap-1"
+                  className="h-7 px-2 text-[10px] font-medium text-zinc-500 hover:text-zinc-300 bg-transparent hover:bg-zinc-900 rounded-lg transition-all flex items-center gap-1 shrink-0 whitespace-nowrap"
                 >
                   <RotateCcw size={10} />
                   Reset
