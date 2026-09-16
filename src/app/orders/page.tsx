@@ -404,7 +404,7 @@ export default function OrdersPage() {
         {/* Status Counters */}
         <div className="grid grid-cols-3 gap-3 md:gap-4 shrink-0">
           <button 
-            className={`group text-left p-5 rounded-2xl transition-all duration-300 relative overflow-hidden ${
+            className={`group text-left p-3.5 rounded-xl transition-all duration-300 relative overflow-hidden ${
               statusFilter === 'preparing' 
                 ? 'bg-amber-500/10 border-amber-500/30 ring-1 ring-amber-500/20 shadow-lg shadow-amber-500/5' 
                 : 'bg-zinc-900/40 border-white/5 hover:bg-zinc-900/60 hover:border-white/10'
@@ -412,15 +412,15 @@ export default function OrdersPage() {
             onClick={() => setStatusFilter(statusFilter === 'preparing' ? 'all' : 'preparing')}
           >
             {statusFilter === 'preparing' && <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 to-transparent" />}
-            <p className="relative text-[11px] font-bold text-zinc-400 uppercase tracking-widest group-hover:text-amber-500/70 transition-colors">Antrean</p>
-            <div className="relative flex items-end justify-between mt-2">
-              <span className={`text-4xl font-black tracking-tighter ${statusFilter === 'preparing' ? 'text-amber-500' : 'text-zinc-100 group-hover:text-amber-500 transition-colors'}`}>{preparingOrders.length}</span>
-              <Utensils size={24} className={statusFilter === 'preparing' ? 'text-amber-500' : 'text-zinc-600 group-hover:text-amber-500/50 transition-colors'} strokeWidth={1.5} />
+            <p className="relative text-[10px] font-bold text-zinc-400 uppercase tracking-widest group-hover:text-amber-500/70 transition-colors">Antrean</p>
+            <div className="relative flex items-center justify-between mt-1">
+              <span className={`text-2xl font-black tracking-tighter ${statusFilter === 'preparing' ? 'text-amber-500' : 'text-zinc-100 group-hover:text-amber-500 transition-colors'}`}>{preparingOrders.length}</span>
+              <Utensils size={18} className={statusFilter === 'preparing' ? 'text-amber-500' : 'text-zinc-600 group-hover:text-amber-500/50 transition-colors'} strokeWidth={1.5} />
             </div>
           </button>
 
           <button 
-            className={`group text-left p-5 rounded-2xl transition-all duration-300 relative overflow-hidden ${
+            className={`group text-left p-3.5 rounded-xl transition-all duration-300 relative overflow-hidden ${
               statusFilter === 'ready' 
                 ? 'bg-emerald-500/10 border-emerald-500/30 ring-1 ring-emerald-500/20 shadow-lg shadow-emerald-500/5' 
                 : 'bg-zinc-900/40 border-white/5 hover:bg-zinc-900/60 hover:border-white/10'
@@ -428,15 +428,15 @@ export default function OrdersPage() {
             onClick={() => setStatusFilter(statusFilter === 'ready' ? 'all' : 'ready')}
           >
             {statusFilter === 'ready' && <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent" />}
-            <p className="relative text-[11px] font-bold text-zinc-400 uppercase tracking-widest group-hover:text-emerald-500/70 transition-colors">Siap Disajikan</p>
-            <div className="relative flex items-end justify-between mt-2">
-              <span className={`text-4xl font-black tracking-tighter ${statusFilter === 'ready' ? 'text-emerald-500' : 'text-zinc-100 group-hover:text-emerald-500 transition-colors'}`}>{readyOrders.length}</span>
-              <Bell size={24} className={statusFilter === 'ready' ? 'text-emerald-500' : 'text-zinc-600 group-hover:text-emerald-500/50 transition-colors'} strokeWidth={1.5} />
+            <p className="relative text-[10px] font-bold text-zinc-400 uppercase tracking-widest group-hover:text-emerald-500/70 transition-colors">Siap Disajikan</p>
+            <div className="relative flex items-center justify-between mt-1">
+              <span className={`text-2xl font-black tracking-tighter ${statusFilter === 'ready' ? 'text-emerald-500' : 'text-zinc-100 group-hover:text-emerald-500 transition-colors'}`}>{readyOrders.length}</span>
+              <Bell size={18} className={statusFilter === 'ready' ? 'text-emerald-500' : 'text-zinc-600 group-hover:text-emerald-500/50 transition-colors'} strokeWidth={1.5} />
             </div>
           </button>
 
           <button 
-            className={`group text-left p-5 rounded-2xl transition-all duration-300 relative overflow-hidden ${
+            className={`group text-left p-3.5 rounded-xl transition-all duration-300 relative overflow-hidden ${
               statusFilter === 'completed' 
                 ? 'bg-zinc-800 border-zinc-600 ring-1 ring-zinc-500 shadow-lg' 
                 : 'bg-zinc-900/40 border-white/5 hover:bg-zinc-900/60 hover:border-white/10'
@@ -444,10 +444,10 @@ export default function OrdersPage() {
             onClick={() => setStatusFilter(statusFilter === 'completed' ? 'all' : 'completed')}
           >
             {statusFilter === 'completed' && <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent" />}
-            <p className="relative text-[11px] font-bold text-zinc-400 uppercase tracking-widest group-hover:text-zinc-300 transition-colors">Selesai</p>
-            <div className="relative flex items-end justify-between mt-2">
-              <span className={`text-4xl font-black tracking-tighter ${statusFilter === 'completed' ? 'text-zinc-300' : 'text-zinc-100 group-hover:text-zinc-300 transition-colors'}`}>{completedOrders.length}</span>
-              <PackageCheck size={24} className={statusFilter === 'completed' ? 'text-zinc-400' : 'text-zinc-600 group-hover:text-zinc-400 transition-colors'} strokeWidth={1.5} />
+            <p className="relative text-[10px] font-bold text-zinc-400 uppercase tracking-widest group-hover:text-zinc-300 transition-colors">Selesai</p>
+            <div className="relative flex items-center justify-between mt-1">
+              <span className={`text-2xl font-black tracking-tighter ${statusFilter === 'completed' ? 'text-zinc-300' : 'text-zinc-100 group-hover:text-zinc-300 transition-colors'}`}>{completedOrders.length}</span>
+              <PackageCheck size={18} className={statusFilter === 'completed' ? 'text-zinc-400' : 'text-zinc-600 group-hover:text-zinc-400 transition-colors'} strokeWidth={1.5} />
             </div>
           </button>
         </div>
