@@ -37,15 +37,21 @@ export default function StockPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isUpdateStockDialogOpen, setIsUpdateStockDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
 
   const [selectedStock, setSelectedStock] = useState<StockItem | null>(null);
 
   const [newItem, setNewItem] = useState({
     name: '',
-    unit: '',
+    unit_value: '',
+    unit_type: 'pcs',
     cost_per_unit: '',
-    min_stock_alert: ''
+    min_stock_alert: '',
+    quantity: ''
   });
+
+  const [editUnitValue, setEditUnitValue] = useState('');
+  const [editUnitType, setEditUnitType] = useState('pcs');
 
   const [stockUpdateAmount, setStockUpdateAmount] = useState('');
   const [stockUpdateType, setStockUpdateType] = useState<'add' | 'subtract'>('add');
@@ -83,7 +89,7 @@ export default function StockPage() {
 
   // Handlers
   const handleAddItem = async () => {
-    if (!newItem.name || !newItem.unit || !newItem.cost_per_unit) return;
+    if (!newItem.name || !newItem.unit_value || !newItem.cost_per_unit) return;
 
     // Prevent duplicate item names (case-insensitive)
     const duplicateExists = stocks.some(s => s.name.toLowerCase() === newItem.name.trim().toLowerCase());
@@ -94,16 +100,16 @@ export default function StockPage() {
 
     const { data, error } = await supabase.from('stocks').insert([{
       name: newItem.name.trim(),
-      unit: newItem.unit,
+      unit: `${newItem.unit_value} ${newItem.unit_type}`.trim(),
       cost_per_unit: parseInt(newItem.cost_per_unit),
       min_stock_alert: parseInt(newItem.min_stock_alert) || 0,
-      quantity: 0
+      quantity: parseInt(newItem.quantity) || 0
     }]).select();
 
     if (data && !error) {
       setStocks([...stocks, data[0]].sort((a, b) => a.name.localeCompare(b.name)));
       setIsAddDialogOpen(false);
-      setNewItem({ name: '', unit: '', cost_per_unit: '', min_stock_alert: '' });
+      setNewItem({ name: '', unit_value: '', unit_type: 'pcs', cost_per_unit: '', min_stock_alert: '', quantity: '' });
     } else {
       alert("Failed to add stock item.");
     }
@@ -148,14 +154,14 @@ export default function StockPage() {
       .from('stocks')
       .update({ 
         name: selectedStock.name.trim(), 
-        unit: selectedStock.unit, 
+        unit: `${editUnitValue} ${editUnitType}`.trim(), 
         cost_per_unit: selectedStock.cost_per_unit, 
         min_stock_alert: selectedStock.min_stock_alert 
       })
       .eq('id', selectedStock.id);
 
     if (!error) {
-      setStocks(stocks.map(s => s.id === selectedStock.id ? selectedStock : s));
+      setStocks(stocks.map(s => s.id === selectedStock.id ? { ...selectedStock, unit: `${editUnitValue} ${editUnitType}`.trim() } : s));
       setIsEditDialogOpen(false);
     } else {
       alert("Failed to edit stock.");
@@ -212,7 +218,7 @@ export default function StockPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <Card className="bg-card border-border">
             <CardHeader className="pb-2">
-              <CardDescription className="text-muted-foreground">Total Modal Tertahan</CardDescription>
+              <CardDescription className="text-muted-foreground">Total Nilai Stok</CardDescription>
               <CardTitle className="text-2xl lg:text-3xl text-primary">Rp {totalModal.toLocaleString('id-ID')}</CardTitle>
             </CardHeader>
           </Card>
@@ -262,53 +268,69 @@ export default function StockPage() {
                 filteredStocks.map((item) => {
                   const isLowStock = item.quantity <= item.min_stock_alert;
                   return (
-                    <div key={item.id} className={`p-4 bg-card border border-border rounded-xl shadow-sm space-y-3 ${isLowStock ? 'bg-destructive/5 border-destructive/30' : ''}`}>
+                    <div 
+                      key={item.id} 
+                      className={`p-4 bg-card border border-border rounded-xl shadow-sm space-y-3 cursor-pointer hover:border-primary/50 transition-colors ${isLowStock ? 'bg-destructive/5 border-destructive/30' : ''}`}
+                      onClick={() => {
+                        setSelectedStock(item);
+                        setIsDetailDialogOpen(true);
+                      }}
+                    >
                       <div className="flex items-center justify-between border-b border-border/60 pb-2">
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center gap-2 font-bold text-foreground">
                             <span>{item.name}</span>
                             {isLowStock && <AlertTriangle size={14} className="text-destructive" />}
                           </div>
-                          <div className="text-[10px] text-muted-foreground">Update: {formatDate(item.last_updated)}</div>
+                          <div className="text-[10px] text-muted-foreground">Pembaruan: {formatDate(item.last_updated)}</div>
                         </div>
                         <div className="flex flex-col items-end gap-1">
                           <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${item.quantity === 0 ? 'bg-destructive/10 text-destructive' : isLowStock ? 'bg-amber-500/10 text-amber-600' : 'bg-green-500/10 text-green-600'}`}>
-                            Stok: {item.quantity} {item.unit}
+                            Stok: {item.quantity} <span className="font-normal text-[10px]">(per {item.unit})</span>
                           </span>
-                          <span className="text-[10px] text-muted-foreground font-medium">Batas tipis: {item.min_stock_alert}</span>
+                          <span className="text-[10px] text-muted-foreground font-medium">Batas minimum: {item.min_stock_alert}</span>
                         </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-2 text-xs">
                         <div>
-                          <p className="text-[10px] text-muted-foreground/70 font-semibold uppercase">Modal per Unit</p>
+                          <p className="text-[10px] text-muted-foreground/70 font-semibold uppercase">Harga Beli/Satuan</p>
                           <p className="font-medium text-foreground mt-0.5">Rp {item.cost_per_unit.toLocaleString('id-ID')}</p>
                         </div>
                         <div>
-                          <p className="text-[10px] text-muted-foreground/70 font-semibold uppercase">Total Modal</p>
+                          <p className="text-[10px] text-muted-foreground/70 font-semibold uppercase">Total Nilai Stok</p>
                           <p className="font-bold text-primary mt-0.5">Rp {(item.quantity * item.cost_per_unit).toLocaleString('id-ID')}</p>
                         </div>
                       </div>
 
                       <div className="flex items-center justify-end pt-2 border-t border-border/40">
                         <DropdownMenu>
-                          <DropdownMenuTrigger className="h-8 w-8 inline-flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground outline-none">
+                          <DropdownMenuTrigger 
+                            className="h-8 w-8 inline-flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground outline-none"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             <MoreVertical size={16} />
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-40 bg-card border-border">
-                            <DropdownMenuItem className="cursor-pointer" onClick={() => {
+                            <DropdownMenuItem className="cursor-pointer" onClick={(e) => {
+                              e.stopPropagation();
                               setSelectedStock(item);
                               setIsUpdateStockDialogOpen(true);
                             }}>
                               Update Stok
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="cursor-pointer" onClick={() => {
+                            <DropdownMenuItem className="cursor-pointer" onClick={(e) => {
+                              e.stopPropagation();
+                              const unitParts = item.unit.match(/^([\d.,]+)\s*(.*)$/);
+                              setEditUnitValue(unitParts ? unitParts[1] : item.unit.replace(/[a-zA-Z\s]/g, ''));
+                              setEditUnitType(unitParts && unitParts[2] ? unitParts[2] : (item.unit.replace(/[\d.,\s]/g, '') || 'pcs'));
                               setSelectedStock(item);
                               setIsEditDialogOpen(true);
                             }}>
                               Edit Bahan
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer" onClick={() => {
+                            <DropdownMenuItem className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer" onClick={(e) => {
+                              e.stopPropagation();
                               setSelectedStock(item);
                               setIsDeleteDialogOpen(true);
                             }}>
@@ -325,17 +347,17 @@ export default function StockPage() {
 
             {/* Desktop Table View */}
             <div className="hidden md:block p-0">
-              <table className="w-full text-left text-sm whitespace-nowrap">
+              <table className="w-full text-left text-sm">
                 <thead className="bg-muted/50 text-muted-foreground sticky top-0">
                   <tr>
-                    <th className="font-medium p-4 pl-6">Nama Bahan</th>
-                    <th className="font-medium p-4 text-center">Status</th>
-                    <th className="font-medium p-4 text-center">Sisa Stok</th>
-                    <th className="font-medium p-4 text-center">Batas Tipis</th>
+                    <th className="font-medium p-4 pl-6">Nama Item</th>
+                    <th className="font-medium p-4 text-center">Status Stok</th>
+                    <th className="font-medium p-4 text-center">Stok Tersedia</th>
+                    <th className="font-medium p-4 text-center">Batas Minimum</th>
                     <th className="font-medium p-4 text-center">Satuan</th>
-                    <th className="font-medium p-4 text-right">Harga Modal/Satuan</th>
-                    <th className="font-medium p-4 text-right">Total Modal</th>
-                    <th className="font-medium p-4 text-center">Terakhir Diperbarui</th>
+                    <th className="font-medium p-4 text-right">Harga Beli/Satuan</th>
+                    <th className="font-medium p-4 text-right">Total Nilai Stok</th>
+                    <th className="font-medium p-4 text-center">Pembaruan Terakhir</th>
                     <th className="font-medium p-4 text-right pr-6">Aksi</th>
                   </tr>
                 </thead>
@@ -354,7 +376,14 @@ export default function StockPage() {
                       {filteredStocks.map((item) => {
                         const isLowStock = item.quantity <= item.min_stock_alert;
                         return (
-                          <tr key={item.id} className={`hover:bg-muted/50 transition-colors ${isLowStock ? 'bg-destructive/5' : ''}`}>
+                          <tr 
+                            key={item.id} 
+                            className={`hover:bg-muted/50 transition-colors cursor-pointer ${isLowStock ? 'bg-destructive/5' : ''}`}
+                            onClick={() => {
+                              setSelectedStock(item);
+                              setIsDetailDialogOpen(true);
+                            }}
+                          >
                             <td className="p-4 pl-6">
                               <div className="flex items-center gap-2">
                                 <span className={`font-medium ${isLowStock ? 'text-destructive' : ''}`}>{item.name}</span>
@@ -379,23 +408,32 @@ export default function StockPage() {
                             <td className="p-4 pr-6">
                               <div className="flex items-center justify-end">
                                 <DropdownMenu>
-                                  <DropdownMenuTrigger className="h-8 w-8 inline-flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground outline-none">
+                                  <DropdownMenuTrigger 
+                                    className="h-8 w-8 inline-flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground outline-none"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
                                     <MoreVertical size={16} />
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end" className="w-40 bg-card border-border">
-                                    <DropdownMenuItem className="cursor-pointer" onClick={() => {
+                                    <DropdownMenuItem className="cursor-pointer" onClick={(e) => {
+                                      e.stopPropagation();
                                       setSelectedStock(item);
                                       setIsUpdateStockDialogOpen(true);
                                     }}>
                                       Update Stok
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem className="cursor-pointer" onClick={() => {
+                                    <DropdownMenuItem className="cursor-pointer" onClick={(e) => {
+                                      e.stopPropagation();
+                                      const unitParts = item.unit.match(/^([\d.,]+)\s*(.*)$/);
+                                      setEditUnitValue(unitParts ? unitParts[1] : item.unit.replace(/[a-zA-Z\s]/g, ''));
+                                      setEditUnitType(unitParts && unitParts[2] ? unitParts[2] : (item.unit.replace(/[\d.,\s]/g, '') || 'pcs'));
                                       setSelectedStock(item);
                                       setIsEditDialogOpen(true);
                                     }}>
                                       Edit Bahan
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer" onClick={() => {
+                                    <DropdownMenuItem className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer" onClick={(e) => {
+                                      e.stopPropagation();
                                       setSelectedStock(item);
                                       setIsDeleteDialogOpen(true);
                                     }}>
@@ -437,15 +475,74 @@ export default function StockPage() {
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <label className="text-right text-sm font-medium">Satuan</label>
-              <Input className="col-span-3 bg-background border-border" placeholder="Cth: kg, pcs, liter" value={newItem.unit} onChange={e => setNewItem({...newItem, unit: e.target.value})} />
+              <div className="col-span-3 flex gap-2">
+                <Input 
+                  type="text" 
+                  className="bg-background border-border flex-1" 
+                  placeholder="Angka (cth: 20, 1)" 
+                  value={newItem.unit_value} 
+                  onChange={e => {
+                    const val = e.target.value.replace(/[^0-9.,]/g, '');
+                    setNewItem({...newItem, unit_value: val});
+                  }} 
+                />
+                <select 
+                  className="flex h-10 w-32 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={newItem.unit_type}
+                  onChange={e => setNewItem({...newItem, unit_type: e.target.value})}
+                >
+                  <option value="pcs">Pcs</option>
+                  <option value="kg">Kg</option>
+                  <option value="gram">Gram</option>
+                  <option value="liter">Liter</option>
+                  <option value="ml">Ml</option>
+                  <option value="pack">Pack</option>
+                  <option value="botol">Botol</option>
+                  <option value="box">Box</option>
+                </select>
+              </div>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <label className="text-right text-sm font-medium">Modal/Satuan</label>
-              <Input type="number" className="col-span-3 bg-background border-border" placeholder="Rp" value={newItem.cost_per_unit} onChange={e => setNewItem({...newItem, cost_per_unit: e.target.value})} />
+              <label className="text-right text-sm font-medium">Harga Beli/Satuan</label>
+              <div className="relative col-span-3">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">Rp</span>
+                <Input 
+                  type="text" 
+                  className="pl-9 bg-background border-border" 
+                  placeholder="0" 
+                  value={newItem.cost_per_unit === '' ? '' : Number(newItem.cost_per_unit).toLocaleString('id-ID')} 
+                  onChange={e => {
+                    const val = e.target.value.replace(/\D/g, '');
+                    setNewItem({...newItem, cost_per_unit: val === '' ? '' : parseInt(val, 10).toString()});
+                  }} 
+                />
+              </div>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <label className="text-right text-sm font-medium text-destructive">Batas Tipis</label>
-              <Input type="number" className="col-span-3 bg-background border-border" placeholder="Peringatan jika stok dibawah ini" value={newItem.min_stock_alert} onChange={e => setNewItem({...newItem, min_stock_alert: e.target.value})} />
+              <label className="text-right text-sm font-medium">Stok Awal</label>
+              <Input 
+                type="text" 
+                className="col-span-3 bg-background border-border" 
+                placeholder="Jumlah stok saat ini" 
+                value={newItem.quantity === '' ? '' : Number(newItem.quantity).toLocaleString('id-ID')} 
+                onChange={e => {
+                  const val = e.target.value.replace(/\D/g, '');
+                  setNewItem({...newItem, quantity: val === '' ? '' : parseInt(val, 10).toString()});
+                }} 
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <label className="text-right text-sm font-medium text-destructive">Batas Minimum</label>
+              <Input 
+                type="text" 
+                className="col-span-3 bg-background border-border" 
+                placeholder="Peringatan jika stok dibawah ini" 
+                value={newItem.min_stock_alert === '' ? '' : Number(newItem.min_stock_alert).toLocaleString('id-ID')} 
+                onChange={e => {
+                  const val = e.target.value.replace(/\D/g, '');
+                  setNewItem({...newItem, min_stock_alert: val === '' ? '' : parseInt(val, 10).toString()});
+                }} 
+              />
             </div>
           </div>
           <DialogFooter>
@@ -527,15 +624,59 @@ export default function StockPage() {
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <label className="text-right text-sm font-medium">Satuan</label>
-                <Input className="col-span-3 bg-background border-border" value={selectedStock.unit} onChange={e => setSelectedStock({...selectedStock, unit: e.target.value})} />
+                <div className="col-span-3 flex gap-2">
+                  <Input 
+                    type="text" 
+                    className="bg-background border-border flex-1" 
+                    placeholder="Angka (cth: 20, 1)" 
+                    value={editUnitValue} 
+                    onChange={e => {
+                      const val = e.target.value.replace(/[^0-9.,]/g, '');
+                      setEditUnitValue(val);
+                    }} 
+                  />
+                  <select 
+                    className="flex h-10 w-32 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={editUnitType}
+                    onChange={e => setEditUnitType(e.target.value)}
+                  >
+                    <option value="pcs">Pcs</option>
+                    <option value="kg">Kg</option>
+                    <option value="gram">Gram</option>
+                    <option value="liter">Liter</option>
+                    <option value="ml">Ml</option>
+                    <option value="pack">Pack</option>
+                    <option value="botol">Botol</option>
+                    <option value="box">Box</option>
+                  </select>
+                </div>
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
-                <label className="text-right text-sm font-medium">Modal/Satuan</label>
-                <Input type="number" className="col-span-3 bg-background border-border" value={selectedStock.cost_per_unit} onChange={e => setSelectedStock({...selectedStock, cost_per_unit: Number(e.target.value)})} />
+                <label className="text-right text-sm font-medium">Harga Beli/Satuan</label>
+                <div className="relative col-span-3">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">Rp</span>
+                  <Input 
+                    type="text" 
+                    className="pl-9 bg-background border-border" 
+                    value={selectedStock.cost_per_unit === '' as any ? '' : Number(selectedStock.cost_per_unit).toLocaleString('id-ID')} 
+                    onChange={e => {
+                      const val = e.target.value.replace(/\D/g, '');
+                      setSelectedStock({...selectedStock, cost_per_unit: val === '' ? '' as any : parseInt(val, 10)});
+                    }} 
+                  />
+                </div>
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
-                <label className="text-right text-sm font-medium text-destructive">Batas Tipis</label>
-                <Input type="number" className="col-span-3 bg-background border-border" value={selectedStock.min_stock_alert} onChange={e => setSelectedStock({...selectedStock, min_stock_alert: Number(e.target.value)})} />
+                <label className="text-right text-sm font-medium text-destructive">Batas Minimum</label>
+                <Input 
+                  type="text" 
+                  className="col-span-3 bg-background border-border" 
+                  value={selectedStock.min_stock_alert === '' as any ? '' : Number(selectedStock.min_stock_alert).toLocaleString('id-ID')} 
+                  onChange={e => {
+                    const val = e.target.value.replace(/\D/g, '');
+                    setSelectedStock({...selectedStock, min_stock_alert: val === '' ? '' as any : parseInt(val, 10)});
+                  }} 
+                />
               </div>
             </div>
           )}
@@ -561,6 +702,62 @@ export default function StockPage() {
           <DialogFooter className="mt-4">
             <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>Batal</Button>
             <Button onClick={handleDeleteItem} variant="destructive">Hapus Bahan</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Detail Dialog */}
+      <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
+        <DialogContent className="bg-card border-border sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Detail Bahan</DialogTitle>
+          </DialogHeader>
+          {selectedStock && (
+            <div className="grid gap-3 py-4 text-sm">
+              <div className="grid grid-cols-3 gap-2">
+                <span className="text-muted-foreground">Nama Bahan</span>
+                <span className="col-span-2 font-medium">{selectedStock.name}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <span className="text-muted-foreground">Status</span>
+                <span className="col-span-2">
+                  {selectedStock.quantity === 0 ? (
+                    <span className="text-destructive font-bold">Habis</span>
+                  ) : selectedStock.quantity <= selectedStock.min_stock_alert ? (
+                    <span className="text-amber-500 font-bold">Stok Tipis</span>
+                  ) : (
+                    <span className="text-green-500 font-bold">Aman</span>
+                  )}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <span className="text-muted-foreground">Satuan</span>
+                <span className="col-span-2">{selectedStock.unit}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <span className="text-muted-foreground">Sisa Stok</span>
+                <span className="col-span-2 font-bold">{selectedStock.quantity}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <span className="text-muted-foreground">Batas Minimum</span>
+                <span className="col-span-2">{selectedStock.min_stock_alert}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <span className="text-muted-foreground">Harga Beli/Satuan</span>
+                <span className="col-span-2">Rp {Number(selectedStock.cost_per_unit).toLocaleString('id-ID')}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <span className="text-muted-foreground">Total Nilai Stok</span>
+                <span className="col-span-2 font-bold text-primary">Rp {(selectedStock.quantity * selectedStock.cost_per_unit).toLocaleString('id-ID')}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <span className="text-muted-foreground">Pembaruan Terakhir</span>
+                <span className="col-span-2">{formatDate(selectedStock.last_updated)}</span>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setIsDetailDialogOpen(false)} className="bg-primary text-primary-foreground hover:bg-primary/90">Tutup</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
