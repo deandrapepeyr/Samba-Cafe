@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChefHat, Search, Plus, Trash2, Loader2, Save } from 'lucide-react';
+import { ChefHat, Search, Plus, Trash2, Loader2, Save, Pencil } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/AuthContext';
@@ -46,6 +46,11 @@ export default function RecipesPage() {
   // Dialog State
   const [isAddIngredientOpen, setIsAddIngredientOpen] = useState(false);
   const [newIngredient, setNewIngredient] = useState({ stock_id: '', quantity: '' });
+  
+  const [isEditIngredientOpen, setIsEditIngredientOpen] = useState(false);
+  const [editingIngredient, setEditingIngredient] = useState<RecipeIngredient | null>(null);
+  const [editQuantity, setEditQuantity] = useState('');
+  
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -96,6 +101,27 @@ export default function RecipesPage() {
       setNewIngredient({ stock_id: '', quantity: '' });
     } else {
       alert("Gagal menambah bahan baku. Mungkin tabel product_ingredients belum ada.");
+    }
+    setIsSaving(false);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingIngredient || !editQuantity) return;
+    setIsSaving(true);
+    
+    const quantity = parseFloat(editQuantity);
+    
+    const { error } = await supabase
+      .from('product_ingredients')
+      .update({ quantity_required: quantity })
+      .eq('id', editingIngredient.id);
+
+    if (!error) {
+      setRecipes(recipes.map(r => r.id === editingIngredient.id ? { ...r, quantity_required: quantity } : r));
+      setIsEditIngredientOpen(false);
+      setEditingIngredient(null);
+    } else {
+      alert("Gagal mengubah takaran bahan baku.");
     }
     setIsSaving(false);
   };
@@ -222,15 +248,30 @@ export default function RecipesPage() {
                               </div>
                             </div>
                           </div>
-                          <Button 
-                            variant="ghost" 
-                            size="icon"
-                            className="text-zinc-500 hover:text-red-400 hover:bg-red-400/10 opacity-0 group-hover:opacity-100 transition-all rounded-xl h-10 w-10"
-                            onClick={() => handleRemoveIngredient(ing.id)}
-                            title="Hapus bahan"
-                          >
-                            <Trash2 size={18} strokeWidth={2} />
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              className="text-zinc-500 hover:text-amber-400 hover:bg-amber-400/10 opacity-0 group-hover:opacity-100 transition-all rounded-xl h-10 w-10"
+                              onClick={() => {
+                                setEditingIngredient(ing);
+                                setEditQuantity(ing.quantity_required.toString());
+                                setIsEditIngredientOpen(true);
+                              }}
+                              title="Edit takaran"
+                            >
+                              <Pencil size={18} strokeWidth={2} />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              className="text-zinc-500 hover:text-red-400 hover:bg-red-400/10 opacity-0 group-hover:opacity-100 transition-all rounded-xl h-10 w-10"
+                              onClick={() => handleRemoveIngredient(ing.id)}
+                              title="Hapus bahan"
+                            >
+                              <Trash2 size={18} strokeWidth={2} />
+                            </Button>
+                          </div>
                         </div>
                       );
                     })}
@@ -296,6 +337,43 @@ export default function RecipesPage() {
             <Button onClick={handleAddIngredient} disabled={!newIngredient.stock_id || !newIngredient.quantity || isSaving}>
               {isSaving ? <Loader2 size={16} className="animate-spin mr-2" /> : <Save size={16} className="mr-2" />}
               Simpan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Ingredient Dialog */}
+      <Dialog open={isEditIngredientOpen} onOpenChange={setIsEditIngredientOpen}>
+        <DialogContent className="sm:max-w-[425px] bg-card border-border">
+          <DialogHeader>
+            <DialogTitle>Edit Takaran Bahan</DialogTitle>
+            <DialogDescription className="text-xs">
+              Ubah takaran <strong className="text-foreground">{stocks.find(s => s.id === editingIngredient?.stock_id)?.name}</strong> untuk 1 porsi <strong className="text-foreground">{selectedProduct?.name}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <label className="text-xs font-semibold">Takaran (Quantity per porsi)</label>
+              <div className="relative">
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="Misal: 15"
+                  value={editQuantity}
+                  onChange={(e) => setEditQuantity(e.target.value)}
+                  className="pr-16"
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">
+                  {editingIngredient ? stocks.find(s => s.id === editingIngredient.stock_id)?.unit : 'Unit'}
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditIngredientOpen(false)}>Batal</Button>
+            <Button onClick={handleSaveEdit} disabled={!editQuantity || isSaving}>
+              {isSaving ? <Loader2 size={16} className="animate-spin mr-2" /> : <Save size={16} className="mr-2" />}
+              Simpan Perubahan
             </Button>
           </DialogFooter>
         </DialogContent>
