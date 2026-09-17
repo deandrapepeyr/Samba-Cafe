@@ -147,6 +147,7 @@ export default function RecipesPage() {
                   <Loader2 className="w-6 h-6 animate-spin mb-2" />
                   <span className="text-xs">Memuat menu...</span>
                 </div>
+              ) : (
                 filteredProducts.map(product => {
                   const isSelected = selectedProductId === product.id;
                   const count = recipes.filter(r => r.product_id === product.id).length;
