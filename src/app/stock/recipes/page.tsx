@@ -242,7 +242,7 @@ export default function RecipesPage() {
                               <div className="flex items-center gap-1.5 mt-1">
                                 <span className="text-xs text-zinc-500">Memotong</span>
                                 <span className="text-xs font-black text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-md border border-amber-400/20">
-                                  {ing.quantity_required} {stock?.unit}
+                                  {ing.quantity_required} <span className="font-semibold opacity-90 text-[10px] ml-0.5">{/^\d/.test(stock?.unit || '') ? `(${stock?.unit})` : stock?.unit}</span>
                                 </span>
                                 <span className="text-xs text-zinc-500">per porsi</span>
                               </div>
@@ -327,7 +327,10 @@ export default function RecipesPage() {
                   className="pr-16"
                 />
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">
-                  {newIngredient.stock_id ? stocks.find(s => s.id === newIngredient.stock_id)?.unit : 'Unit'}
+                  {(() => {
+                    const unit = newIngredient.stock_id ? stocks.find(s => s.id === newIngredient.stock_id)?.unit : 'Unit';
+                    return /^\d/.test(unit || '') ? `(${unit})` : unit;
+                  })()}
                 </div>
               </div>
             </div>
@@ -364,7 +367,10 @@ export default function RecipesPage() {
                   className="pr-16"
                 />
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">
-                  {editingIngredient ? stocks.find(s => s.id === editingIngredient.stock_id)?.unit : 'Unit'}
+                  {(() => {
+                    const unit = editingIngredient ? stocks.find(s => s.id === editingIngredient.stock_id)?.unit : 'Unit';
+                    return /^\d/.test(unit || '') ? `(${unit})` : unit;
+                  })()}
                 </div>
               </div>
             </div>
