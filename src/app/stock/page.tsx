@@ -285,9 +285,9 @@ export default function StockPage() {
                         </div>
                         <div className="flex flex-col items-end gap-1">
                           <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${item.quantity === 0 ? 'bg-destructive/10 text-destructive' : isLowStock ? 'bg-amber-500/10 text-amber-600' : 'bg-green-500/10 text-green-600'}`}>
-                            Stok: {item.quantity} <span className="font-normal text-[10px]">(per {item.unit})</span>
+                            Stok: {item.quantity} <span className="font-normal text-[10px]">{item.unit}</span>
                           </span>
-                          <span className="text-[10px] text-muted-foreground font-medium">Batas minimum: {item.min_stock_alert}</span>
+                          <span className="text-[10px] text-muted-foreground font-medium">Batas minimum: {item.min_stock_alert} {item.unit}</span>
                         </div>
                       </div>
 
@@ -353,7 +353,6 @@ export default function StockPage() {
                     <th className="font-medium p-4 text-center">Status Stok</th>
                     <th className="font-medium p-4 text-center">Stok Tersedia</th>
                     <th className="font-medium p-4 text-center hidden lg:table-cell">Batas Minimum</th>
-                    <th className="font-medium p-4 text-center hidden lg:table-cell">Satuan</th>
                     <th className="font-medium p-4 text-right hidden xl:table-cell">Harga Beli/Satuan</th>
                     <th className="font-medium p-4 text-right">Total Nilai Stok</th>
                     <th className="font-medium p-4 text-center">Pembaruan Terakhir</th>
@@ -398,9 +397,12 @@ export default function StockPage() {
                                 <span className="bg-green-500/10 text-green-600 text-xs font-bold px-2 py-1 rounded-md inline-block whitespace-nowrap">Aman</span>
                               )}
                             </td>
-                            <td className="p-4 text-center font-bold">{item.quantity}</td>
-                            <td className="p-4 text-center text-muted-foreground hidden lg:table-cell">{item.min_stock_alert}</td>
-                            <td className="p-4 text-center text-muted-foreground hidden lg:table-cell">{item.unit}</td>
+                            <td className="p-4 text-center font-bold">
+                              {item.quantity} <span className="font-normal text-xs text-muted-foreground">{item.unit}</span>
+                            </td>
+                            <td className="p-4 text-center text-muted-foreground hidden lg:table-cell">
+                              {item.min_stock_alert} {item.unit}
+                            </td>
                             <td className="p-4 text-right hidden xl:table-cell">Rp {item.cost_per_unit.toLocaleString('id-ID')}</td>
                             <td className="p-4 text-right font-bold text-primary">Rp {(item.quantity * item.cost_per_unit).toLocaleString('id-ID')}</td>
                             <td className="p-4 text-center text-xs text-muted-foreground">{formatDate(item.last_updated)}</td>
