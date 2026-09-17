@@ -369,7 +369,7 @@ export default function OrdersPage() {
 
   return (
     <MainLayout title="Order List & Status Pesanan">
-      <div className="p-4 md:p-6 lg:p-8 max-w-[1400px] mx-auto w-full flex flex-col flex-1 min-h-0 space-y-5">
+      <div className="p-4 md:p-6 lg:p-8 max-w-[1400px] mx-auto w-full flex flex-col space-y-5">
         
         {/* Header Bar */}
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shrink-0">
@@ -491,10 +491,10 @@ export default function OrdersPage() {
             <p className="text-sm text-zinc-500 font-medium">Sinkronisasi data pesanan...</p>
           </div>
         ) : activeTab === 'kanban' ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6 flex-1 min-h-0 overflow-y-auto md:overflow-hidden">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6">
             
             {/* Column 1: Sedang Dibuat */}
-            <div className="flex flex-col bg-black/20 rounded-3xl p-4 lg:p-5 border border-white/5 shadow-inner min-h-[400px] md:min-h-0 h-full">
+            <div className="flex flex-col bg-black/20 rounded-3xl p-4 lg:p-5 border border-white/5 shadow-inner min-h-[400px]">
               <div className="flex items-center justify-between px-1 pb-4 mb-4 border-b border-white/10 shrink-0">
                 <div className="flex items-center gap-2.5">
                   <div className="relative flex items-center justify-center w-3 h-3">
@@ -506,7 +506,7 @@ export default function OrdersPage() {
                 <span className="text-xs font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-full">{preparingOrders.length}</span>
               </div>
 
-              <div className="space-y-4 overflow-y-auto flex-1 pr-1 pb-4 scrollbar-hide">
+              <div className="space-y-4 pb-4">
                 {preparingOrders.length === 0 ? (
                   <div className="border border-dashed border-white/10 rounded-2xl p-10 text-center text-zinc-500 text-sm font-medium">
                     Belum ada antrean masuk
@@ -518,7 +518,7 @@ export default function OrdersPage() {
             </div>
 
             {/* Column 2: Siap Disajikan */}
-            <div className="flex flex-col bg-black/20 rounded-3xl p-4 lg:p-5 border border-white/5 shadow-inner min-h-[400px] md:min-h-0 h-full">
+            <div className="flex flex-col bg-black/20 rounded-3xl p-4 lg:p-5 border border-white/5 shadow-inner min-h-[400px]">
               <div className="flex items-center justify-between px-1 pb-4 mb-4 border-b border-white/10 shrink-0">
                 <div className="flex items-center gap-2.5">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
@@ -527,7 +527,7 @@ export default function OrdersPage() {
                 <span className="text-xs font-bold text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full">{readyOrders.length}</span>
               </div>
 
-              <div className="space-y-4 overflow-y-auto flex-1 pr-1 pb-4 scrollbar-hide">
+              <div className="space-y-4 pb-4">
                 {readyOrders.length === 0 ? (
                   <div className="border border-dashed border-white/10 rounded-2xl p-10 text-center text-zinc-500 text-sm font-medium">
                     Belum ada pesanan siap saji
@@ -539,7 +539,7 @@ export default function OrdersPage() {
             </div>
 
             {/* Column 3: Selesai */}
-            <div className="flex flex-col bg-black/20 rounded-3xl p-4 lg:p-5 border border-white/5 shadow-inner min-h-[400px] md:min-h-0 h-full">
+            <div className="flex flex-col bg-black/20 rounded-3xl p-4 lg:p-5 border border-white/5 shadow-inner min-h-[400px]">
               <div className="flex items-center justify-between px-1 pb-4 mb-4 border-b border-white/10 shrink-0">
                 <div className="flex items-center gap-2.5">
                   <span className="w-2.5 h-2.5 rounded-full bg-zinc-600" />
@@ -548,7 +548,7 @@ export default function OrdersPage() {
                 <span className="text-xs font-bold text-zinc-400 bg-zinc-800 border border-zinc-700 px-3 py-1 rounded-full">{completedOrders.length}</span>
               </div>
 
-              <div className="space-y-4 overflow-y-auto flex-1 pr-1 pb-4 scrollbar-hide">
+              <div className="space-y-4 pb-4">
                 {completedOrders.length === 0 ? (
                   <div className="border border-dashed border-white/10 rounded-2xl p-10 text-center text-zinc-500 text-sm font-medium">
                     Belum ada pesanan selesai
@@ -562,7 +562,7 @@ export default function OrdersPage() {
           </div>
         ) : (
           /* List Mode View */
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 flex-1 min-h-0 overflow-y-auto pb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 pb-4">
             {filteredAllOrders.length === 0 ? (
               <div className="col-span-full border border-dashed border-white/10 rounded-2xl p-16 text-center text-zinc-500 text-sm font-medium">
                 Tidak ada pesanan yang sesuai filter
