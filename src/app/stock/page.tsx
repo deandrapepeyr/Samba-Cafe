@@ -285,9 +285,9 @@ export default function StockPage() {
                         </div>
                         <div className="flex flex-col items-end gap-1">
                           <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${item.quantity === 0 ? 'bg-destructive/10 text-destructive' : isLowStock ? 'bg-amber-500/10 text-amber-600' : 'bg-green-500/10 text-green-600'}`}>
-                            Stok: {item.quantity} <span className="font-normal text-[10px]">{item.unit}</span>
+                            Stok: {item.quantity} <span className="font-normal text-[10px] ml-0.5">{/^\d/.test(item.unit) ? `(${item.unit})` : item.unit}</span>
                           </span>
-                          <span className="text-[10px] text-muted-foreground font-medium">Batas minimum: {item.min_stock_alert} {item.unit}</span>
+                          <span className="text-[10px] text-muted-foreground font-medium">Batas minimum: {item.min_stock_alert} {/^\d/.test(item.unit) ? `(${item.unit})` : item.unit}</span>
                         </div>
                       </div>
 
@@ -398,10 +398,10 @@ export default function StockPage() {
                               )}
                             </td>
                             <td className="p-4 text-center font-bold">
-                              {item.quantity} <span className="font-normal text-xs text-muted-foreground">{item.unit}</span>
+                              {item.quantity} <span className="font-normal text-xs text-muted-foreground ml-1">{/^\d/.test(item.unit) ? `(${item.unit})` : item.unit}</span>
                             </td>
                             <td className="p-4 text-center text-muted-foreground hidden lg:table-cell">
-                              {item.min_stock_alert} {item.unit}
+                              {item.min_stock_alert} <span className="text-xs ml-0.5">{/^\d/.test(item.unit) ? `(${item.unit})` : item.unit}</span>
                             </td>
                             <td className="p-4 text-right hidden xl:table-cell">Rp {item.cost_per_unit.toLocaleString('id-ID')}</td>
                             <td className="p-4 text-right font-bold text-primary">Rp {(item.quantity * item.cost_per_unit).toLocaleString('id-ID')}</td>
