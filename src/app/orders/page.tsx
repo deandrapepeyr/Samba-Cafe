@@ -45,6 +45,7 @@ type Order = {
   cashier_name: string;
   customer_name: string | null;
   status: string; // 'preparing' | 'ready' | 'completed' | 'Paid'
+  completedAt?: Date;
   items: OrderItem[];
 };
 
@@ -127,8 +128,16 @@ export default function OrdersPage() {
         const items = itemsData ? itemsData.filter(i => i.transaction_id === tx.id) : [];
         const dateObj = new Date(tx.created_at);
         
-        // Map status: if status is 'Paid', consider it 'preparing' by default
-        let normStatus = (tx.status || 'preparing').toLowerCase();
+        let normStatus = (tx.status || 'preparing');
+        let completedAt = undefined;
+        
+        if (normStatus.startsWith('completed|')) {
+          const parts = normStatus.split('|');
+          normStatus = 'completed';
+          if (parts[1]) completedAt = new Date(parts[1]);
+        }
+        
+        normStatus = normStatus.toLowerCase();
         if (normStatus === 'paid') normStatus = 'preparing';
 
         return {
@@ -141,6 +150,7 @@ export default function OrdersPage() {
           cashier_name: tx.cashier_name,
           customer_name: tx.customer_name,
           status: normStatus,
+          completedAt,
           items: items.map(item => ({
             name: item.product_name,
             price: item.price,
@@ -198,11 +208,20 @@ export default function OrdersPage() {
     setUpdatingId(orderId);
     
     // Optimistic UI update
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+    setOrders(prev => prev.map(o => o.id === orderId ? { 
+      ...o, 
+      status: newStatus,
+      completedAt: newStatus === 'completed' ? new Date() : undefined 
+    } : o));
+
+    let dbStatus = newStatus;
+    if (newStatus === 'completed') {
+      dbStatus = `completed|${new Date().toISOString()}`;
+    }
 
     const { error } = await supabase
       .from('transactions')
-      .update({ status: newStatus })
+      .update({ status: dbStatus })
       .eq('id', orderId);
 
     if (error) {
@@ -216,20 +235,44 @@ export default function OrdersPage() {
     setUpdatingId(null);
   };
 
-  const getElapsedTimeText = (createdAt: Date) => {
-    const diffMs = now.getTime() - createdAt.getTime();
+  const getElapsedTimeText = (order: Order) => {
+    let diffMs;
+    if (order.status === 'completed') {
+      if (order.completedAt) {
+        diffMs = order.completedAt.getTime() - order.createdAt.getTime();
+      } else {
+        return "Selesai"; // For old legacy orders without timestamp
+      }
+    } else {
+      diffMs = now.getTime() - order.createdAt.getTime();
+    }
+
     const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return 'Baru saja';
-    if (diffMins < 60) return `${diffMins} mnt lalu`;
-    const hours = Math.floor(diffMins / 60);
-    return `${hours} jam ${diffMins % 60} mnt lalu`;
+    const diffHours = Math.floor(diffMins / 60);
+
+    if (order.status === 'completed') {
+      if (diffHours > 0) {
+        return `${diffHours}j ${diffMins % 60}m`;
+      }
+      return `${diffMins} mnt`;
+    }
+
+    if (diffHours > 0) {
+      return `${diffHours}j ${diffMins % 60}m lalu`;
+    }
+    return `${diffMins} mnt lalu`;
   };
 
-  const getTimerBadgeStyle = (createdAt: Date) => {
-    const diffMins = Math.floor((now.getTime() - createdAt.getTime()) / 60000);
-    if (diffMins < 5) return 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
-    if (diffMins < 12) return 'bg-amber-500/10 text-amber-500 border-amber-500/20';
-    return 'bg-rose-500/10 text-rose-500 border-rose-500/20 animate-pulse';
+  const getTimerBadgeStyle = (order: Order) => {
+    if (order.status === 'completed') {
+      return 'bg-zinc-800 text-zinc-400 border-zinc-700';
+    }
+    
+    const diffMins = Math.floor((now.getTime() - order.createdAt.getTime()) / 60000);
+    
+    if (diffMins > 30) return 'bg-red-500/10 text-red-500 border-red-500/20';
+    if (diffMins > 15) return 'bg-amber-500/10 text-amber-500 border-amber-500/20';
+    return 'bg-zinc-800 text-zinc-400 border-zinc-700';
   };
 
   if (!role) return null;
@@ -282,9 +325,9 @@ export default function OrdersPage() {
                 </p>
               )}
             </div>
-            <span className={`shrink-0 whitespace-nowrap inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold rounded-md border ${getTimerBadgeStyle(order.createdAt)}`}>
+            <span className={`shrink-0 whitespace-nowrap inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold rounded-md border ${getTimerBadgeStyle(order)}`}>
               <Clock size={10} className="shrink-0" />
-              {getElapsedTimeText(order.createdAt)}
+              {getElapsedTimeText(order)}
             </span>
           </div>
 
