@@ -35,14 +35,7 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
     window.print();
   };
 
-  const getProductsByCatName = (names: string[]) => {
-    const matchedCategories = categories.filter(c => names.some(n => c.name.toLowerCase().includes(n.toLowerCase())));
-    const catIds = matchedCategories.map(c => c.id);
-    return products.filter(p => catIds.includes(p.category_id));
-  };
-
-  const foodAndSnacks = getProductsByCatName(['food', 'snack']);
-  const drinksAndDesserts = getProductsByCatName(['minuman', 'drink', 'dessert']);
+  const displayCategories = categories.filter(c => c.id !== '1' && products.some(p => p.category_id === c.id));
 
   const heroProduct = products.find(p => p.name.toLowerCase().includes('katsu') && p.image_url) || products.find(p => p.image_url);
 
@@ -115,11 +108,10 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
           
           <style dangerouslySetInnerHTML={{__html: `
             @media print {
-              body { background: none !important; background-color: transparent !important; }
-              body > * { display: none !important; }
-              body > [data-radix-portal] { display: block !important; }
-              .print-wrapper { position: absolute; left: 0; top: 0; transform: none !important; width: 100%; height: 100%; }
-              @page { size: A5 landscape; margin: 0mm; }
+              body * { visibility: hidden; }
+              .print-wrapper, .print-wrapper * { visibility: visible; }
+              .print-wrapper { position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; transform: none !important; }
+              @page { size: A5 landscape; margin: 0; }
               * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             }
             .menu-leader {
@@ -151,6 +143,7 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
               style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(3, 1fr)',
+                gridTemplateRows: '100%',
                 fontFamily: "'Inter', sans-serif"
               }}
             >
@@ -190,85 +183,86 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
                 </div>
               </div>
 
-              {/* === COLUMN 2: FOOD & SNACKS === */}
-              <div className={`p-6 border-r ${theme === 'dark' ? 'border-[#ffb300]/20' : 'border-[#4e342e]/10'} relative flex flex-col`}>
+              {/* === COLUMN 2 & 3: DYNAMIC MENU ITEMS === */}
+              <div 
+                className="p-4 sm:p-6 relative flex flex-col overflow-hidden"
+                style={{ gridColumn: 'span 2 / span 2' }}
+              >
                 <div className={`absolute top-0 left-0 w-full h-2 ${theme === 'dark' ? 'bg-[#222]' : 'bg-[#d7ccc8]'}`}></div>
                 <div className={`absolute bottom-0 left-0 w-full h-2 ${theme === 'dark' ? 'bg-[#222]' : 'bg-[#d7ccc8]'}`}></div>
 
-                <div className={`inline-block py-1.5 px-4 rounded-full mb-5 self-start border ${theme === 'dark' ? 'border-[#ffb300] text-[#ffb300]' : 'border-[#e65100] text-[#e65100] bg-white'}`}>
-                  <h2 className="text-[13px] font-black uppercase tracking-widest">
-                    Makanan & Snack
-                  </h2>
-                </div>
-                
-                <div className="space-y-3 flex-1 text-[11px]">
-                  {foodAndSnacks.map((product, idx) => (
-                    // Hide products beyond a certain limit to prevent overflow
-                    idx < 9 && (
-                      <div key={product.id} className="flex flex-col">
-                        <div className="flex items-end justify-between font-bold">
-                          <span className={`whitespace-nowrap max-w-[130px] overflow-hidden text-ellipsis ${theme === 'dark' ? 'text-zinc-100' : 'text-[#3e2723]'}`}>{product.name}</span>
-                          <div className="menu-leader"></div>
-                          <span className={`${theme === 'dark' ? 'text-[#ffb300]' : 'text-[#e65100]'}`}>
-                            {product.price / 1000}K
-                          </span>
+                <div 
+                  className="flex-1 w-full" 
+                  style={{ 
+                    columnCount: 2, 
+                    columnGap: '3rem',
+                    columnRule: `1px solid ${theme === 'dark' ? 'rgba(255, 179, 0, 0.2)' : 'rgba(78, 52, 46, 0.1)'}`
+                  }}
+                >
+                  {displayCategories.map(cat => {
+                    const catProducts = products.filter(p => p.category_id === cat.id).slice(0, 15);
+                    return (
+                      <div key={cat.id} className="flex flex-col mb-4" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
+                        <div className={`inline-block py-1.5 px-3 rounded-full mb-2 self-start border ${theme === 'dark' ? 'border-[#ffb300] text-[#ffb300]' : 'border-[#e65100] text-[#e65100] bg-white'}`}>
+                          <h2 className="text-[11px] font-black uppercase tracking-widest">
+                            {cat.name}
+                          </h2>
+                        </div>
+                        <div className="space-y-1.5 text-[11px]">
+                          {catProducts.map((product) => (
+                            <div key={product.id} className="flex flex-col">
+                              <div className="flex items-end justify-between font-bold">
+                                <span className={`whitespace-nowrap max-w-[130px] overflow-hidden text-ellipsis ${theme === 'dark' ? 'text-zinc-100' : 'text-[#3e2723]'}`}>{product.name}</span>
+                                <div className="menu-leader"></div>
+                                <span className={`${theme === 'dark' ? 'text-[#ffb300]' : 'text-[#e65100]'}`}>
+                                  {product.price / 1000}K
+                                </span>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
-                    )
-                  ))}
-                  {foodAndSnacks.length > 9 && (
-                    <div className="text-[10px] text-center italic text-zinc-500 pt-1">...and more in store!</div>
-                  )}
+                    );
+                  })}
                 </div>
 
-                <div className="mt-4 flex gap-4 justify-center">
-                  {foodAndSnacks.filter(p => p.image_url).slice(0, 2).map((p, i) => (
-                    <div key={p.id} className={`w-16 h-16 rounded-full overflow-hidden shadow-2xl border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-white'}`}>
-                      <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
-                    </div>
-                  ))}
-                </div>
-              </div>
+                {(() => {
+                  const galleryItems = products.filter(p => displayCategories.some(c => c.id === p.category_id) && p.image_url).slice(0, 6);
+                  if (galleryItems.length === 0) return null;
+                  
+                  const half = Math.ceil(galleryItems.length / 2);
+                  const leftItems = galleryItems.slice(0, half);
+                  const rightItems = galleryItems.slice(half);
 
-              {/* === COLUMN 3: DRINKS & DESSERT === */}
-              <div className="p-6 relative flex flex-col">
-                <div className={`absolute top-0 left-0 w-full h-2 ${theme === 'dark' ? 'bg-[#222]' : 'bg-[#d7ccc8]'}`}></div>
-                <div className={`absolute bottom-0 left-0 w-full h-2 ${theme === 'dark' ? 'bg-[#222]' : 'bg-[#d7ccc8]'}`}></div>
+                  return (
+                    <div className="mt-4 pt-3 relative" style={{ breakInside: 'avoid', borderTop: `1px dashed ${theme === 'dark' ? 'rgba(255, 179, 0, 0.2)' : 'rgba(78, 52, 46, 0.2)'}` }}>
+                      <div className="grid grid-cols-2 gap-[3rem] relative">
+                        <div 
+                          className="absolute top-0 bottom-0 left-1/2 w-[1px] -translate-x-1/2" 
+                          style={{ backgroundColor: theme === 'dark' ? 'rgba(255, 179, 0, 0.2)' : 'rgba(78, 52, 46, 0.1)' }}
+                        />
+                        
+                        <div className="flex flex-nowrap gap-2 justify-center items-center px-1">
+                          {leftItems.map(p => (
+                            <div key={p.id} className={`shrink-0 w-[55px] h-[55px] rounded-full overflow-hidden shadow-lg border-2 ${theme === 'dark' ? 'border-[#2a2a2a] shadow-black/50' : 'border-white shadow-[#4e342e]/10'}`}>
+                              <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
+                            </div>
+                          ))}
+                        </div>
 
-                <div className={`inline-block py-1.5 px-4 rounded-full mb-5 self-start border ${theme === 'dark' ? 'border-[#ffb300] text-[#ffb300]' : 'border-[#e65100] text-[#e65100] bg-white'}`}>
-                  <h2 className="text-[13px] font-black uppercase tracking-widest">
-                    Minuman & Dessert
-                  </h2>
-                </div>
-                
-                <div className="space-y-3 flex-1 text-[11px]">
-                  {drinksAndDesserts.map((product, idx) => (
-                    idx < 9 && (
-                      <div key={product.id} className="flex flex-col">
-                        <div className="flex items-end justify-between font-bold">
-                          <span className={`whitespace-nowrap max-w-[130px] overflow-hidden text-ellipsis ${theme === 'dark' ? 'text-zinc-100' : 'text-[#3e2723]'}`}>{product.name}</span>
-                          <div className="menu-leader"></div>
-                          <span className={`${theme === 'dark' ? 'text-[#ffb300]' : 'text-[#e65100]'}`}>
-                            {product.price / 1000}K
-                          </span>
+                        <div className="flex flex-nowrap gap-2 justify-center items-center px-1">
+                          {rightItems.map(p => (
+                            <div key={p.id} className={`shrink-0 w-[55px] h-[55px] rounded-full overflow-hidden shadow-lg border-2 ${theme === 'dark' ? 'border-[#2a2a2a] shadow-black/50' : 'border-white shadow-[#4e342e]/10'}`}>
+                              <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
+                            </div>
+                          ))}
                         </div>
                       </div>
-                    )
-                  ))}
-                  {drinksAndDesserts.length > 9 && (
-                    <div className="text-[10px] text-center italic text-zinc-500 pt-1">...and more in store!</div>
-                  )}
-                </div>
-
-                <div className="mt-4 flex gap-4 justify-center">
-                  {drinksAndDesserts.filter(p => p.image_url).slice(0, 2).map((p, i) => (
-                    <div key={p.id} className={`w-16 h-16 rounded-full overflow-hidden shadow-2xl border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-white'}`}>
-                      <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
                     </div>
-                  ))}
-                </div>
+                  );
+                })()}
 
-                <div className={`mt-auto pt-6 text-center text-[9px] font-bold tracking-widest uppercase ${theme === 'dark' ? 'text-zinc-600' : 'text-[#8d6e63]'}`}>
+                <div className={`mt-3 mb-1 text-center text-[9px] font-bold tracking-widest uppercase ${theme === 'dark' ? 'text-zinc-600' : 'text-[#8d6e63]'}`}>
                   Terima Kasih Atas Kunjungan Anda!
                 </div>
               </div>

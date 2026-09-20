@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, LayoutDashboard, Settings, UserCircle, LogOut, LogIn, Coffee, Package, FileText, ChevronLeft, ChevronRight, Loader2, ChefHat, BookOpen } from 'lucide-react';
+import { Home, LayoutDashboard, Settings, UserCircle, LogOut, LogIn, Coffee, Package, FileText, ChevronLeft, ChevronRight, Loader2, ChefHat, BookOpen, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';

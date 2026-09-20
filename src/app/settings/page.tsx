@@ -7,12 +7,63 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/lib/supabase';
-import { Search, Plus, Trash2, Edit2, Check, X, Tag, DollarSign, Image as ImageIcon, Box, Utensils, Loader2, Layers, ChevronLeft, ChevronUp, ChevronDown, Menu, Printer } from 'lucide-react';
+import { Search, Plus, Trash2, Edit2, Check, X, Tag, DollarSign, Image as ImageIcon, Box, Utensils, Loader2, Layers, ChevronLeft, ChevronUp, ChevronDown, Menu, Printer, Settings } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { BrochureModal } from '@/components/BrochureModal';
+
+function TitipanAutocomplete({ id, value, onChange, options, placeholder }: { id: string, value: string, onChange: (val: string) => void, options: string[], placeholder?: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+  
+  const filtered = options.filter(o => o.toLowerCase().includes(value?.toLowerCase() || '') && o !== value);
+
+  return (
+    <div className="relative">
+      <Input 
+        id={id}
+        className="bg-zinc-900/80 border-white/10 text-zinc-100 focus-visible:ring-primary h-11 rounded-xl w-full" 
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setIsOpen(true);
+        }}
+        onFocus={() => {
+          setIsFocused(true);
+          setIsOpen(true);
+        }}
+        onBlur={() => {
+          setIsFocused(false);
+          setTimeout(() => setIsOpen(false), 200);
+        }}
+      />
+      {isOpen && isFocused && filtered.length > 0 && (
+        <div className="absolute z-50 w-full mt-1.5 bg-zinc-800 border border-white/10 rounded-xl shadow-2xl overflow-hidden py-1 animate-in fade-in slide-in-from-top-2">
+          <div className="px-4 py-2 text-[10px] font-bold text-zinc-400 uppercase tracking-widest border-b border-white/5 mb-1 bg-zinc-900/50">
+            Daftar Penitip
+          </div>
+          {filtered.map(opt => (
+            <div 
+              key={opt}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                onChange(opt);
+                setIsOpen(false);
+              }} 
+              className="px-4 py-2 hover:bg-zinc-700/50 cursor-pointer text-sm text-zinc-100 transition-colors"
+            >
+              {opt}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function SettingsPage() {
   const [isBrochureOpen, setIsBrochureOpen] = useState(false);
@@ -76,7 +127,9 @@ export default function SettingsPage() {
     image_url: 'https://images.unsplash.com/photo-1510591509098-f4fdc6d0ff04?auto=format&fit=crop&q=80&w=400&h=300',
     is_titipan: false,
     titipan_name: '',
-    supplier_price: ''
+    supplier_price: '',
+    is_quick: false,
+    variants: [] as any[]
   });
   const [newIngredients, setNewIngredients] = useState<{stock_id: string, quantity_required: string}[]>([]);
 
@@ -89,6 +142,11 @@ export default function SettingsPage() {
   const [editingItem, setEditingItem] = useState<any | null>(null);
   const [editIngredients, setEditIngredients] = useState<{stock_id: string, quantity_required: string}[]>([]);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [isEditCategoryDialogOpen, setIsEditCategoryDialogOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<{id: string, name: string} | null>(null);
+  
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [productToDelete, setProductToDelete] = useState<any | null>(null);
   
   const [newUser, setNewUser] = useState({
     name: '',
@@ -172,7 +230,9 @@ export default function SettingsPage() {
         is_available: true,
         is_titipan: newItem.is_titipan,
         titipan_name: newItem.is_titipan ? newItem.titipan_name : null,
-        supplier_price: newItem.is_titipan ? parseInt(newItem.supplier_price.toString()) || 0 : 0
+        supplier_price: newItem.is_titipan ? parseInt(newItem.supplier_price.toString()) || 0 : 0,
+        is_quick: newItem.is_quick,
+        variants: newItem.variants || []
       };
       
       const { error } = await supabase.from('products').insert([product]);
@@ -200,7 +260,9 @@ export default function SettingsPage() {
           image_url: 'https://images.unsplash.com/photo-1510591509098-f4fdc6d0ff04?auto=format&fit=crop&q=80&w=400&h=300',
           is_titipan: false,
           titipan_name: '',
-          supplier_price: ''
+          supplier_price: '',
+          is_quick: false,
+          variants: [] as any[]
         });
         setNewIngredients([]);
         setNewImageFile(null);
@@ -258,6 +320,23 @@ export default function SettingsPage() {
       }
     } catch (error: any) {
       alert("Failed to upload image: " + error.message);
+      console.error(error);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleDeleteProduct = async () => {
+    if (!productToDelete) return;
+    setIsUploading(true);
+    try {
+      const { error } = await supabase.from('products').delete().eq('id', productToDelete.id);
+      if (error) throw error;
+      setProducts(products.filter(p => p.id !== productToDelete.id));
+      setIsDeleteDialogOpen(false);
+      setProductToDelete(null);
+    } catch (error: any) {
+      alert("Failed to delete product: " + error.message);
       console.error(error);
     } finally {
       setIsUploading(false);
@@ -360,17 +439,29 @@ export default function SettingsPage() {
               
               <Card className="bg-zinc-950/50 border-white/10 backdrop-blur-xl shadow-2xl rounded-2xl overflow-hidden">
                 <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-white/5">
-                  <div>
-                    <CardTitle className="text-xl">
-                      {viewMode === 'categories' ? 'Menu Categories' : viewMode === 'list' ? 'Daftar Menu' : selectedCategoryName}
-                    </CardTitle>
-                    <CardDescription>
-                      {viewMode === 'categories' 
-                        ? 'Select a category to view or manage its items.'
-                        : viewMode === 'list'
-                        ? 'Arrange the global order of all menu items.'
-                        : 'Add, edit, or remove food and drinks from this category.'}
-                    </CardDescription>
+                  <div className="flex items-start sm:items-center gap-3">
+                    {viewMode !== 'categories' && (
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => { setViewMode('categories'); setSelectedCategoryId(null); }}
+                        className="rounded-full hover:bg-white/10 shrink-0 text-zinc-400 hover:text-white h-8 w-8 mt-1 sm:mt-0"
+                      >
+                        <ChevronLeft size={20} />
+                      </Button>
+                    )}
+                    <div>
+                      <CardTitle className="text-xl">
+                        {viewMode === 'categories' ? 'Menu Categories' : viewMode === 'list' ? 'Daftar Menu' : selectedCategoryName}
+                      </CardTitle>
+                      <CardDescription>
+                        {viewMode === 'categories' 
+                          ? 'Select a category to view or manage its items.'
+                          : viewMode === 'list'
+                          ? 'Arrange the global order of all menu items.'
+                          : 'Add, edit, or remove food and drinks from this category.'}
+                      </CardDescription>
+                    </div>
                   </div>
                   <div className="flex gap-2 w-full sm:w-auto">
                     {viewMode === 'categories' ? (
@@ -409,25 +500,9 @@ export default function SettingsPage() {
                           <Printer size={16} className="mr-2 text-primary" />
                           Cetak Brosur A4
                         </Button>
-                        <Button 
-                          variant="outline"
-                          className="flex-1 sm:flex-none border-white/10 hover:bg-white/5 transition-all duration-300 rounded-xl"
-                          onClick={() => setViewMode('categories')}
-                        >
-                          <ChevronLeft size={16} className="mr-2" />
-                          Back
-                        </Button>
                       </>
                     ) : (
                       <>
-                        <Button 
-                          variant="outline"
-                          className="flex-1 sm:flex-none border-white/10 hover:bg-white/5 transition-all duration-300 rounded-xl"
-                          onClick={() => { setViewMode('categories'); setSelectedCategoryId(null); }}
-                        >
-                          <ChevronLeft size={16} className="mr-2" />
-                          Back
-                        </Button>
                         <Button 
                           className="bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-white/10 hover:border-primary/50 transition-all duration-300 rounded-xl shadow-sm hover:shadow-primary/10 hover:-translate-y-0.5"
                           onClick={() => {
@@ -522,7 +597,7 @@ export default function SettingsPage() {
                           ))}
                         </div>
                       ) : viewMode === 'categories' ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5 p-2">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 p-2">
                           {categories.map(cat => {
                             const itemCount = cat.id === '1' 
                               ? products.length 
@@ -530,42 +605,50 @@ export default function SettingsPage() {
                             return (
                               <div 
                                 key={cat.id} 
-                                className="cursor-pointer group relative overflow-hidden p-6 rounded-2xl bg-zinc-900/40 border border-white/5 hover:border-primary/50 hover:bg-zinc-900/80 transition-all duration-300 flex flex-col items-start gap-4 hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/5"
+                                className="cursor-pointer group relative overflow-hidden px-5 py-4 rounded-xl bg-zinc-900/40 border border-white/5 hover:border-primary/50 hover:bg-zinc-900/80 transition-all duration-300 flex items-center justify-between hover:-translate-y-0.5 hover:shadow-md hover:shadow-primary/5"
                                 onClick={() => { 
                                   setSelectedCategoryId(cat.id); 
                                   setViewMode('items'); 
                                 }}
                               >
-                                <div className="flex justify-between items-start w-full">
-                                  <div className="w-12 h-12 rounded-xl bg-white/5 text-zinc-400 flex items-center justify-center group-hover:bg-primary/10 group-hover:text-primary transition-colors duration-300">
-                                    {cat.id === '1' ? <Layers size={22} strokeWidth={1.5} /> : <Utensils size={22} strokeWidth={1.5} />}
-                                  </div>
-                                  {cat.id !== '1' && (
-                                    <div 
-                                      className="w-8 h-8 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center opacity-100 hover:bg-red-500 hover:text-white transition-all duration-300"
-                                      onClick={async (e) => {
-                                        e.stopPropagation();
-                                        if (confirm(`Yakin ingin menghapus kategori ${cat.name}?`)) {
-                                          const { error } = await supabase.from('categories').delete().eq('id', cat.id);
-                                          if (error) {
-                                            alert("Failed to delete category: " + error.message);
-                                          } else {
-                                            setCategories(categories.filter(c => c.id !== cat.id));
-                                          }
-                                        }
-                                      }}
-                                    >
-                                      <Trash2 size={14} />
-                                    </div>
-                                  )}
-                                </div>
                                 <div>
-                                  <h3 className="text-lg font-medium text-zinc-100 group-hover:text-primary transition-colors">{cat.name}</h3>
-                                  <p className="text-sm text-zinc-500 mt-0.5">{itemCount} Menu Items</p>
+                                  <h3 className="font-bold text-zinc-100 group-hover:text-primary transition-colors text-sm">{cat.name}</h3>
+                                  <p className="text-xs text-zinc-500 mt-1">{itemCount} items</p>
                                 </div>
-                                <div className="absolute right-5 bottom-5 opacity-100 transition-all duration-300 translate-x-0">
-                                  <ChevronLeft className="w-5 h-5 text-primary rotate-180" />
-                                </div>
+                                {cat.id !== '1' && (
+                                  <div onClick={e => e.stopPropagation()}>
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger 
+                                        className="w-8 h-8 rounded-lg text-zinc-400 flex items-center justify-center hover:bg-white/10 hover:text-white transition-all duration-300"
+                                      >
+                                        <Settings size={16} />
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end" className="w-40 border-white/10 bg-zinc-900 rounded-xl">
+                                        <DropdownMenuItem 
+                                          className="cursor-pointer hover:bg-white/5 focus:bg-white/5 text-zinc-200 py-2.5 rounded-lg"
+                                          onClick={() => { setEditingCategory({ id: cat.id, name: cat.name }); setIsEditCategoryDialogOpen(true); }}
+                                        >
+                                          <Edit2 size={14} className="mr-2" /> Edit Kategori
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem 
+                                          className="cursor-pointer text-red-500 hover:bg-red-500/10 focus:bg-red-500/10 focus:text-red-500 py-2.5 rounded-lg mt-1"
+                                          onClick={async () => {
+                                            if (confirm(`Yakin ingin menghapus kategori ${cat.name}?`)) {
+                                              const { error } = await supabase.from('categories').delete().eq('id', cat.id);
+                                              if (error) {
+                                                alert("Failed to delete category");
+                                              } else {
+                                                setCategories(categories.filter(c => c.id !== cat.id));
+                                              }
+                                            }
+                                          }}
+                                        >
+                                          <Trash2 size={14} className="mr-2" /> Hapus Kategori
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
@@ -573,13 +656,13 @@ export default function SettingsPage() {
                       ) : (
                         <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-500 p-2">
                           {(() => {
-                            const titipanNames = Array.from(new Set(filteredProducts.filter(p => p.is_titipan && p.titipan_name).map(p => p.titipan_name as string)));
+                            const titipanNames = Array.from(new Set(filteredProducts.filter(p => p.is_titipan).map(p => (p.titipan_name as string) || 'Lainnya')));
                             
                             const finalProducts = filteredProducts.filter(p => {
                               if (activeItemTab === 'my-item' || !titipanNames.includes(activeItemTab)) {
                                 return !p.is_titipan;
                               }
-                              return p.is_titipan && p.titipan_name === activeItemTab;
+                              return p.is_titipan && (p.titipan_name || 'Lainnya') === activeItemTab;
                             });
 
                             return (
@@ -678,7 +761,7 @@ export default function SettingsPage() {
                                             } else {
                                               setEditIngredients([]);
                                             }
-                                            setEditingItem(product);
+                                            setEditingItem({ ...product, variants: product.variants || [] });
                                             setIsEditItemDialogOpen(true);
                                           }}
                                         >
@@ -688,14 +771,8 @@ export default function SettingsPage() {
                                           variant="destructive" 
                                           className="flex-1 sm:flex-none rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20 transition-all duration-300"
                                           onClick={async () => {
-                                            if (window.confirm(`Yakin ingin menghapus menu ${product.name}?`)) {
-                                              const { error } = await supabase.from('products').delete().eq('id', product.id);
-                                              if (error) {
-                                                alert("Failed to delete product: " + error.message);
-                                              } else {
-                                                setProducts(products.filter(p => p.id !== product.id));
-                                              }
-                                            }
+                                            setProductToDelete(product);
+                                            setIsDeleteDialogOpen(true);
                                           }}
                                         >
                                           Delete
@@ -823,7 +900,7 @@ export default function SettingsPage() {
           <DialogHeader>
             <DialogTitle className="text-xl text-zinc-100">Add New Menu Item</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-5 py-4 max-h-[70vh] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/10">
+          <div className="flex flex-col gap-5 py-4 px-4 max-h-[70vh] overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-white/10 w-full">
             <div className="grid gap-2">
               <label htmlFor="name" className="text-sm font-medium text-zinc-400">Name</label>
               <Input 
@@ -892,12 +969,12 @@ export default function SettingsPage() {
               <div className="grid gap-4 animate-in fade-in slide-in-from-top-2 p-4 bg-primary/5 border border-primary/10 rounded-xl">
                 <div className="grid gap-2">
                   <label htmlFor="titipan_name" className="text-sm font-bold text-primary">Nama Penitip</label>
-                  <Input 
+                  <TitipanAutocomplete
                     id="titipan_name" 
-                    className="bg-zinc-900/80 border-white/10 text-zinc-100 focus-visible:ring-primary h-11 rounded-xl" 
                     placeholder="Contoh: Ibu Sari"
+                    options={Array.from(new Set(products.filter(p => p.is_titipan && p.titipan_name).map(p => p.titipan_name as string)))}
                     value={newItem.titipan_name}
-                    onChange={(e) => setNewItem({...newItem, titipan_name: e.target.value})}
+                    onChange={(val) => setNewItem({...newItem, titipan_name: val})}
                   />
                 </div>
                 <div className="grid gap-2">
@@ -920,6 +997,21 @@ export default function SettingsPage() {
               </div>
             )}
             
+            {/* Quick Food Section */}
+            <div className="flex items-center space-x-3 p-4 rounded-xl bg-white/[0.02] border border-white/5 mt-2">
+              <input 
+                type="checkbox"
+                id="is_quick"
+                checked={newItem.is_quick}
+                onChange={(e) => setNewItem({...newItem, is_quick: e.target.checked})}
+                className="w-5 h-5 text-primary bg-zinc-900 border-white/10 rounded focus:ring-primary focus:ring-2 accent-primary cursor-pointer"
+              />
+              <div>
+                <label htmlFor="is_quick" className="text-sm font-medium text-zinc-300 cursor-pointer select-none block">Cepat Saji (Tanpa Masak)</label>
+                <p className="text-[10px] text-zinc-500 font-medium mt-0.5">Jika dicentang, menu ini tidak masuk Antrian Dapur saat Lunas.</p>
+              </div>
+            </div>
+            
             {/* Ingredients Section */}
             <div className="mt-4 pt-4 border-t border-white/10">
               <h4 className="text-sm font-medium mb-3 text-zinc-300 flex items-center gap-2">
@@ -930,7 +1022,7 @@ export default function SettingsPage() {
                 {newIngredients.map((ing, idx) => (
                   <div key={idx} className="flex gap-2 items-center animate-in fade-in">
                     <select 
-                      className="flex-1 h-10 rounded-xl border border-white/10 bg-zinc-900/50 px-2 py-1 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-primary"
+                      className="flex-1 min-w-0 h-10 rounded-xl border border-white/10 bg-zinc-900/50 px-2 py-1 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-primary"
                       value={ing.stock_id}
                       onChange={(e) => {
                         const newIngs = [...newIngredients];
@@ -942,7 +1034,7 @@ export default function SettingsPage() {
                       {stocks.map(s => <option key={s.id} value={s.id} className="bg-zinc-900">{s.name} ({s.unit})</option>)}
                     </select>
                     <Input 
-                      className="w-24 h-10 bg-zinc-900/50 border-white/10 text-zinc-100 rounded-xl text-center" 
+                      className="w-24 shrink-0 h-10 bg-zinc-900/50 border-white/10 text-zinc-100 rounded-xl text-center" 
                       placeholder="Takaran" 
                       type="number" step="any"
                       value={ing.quantity_required}
@@ -952,7 +1044,7 @@ export default function SettingsPage() {
                         setNewIngredients(newIngs);
                       }}
                     />
-                    <Button variant="ghost" size="icon" className="h-10 w-10 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-xl" onClick={() => setNewIngredients(newIngredients.filter((_, i) => i !== idx))}>
+                    <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-xl" onClick={() => setNewIngredients(newIngredients.filter((_, i) => i !== idx))}>
                       <Trash2 size={16} />
                     </Button>
                   </div>
@@ -979,7 +1071,7 @@ export default function SettingsPage() {
             <DialogTitle className="text-xl text-zinc-100">Edit Menu Item</DialogTitle>
           </DialogHeader>
           {editingItem && (
-            <div className="grid gap-5 py-4 max-h-[70vh] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/10">
+            <div className="flex flex-col gap-5 py-4 px-4 max-h-[70vh] overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-white/10 w-full">
               <div className="grid gap-2">
                 <label htmlFor="editName" className="text-sm font-medium text-zinc-400">Name</label>
                 <Input 
@@ -1047,12 +1139,12 @@ export default function SettingsPage() {
                 <div className="grid gap-4 animate-in fade-in slide-in-from-top-2 p-4 bg-primary/5 border border-primary/10 rounded-xl">
                   <div className="grid gap-2">
                     <label htmlFor="edit_titipan_name" className="text-sm font-bold text-primary">Nama Penitip</label>
-                    <Input 
+                    <TitipanAutocomplete
                       id="edit_titipan_name" 
-                      className="bg-zinc-900/80 border-white/10 text-zinc-100 focus-visible:ring-primary h-11 rounded-xl" 
                       placeholder="Contoh: Ibu Sari"
+                      options={Array.from(new Set(products.filter(p => p.is_titipan && p.titipan_name).map(p => p.titipan_name as string)))}
                       value={editingItem.titipan_name || ''}
-                      onChange={(e) => setEditingItem({...editingItem, titipan_name: e.target.value})}
+                      onChange={(val) => setEditingItem({...editingItem, titipan_name: val})}
                     />
                   </div>
                   <div className="grid gap-2">
@@ -1075,6 +1167,21 @@ export default function SettingsPage() {
                 </div>
               )}
               
+              {/* Quick Food Section */}
+              <div className="flex items-center space-x-3 p-4 rounded-xl bg-white/[0.02] border border-white/5 mt-2">
+                <input 
+                  type="checkbox"
+                  id="edit_is_quick"
+                  checked={editingItem.is_quick || false}
+                  onChange={(e) => setEditingItem({...editingItem, is_quick: e.target.checked})}
+                  className="w-5 h-5 text-primary bg-zinc-900 border-white/10 rounded focus:ring-primary focus:ring-2 accent-primary cursor-pointer"
+                />
+                <div>
+                  <label htmlFor="edit_is_quick" className="text-sm font-medium text-zinc-300 cursor-pointer select-none block">Cepat Saji (Tanpa Masak)</label>
+                  <p className="text-[10px] text-zinc-500 font-medium mt-0.5">Jika dicentang, menu ini tidak masuk Antrian Dapur saat Lunas.</p>
+                </div>
+              </div>
+              
               {/* Ingredients Section */}
               <div className="mt-4 pt-4 border-t border-white/10">
                 <h4 className="text-sm font-medium mb-3 text-zinc-300 flex items-center gap-2">
@@ -1085,7 +1192,7 @@ export default function SettingsPage() {
                   {editIngredients.map((ing, idx) => (
                     <div key={idx} className="flex gap-2 items-center animate-in fade-in">
                       <select 
-                        className="flex-1 h-10 rounded-xl border border-white/10 bg-zinc-900/50 px-2 py-1 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-primary"
+                        className="flex-1 min-w-0 h-10 rounded-xl border border-white/10 bg-zinc-900/50 px-2 py-1 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-primary"
                         value={ing.stock_id}
                         onChange={(e) => {
                           const newIngs = [...editIngredients];
@@ -1097,7 +1204,7 @@ export default function SettingsPage() {
                         {stocks.map(s => <option key={s.id} value={s.id} className="bg-zinc-900">{s.name} ({s.unit})</option>)}
                       </select>
                       <Input 
-                        className="w-24 h-10 bg-zinc-900/50 border-white/10 text-zinc-100 rounded-xl text-center" 
+                        className="w-24 shrink-0 h-10 bg-zinc-900/50 border-white/10 text-zinc-100 rounded-xl text-center" 
                         placeholder="Takaran" 
                         type="number" step="any"
                         value={ing.quantity_required}
@@ -1107,7 +1214,7 @@ export default function SettingsPage() {
                           setEditIngredients(newIngs);
                         }}
                       />
-                      <Button variant="ghost" size="icon" className="h-10 w-10 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-xl" onClick={() => setEditIngredients(editIngredients.filter((_, i) => i !== idx))}>
+                      <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-xl" onClick={() => setEditIngredients(editIngredients.filter((_, i) => i !== idx))}>
                         <Trash2 size={16} />
                       </Button>
                     </div>
@@ -1117,6 +1224,247 @@ export default function SettingsPage() {
                   </Button>
                 </div>
               </div>
+
+              {/* Separated Variants & Toppings Section */}
+              <div className="mt-6 border-t border-white/5 pt-6 pb-2">
+                
+                {/* Varian Utama */}
+                <div className="mb-8">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-1.5 h-4 bg-primary rounded-full"></div>
+                    <h4 className="text-sm font-bold text-zinc-100 uppercase tracking-wider">Varian Utama (Wajib Pilih)</h4>
+                  </div>
+                  <p className="text-xs text-zinc-500 mb-4 pl-3.5">Customer wajib memilih 1 dari grup ini. Contoh: Pilihan Rasa, Level Pedas.</p>
+                  
+                  <div className="space-y-4">
+                    {(editingItem.variants || []).map((variant: any, vIdx: number) => {
+                      if (!variant.is_required) return null;
+                      return (
+                        <div key={vIdx} className="bg-zinc-900/30 border border-white/5 rounded-2xl p-4 md:p-5 relative group hover:border-white/10 transition-colors">
+                          <button 
+                            onClick={() => {
+                              const newV = [...editingItem.variants];
+                              newV.splice(vIdx, 1);
+                              setEditingItem({...editingItem, variants: newV});
+                            }}
+                            className="absolute right-3 top-3 p-1.5 text-zinc-600 hover:bg-red-500/10 hover:text-red-500 rounded-lg transition-colors"
+                            title="Hapus Varian"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                          
+                          <div className="pr-10 mb-5">
+                            <label className="text-xs font-semibold text-zinc-400 mb-1.5 block">Nama Grup Varian</label>
+                            <Input 
+                              placeholder="Ketik nama varian..." 
+                              className="h-10 bg-zinc-900/80 border-white/10 text-sm font-medium rounded-xl focus-visible:ring-primary/50 text-zinc-100 placeholder:text-zinc-600"
+                              value={variant.name}
+                              onChange={(e) => {
+                                const newV = [...editingItem.variants];
+                                newV[vIdx].name = e.target.value;
+                                setEditingItem({...editingItem, variants: newV});
+                              }}
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-xs font-semibold text-zinc-400 block mb-2">Pilihan & Harga</label>
+                            {variant.choices.map((choice: any, cIdx: number) => (
+                              <div key={cIdx} className="flex gap-2 items-center">
+                                <Input 
+                                  placeholder="Nama Pilihan (cth: Pedas)" 
+                                  className="h-10 flex-1 bg-zinc-900/50 border-white/5 text-sm rounded-xl focus-visible:ring-primary/50 text-zinc-200 placeholder:text-zinc-600"
+                                  value={choice.name}
+                                  onChange={(e) => {
+                                    const newV = [...editingItem.variants];
+                                    newV[vIdx].choices[cIdx].name = e.target.value;
+                                    setEditingItem({...editingItem, variants: newV});
+                                  }}
+                                />
+                                <div className="relative w-32 shrink-0">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-zinc-500">Rp</span>
+                                  <Input 
+                                    placeholder="0" 
+                                    className="h-10 pl-9 pr-3 bg-zinc-900/50 border-white/5 text-sm rounded-xl focus-visible:ring-primary/50 text-zinc-200"
+                                    value={choice.price ? choice.price.toLocaleString('id-ID') : ''}
+                                    onChange={(e) => {
+                                      const raw = e.target.value.replace(/\D/g, '');
+                                      const newV = [...editingItem.variants];
+                                      newV[vIdx].choices[cIdx].price = raw ? parseInt(raw) : 0;
+                                      setEditingItem({...editingItem, variants: newV});
+                                    }}
+                                  />
+                                </div>
+                                <button 
+                                  onClick={() => {
+                                    const newV = [...editingItem.variants];
+                                    newV[vIdx].choices.splice(cIdx, 1);
+                                    setEditingItem({...editingItem, variants: newV});
+                                  }}
+                                  className="p-2.5 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
+                                >
+                                  <X size={16} />
+                                </button>
+                              </div>
+                            ))}
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-9 text-xs font-semibold text-primary hover:text-primary hover:bg-primary/10 px-3 mt-2 rounded-xl"
+                              onClick={() => {
+                                const newV = [...editingItem.variants];
+                                newV[vIdx].choices.push({ name: '', price: 0 });
+                                setEditingItem({...editingItem, variants: newV});
+                              }}
+                            >
+                              <Plus size={14} className="mr-1.5" /> Tambah Pilihan Lain
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="w-full border-dashed border-white/10 text-zinc-400 hover:text-zinc-100 hover:bg-white/5 h-12 rounded-2xl transition-colors font-medium text-sm" 
+                      onClick={() => {
+                        const newV = [...(editingItem.variants || []), { name: '', is_required: true, choices: [{ name: '', price: 0 }] }];
+                        setEditingItem({...editingItem, variants: newV});
+                      }}
+                    >
+                      <Plus size={16} className="mr-2 text-primary" /> Buat Grup Varian Utama
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Topping Tambahan */}
+                <div className="mb-2">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-1.5 h-4 bg-amber-500 rounded-full"></div>
+                    <h4 className="text-sm font-bold text-zinc-100 uppercase tracking-wider">Topping (Opsional)</h4>
+                  </div>
+                  <p className="text-xs text-zinc-500 mb-4 pl-3.5">Customer bebas memilih topping tambahan ini (bisa lebih dari satu). Contoh: Ekstra Telur, Keju.</p>
+                  
+                  <div className="space-y-4">
+                    {(editingItem.variants || []).map((variant: any, vIdx: number) => {
+                      if (variant.is_required) return null;
+                      return (
+                        <div key={vIdx} className="bg-zinc-900/30 border border-white/5 rounded-2xl p-4 md:p-5 relative group hover:border-white/10 transition-colors">
+                          <button 
+                            onClick={() => {
+                              const newV = [...editingItem.variants];
+                              newV.splice(vIdx, 1);
+                              setEditingItem({...editingItem, variants: newV});
+                            }}
+                            className="absolute right-3 top-3 p-1.5 text-zinc-600 hover:bg-red-500/10 hover:text-red-500 rounded-lg transition-colors"
+                            title="Hapus Topping"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                          
+                          <div className="pr-10 mb-5 flex flex-col gap-3">
+                            <div>
+                              <label className="text-xs font-semibold text-zinc-400 mb-1.5 block">Nama Grup Topping</label>
+                              <Input 
+                                placeholder="Ketik nama topping..." 
+                                className="h-10 bg-zinc-900/80 border-white/10 text-sm font-medium rounded-xl focus-visible:ring-amber-500/50 text-zinc-100 placeholder:text-zinc-600"
+                                value={variant.name}
+                                onChange={(e) => {
+                                  const newV = [...editingItem.variants];
+                                  newV[vIdx].name = e.target.value;
+                                  setEditingItem({...editingItem, variants: newV});
+                                }}
+                              />
+                            </div>
+                            <label className="flex items-center gap-2 text-xs font-semibold text-zinc-400 cursor-pointer">
+                              <input 
+                                type="checkbox" 
+                                className="rounded border-white/10 bg-zinc-900 text-amber-500 focus:ring-amber-500 focus:ring-offset-0 w-4 h-4"
+                                checked={variant.is_multiple !== false}
+                                onChange={(e) => {
+                                  const newV = [...editingItem.variants];
+                                  newV[vIdx].is_multiple = e.target.checked;
+                                  setEditingItem({...editingItem, variants: newV});
+                                }}
+                              />
+                              Customer Bisa Pilih Lebih dari 1 (Multi-select)
+                            </label>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-xs font-semibold text-zinc-400 block mb-2">Pilihan Topping & Harga</label>
+                            {variant.choices.map((choice: any, cIdx: number) => (
+                              <div key={cIdx} className="flex gap-2 items-center">
+                                <Input 
+                                  placeholder="Nama Pilihan (cth: Keju Slice)" 
+                                  className="h-10 flex-1 bg-zinc-900/50 border-white/5 text-sm rounded-xl focus-visible:ring-amber-500/50 text-zinc-200 placeholder:text-zinc-600"
+                                  value={choice.name}
+                                  onChange={(e) => {
+                                    const newV = [...editingItem.variants];
+                                    newV[vIdx].choices[cIdx].name = e.target.value;
+                                    setEditingItem({...editingItem, variants: newV});
+                                  }}
+                                />
+                                <div className="relative w-32 shrink-0">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-zinc-500">Rp</span>
+                                  <Input 
+                                    placeholder="0" 
+                                    className="h-10 pl-9 pr-3 bg-zinc-900/50 border-white/5 text-sm rounded-xl focus-visible:ring-amber-500/50 text-zinc-200"
+                                    value={choice.price ? choice.price.toLocaleString('id-ID') : ''}
+                                    onChange={(e) => {
+                                      const raw = e.target.value.replace(/\D/g, '');
+                                      const newV = [...editingItem.variants];
+                                      newV[vIdx].choices[cIdx].price = raw ? parseInt(raw) : 0;
+                                      setEditingItem({...editingItem, variants: newV});
+                                    }}
+                                  />
+                                </div>
+                                <button 
+                                  onClick={() => {
+                                    const newV = [...editingItem.variants];
+                                    newV[vIdx].choices.splice(cIdx, 1);
+                                    setEditingItem({...editingItem, variants: newV});
+                                  }}
+                                  className="p-2.5 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
+                                >
+                                  <X size={16} />
+                                </button>
+                              </div>
+                            ))}
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-9 text-xs font-semibold text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 px-3 mt-2 rounded-xl"
+                              onClick={() => {
+                                const newV = [...editingItem.variants];
+                                newV[vIdx].choices.push({ name: '', price: 0 });
+                                setEditingItem({...editingItem, variants: newV});
+                              }}
+                            >
+                              <Plus size={14} className="mr-1.5" /> Tambah Pilihan Lain
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="w-full border-dashed border-white/10 text-zinc-400 hover:text-zinc-100 hover:bg-white/5 h-12 rounded-2xl transition-colors font-medium text-sm" 
+                      onClick={() => {
+                        const newV = [...(editingItem.variants || []), { name: '', is_required: false, is_multiple: true, choices: [{ name: '', price: 0 }] }];
+                        setEditingItem({...editingItem, variants: newV});
+                      }}
+                    >
+                      <Plus size={16} className="mr-2 text-amber-500" /> Buat Grup Topping
+                    </Button>
+                  </div>
+                </div>
+
+              </div>
+
             </div>
           )}
           <DialogFooter className="pt-4 mt-2 border-t border-white/5">
@@ -1159,6 +1507,42 @@ export default function SettingsPage() {
               className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl"
             >
               Save Category
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Category Dialog */}
+      <Dialog open={isEditCategoryDialogOpen} onOpenChange={setIsEditCategoryDialogOpen}>
+        <DialogContent className="bg-zinc-950 border-white/10 sm:max-w-[425px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-zinc-100">Edit Kategori</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <label className="text-sm font-medium text-zinc-400 mb-2 block">Nama Kategori</label>
+            <Input 
+              placeholder="Nama Kategori" 
+              className="bg-zinc-900/50 border-white/10 text-zinc-100 focus-visible:ring-primary h-11 rounded-xl"
+              value={editingCategory?.name || ''}
+              onChange={(e) => setEditingCategory(prev => prev ? { ...prev, name: e.target.value } : null)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditCategoryDialogOpen(false)} className="border-white/10 hover:bg-white/5 rounded-xl">Batal</Button>
+            <Button 
+              onClick={async () => {
+                if (!editingCategory || !editingCategory.name) return;
+                const { error } = await supabase.from('categories').update({ name: editingCategory.name }).eq('id', editingCategory.id);
+                if (error) {
+                  alert("Gagal memperbarui kategori: " + error.message);
+                } else {
+                  setCategories(categories.map(c => c.id === editingCategory.id ? { ...c, name: editingCategory.name } : c));
+                  setIsEditCategoryDialogOpen(false);
+                }
+              }} 
+              className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl"
+            >
+              Simpan
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1305,6 +1689,30 @@ export default function SettingsPage() {
             <Button variant="outline" onClick={() => setIsResetDialogOpen(false)}>Batal</Button>
             <Button variant="destructive" onClick={handleResetTransactions} disabled={isResetting}>
               {isResetting ? "Mereset..." : "Ya, Reset Semua Data"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Item Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="bg-zinc-950 border-white/10 sm:max-w-md rounded-2xl z-[200]">
+          <DialogHeader>
+            <DialogTitle className="text-xl text-red-500 flex items-center gap-2">
+              <Trash2 size={24} /> Hapus Produk
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4 text-zinc-300">
+            Apakah Anda yakin ingin menghapus produk <span className="font-bold text-zinc-100">{productToDelete?.name}</span> secara permanen?
+          </div>
+          <DialogFooter className="pt-4 mt-2 border-t border-white/5 gap-2 sm:gap-0">
+            <Button variant="outline" className="border-white/10 hover:bg-white/5 rounded-xl text-zinc-300" onClick={() => setIsDeleteDialogOpen(false)}>Batal</Button>
+            <Button 
+              className="bg-red-500 text-white hover:bg-red-600 rounded-xl shadow-lg shadow-red-500/20"
+              onClick={handleDeleteProduct}
+              disabled={isUploading}
+            >
+              {isUploading ? 'Menghapus...' : 'Ya, Hapus'}
             </Button>
           </DialogFooter>
         </DialogContent>

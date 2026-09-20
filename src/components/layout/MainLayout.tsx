@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Sidebar } from './Sidebar';
-import { Menu, X, Home, Clock, LayoutDashboard, ChefHat, Bot, Send, Sparkles, Upload, Image as ImageIcon } from 'lucide-react';
+import { Menu, X, Home, Clock, LayoutDashboard, ChefHat, Bot, Send, Sparkles, Upload, Image as ImageIcon, WifiOff } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
@@ -23,11 +23,13 @@ interface MainLayoutProps {
 export function MainLayout({ children, onLogoutClick, onLoginClick, title, headerAction }: MainLayoutProps) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
   const pathname = usePathname();
   const { role, isLoading } = useAuth();
 
   useEffect(() => {
     setMounted(true);
+    setIsOnline(navigator.onLine);
 
     // Background Sync Logic
     const syncOfflineQueue = async () => {
@@ -57,7 +59,17 @@ export function MainLayout({ children, onLogoutClick, onLoginClick, title, heade
     };
 
     // Listen for online event
-    window.addEventListener('online', syncOfflineQueue);
+    const handleOnline = () => {
+      setIsOnline(true);
+      syncOfflineQueue();
+    };
+    
+    const handleOffline = () => {
+      setIsOnline(false);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
     
     // Also try syncing right away if already online on mount
     if (navigator.onLine) {
@@ -65,7 +77,8 @@ export function MainLayout({ children, onLogoutClick, onLoginClick, title, heade
     }
 
     return () => {
-      window.removeEventListener('online', syncOfflineQueue);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
     };
   }, []);
 
@@ -180,7 +193,14 @@ export function MainLayout({ children, onLogoutClick, onLoginClick, title, heade
   };
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden text-foreground">
+    <div className="flex h-screen bg-background overflow-hidden text-foreground relative">
+      {/* Global Connection Status */}
+      {!isOnline && mounted && (
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[100] bg-amber-500 text-amber-950 px-4 py-1.5 rounded-full text-xs font-bold shadow-lg shadow-amber-500/20 flex items-center gap-2 animate-bounce">
+          <WifiOff size={16} /> Mode Offline
+        </div>
+      )}
+
       {/* Desktop Sidebar */}
       <div className="hidden md:block">
         <Sidebar onLogoutClick={onLogoutClick} onLoginClick={onLoginClick} />

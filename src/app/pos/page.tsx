@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { supabase } from '@/lib/supabase';
-import { Search, Plus, Minus, FileEdit, Menu, X, QrCode, Banknote, CheckCircle2, ShoppingCart, LockKeyhole, UserCircle, LogIn, Lock, LogOut, Eye, EyeOff, KeyRound, ShieldCheck, Utensils } from 'lucide-react';
+import { Search, Plus, Minus, FileEdit, Menu, X, QrCode, Banknote, CheckCircle2, ShoppingCart, LockKeyhole, UserCircle, LogIn, Lock, LogOut, Eye, EyeOff, KeyRound, ShieldCheck, Utensils, Clock, ListPlus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,18 @@ import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/co
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth, Role } from '@/lib/AuthContext';
+
+export type ProductVariantChoice = {
+  name: string;
+  price: number;
+};
+
+export type ProductVariant = {
+  name: string;
+  is_required: boolean;
+  is_multiple?: boolean;
+  choices: ProductVariantChoice[];
+};
 
 export type Product = {
   id: string;
@@ -24,6 +36,8 @@ export type Product = {
   is_titipan: boolean;
   titipan_name: string | null;
   supplier_price?: number;
+  is_quick?: boolean;
+  variants?: ProductVariant[];
 };
 
 export type Category = {
@@ -49,12 +63,19 @@ export default function POSPage() {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [stocksData, setStocksData] = useState<{id: string, quantity: number}[]>([]);
+  const [recipesData, setRecipesData] = useState<{product_id: string, stock_id: string, quantity_required: number}[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
 
   const [activeCategory, setActiveCategory] = useState('1');
   const [searchQuery, setSearchQuery] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   
+  // Options Modal State
+  const [isOptionsModalOpen, setIsOptionsModalOpen] = useState(false);
+  const [selectedProductForOptions, setSelectedProductForOptions] = useState<Product | null>(null);
+  const [selectedVariantChoices, setSelectedVariantChoices] = useState<Record<string, string[]>>({});
+
   // Note dialog state
   const [isNoteDialogOpen, setIsNoteDialogOpen] = useState(false);
   const [activeNoteItem, setActiveNoteItem] = useState<string | null>(null);
@@ -62,7 +83,7 @@ export default function POSPage() {
 
   // Checkout flow state
   const [checkoutStep, setCheckoutStep] = useState<'none' | 'method' | 'confirm' | 'success'>('none');
-  const [paymentMethod, setPaymentMethod] = useState<'QRIS' | 'Cash' | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<'QRIS' | 'Cash' | 'Bayar Nanti' | null>(null);
   const [cashReceived, setCashReceived] = useState<string>('');
   const [customerName, setCustomerName] = useState('');
 
@@ -97,26 +118,64 @@ export default function POSPage() {
   const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(true);
   
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [oldCartItems, setOldCartItems] = useState<any[]>([]);
+  
   const cartEndRef = useRef<HTMLDivElement>(null);
 
+  const generateNextOrderId = async () => {
+    const today = new Date();
+    const datePrefix = `order_${today.getFullYear().toString().slice(-2)}${(today.getMonth() + 1).toString().padStart(2, '0')}${today.getDate().toString().padStart(2, '0')}_`;
+    
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('id')
+        .like('id', `${datePrefix}%`)
+        .order('id', { ascending: false })
+        .limit(1);
+        
+      if (!error && data && data.length > 0) {
+        const lastId = data[0].id;
+        const lastSequence = parseInt(lastId.split('_').pop() || '0', 10);
+        return `${datePrefix}${(lastSequence + 1).toString().padStart(4, '0')}`;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return `${datePrefix}0001`;
+  };
+
   useEffect(() => {
-    setOrderNumber(Math.floor(Math.random() * 10000).toString().padStart(4, '0'));
+    generateNextOrderId().then(setOrderNumber);
   }, []);
 
   useEffect(() => {
     async function initPageData() {
       setIsCheckingShift(true);
 
-      const [categoriesRes, productsRes] = await Promise.all([
+      // Instant render from cache
+      try {
+        const cached = localStorage.getItem('samba_products_cache');
+        if (cached) { setProducts(JSON.parse(cached)); setIsLoadingData(false); }
+      } catch(e) {}
+
+      const [categoriesRes, productsRes, stocksRes, recipesRes] = await Promise.all([
         supabase.from('categories').select('*'),
-        supabase.from('products').select('*').eq('is_available', true)
+        supabase.from('products').select('*').eq('is_available', true),
+        supabase.from('stocks').select('id, quantity'),
+        supabase.from('product_ingredients').select('product_id, stock_id, quantity_required')
       ]);
 
       if (categoriesRes.data) {
         setCategories([{ id: '1', name: 'All Menu' }, ...categoriesRes.data]);
       }
+      if (stocksRes.data) setStocksData(stocksRes.data);
+      if (recipesRes.data) setRecipesData(recipesRes.data);
       if (productsRes.data) {
-        setProducts(productsRes.data.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
+        const sorted = productsRes.data.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+        setProducts(sorted);
+        try { localStorage.setItem('samba_products_cache', JSON.stringify(sorted)); } catch(e) {}
       }
       setIsLoadingData(false);
 
@@ -138,13 +197,47 @@ export default function POSPage() {
         setActiveShift(null);
       }
       setIsCheckingShift(false);
+
+      // Load edit context if present
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const editId = params.get('edit');
+        if (editId) {
+          setIsEditMode(true);
+          setOrderNumber(editId);
+          const { data: tx } = await supabase.from('transactions').select('*').eq('id', editId).single();
+          if (tx) {
+            setCustomerName(tx.customer_name || '');
+            setPaymentMethod(tx.method);
+            const { data: items } = await supabase.from('transaction_items').select('*').eq('transaction_id', editId);
+            if (items && productsRes.data) {
+              setOldCartItems(items);
+              const mappedCart: CartItem[] = items.map(it => {
+                const p = productsRes.data.find(prod => prod.name === it.product_name);
+                return {
+                  id: p ? p.id : Math.random().toString(),
+                  product: p || { id: '', name: it.product_name, price: it.price, category_id: '', image_url: '', is_available: true, is_titipan: false, titipan_name: null },
+                  quantity: it.quantity,
+                  notes: it.notes || ''
+                };
+              });
+              setCart(mappedCart);
+            }
+          }
+        }
+      }
     }
 
     initPageData();
 
     const handleRefreshProducts = async () => {
-      const { data } = await supabase.from('products').select('*').eq('is_available', true);
-      if (data) {
+      const [productsRes, stocksRes] = await Promise.all([
+        supabase.from('products').select('*').eq('is_available', true),
+        supabase.from('stocks').select('id, quantity')
+      ]);
+      if (stocksRes.data) setStocksData(stocksRes.data);
+      if (productsRes.data) {
+        const data = productsRes.data;
         // Find newly added products or updated products and ensure state is fresh
         setProducts(data.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
       }
@@ -280,6 +373,44 @@ export default function POSPage() {
     }
   };
 
+  const getProductStock = (productId: string) => {
+    const productRecipes = recipesData.filter(r => r.product_id === productId);
+    if (productRecipes.length === 0) return null; // Infinite/Not Tracked
+    
+    let maxAvailable = Infinity;
+    for (const recipe of productRecipes) {
+      const stockItem = stocksData.find(s => s.id === recipe.stock_id);
+      if (!stockItem) return 0; // Missing ingredient
+      const possiblePortions = Math.floor(stockItem.quantity / recipe.quantity_required);
+      if (possiblePortions < maxAvailable) {
+        maxAvailable = possiblePortions;
+      }
+    }
+    return maxAvailable;
+  };
+
+  const getStockString = (product: Product) => {
+    if (!product.is_available) return 'tidak ada stok';
+    const stock = getProductStock(product.id);
+    if (stock === null) return 'stok Ada'; // Not tracked by recipe
+    if (stock === 0) return 'Habis';
+    return `stok ${stock}`;
+  };
+
+  const isStockEmpty = (product: Product) => {
+    if (!product.is_available) return true;
+    const stock = getProductStock(product.id);
+    return stock === 0;
+  };
+
+  const handleCheckoutClick = () => {
+    if (cart.length === 0) {
+      alert('Keranjang masih kosong!');
+      return;
+    }
+    setCheckoutStep('method');
+  };
+
   const handleCalculateEndShift = async () => {
     if (!activeShift) {
       logout();
@@ -348,28 +479,66 @@ export default function POSPage() {
     return matchesCategory && matchesSearch;
   });
 
-  const addToCart = (product: Product) => {
+  const handleProductClick = (product: Product) => {
     if (isLocked) {
       handleLockActionClick();
       return;
     }
+    if (isStockEmpty(product)) {
+      alert('Stok item ini sudah habis.');
+      return;
+    }
+
+    if (product.variants && product.variants.length > 0) {
+      setSelectedProductForOptions(product);
+      const initialChoices: Record<string, string[]> = {};
+      product.variants.forEach(v => {
+        if (v.is_required && v.choices.length > 0) {
+          initialChoices[v.name] = [v.choices[0].name];
+        } else {
+          initialChoices[v.name] = [];
+        }
+      });
+      setSelectedVariantChoices(initialChoices);
+      setIsOptionsModalOpen(true);
+    } else {
+      addToCart(product, '', 0);
+    }
+  };
+
+  const addToCart = (product: Product, notes: string = '', addonPrice: number = 0) => {
+    const maxStock = getProductStock(product.id);
+    const cartItemId = notes ? `${product.id}-${notes}` : product.id;
+
     setCart(prev => {
-      const existing = prev.find(item => item.product.id === product.id);
+      const existing = prev.find(item => item.product.id === product.id && (item.notes || '') === notes);
       if (existing) {
+        if (maxStock !== null && existing.quantity >= maxStock) {
+          alert(`Maksimal stok yang tersedia hanya ${maxStock}`);
+          return prev;
+        }
         return prev.map(item =>
-          item.product.id === product.id
+          (item.product.id === product.id && (item.notes || '') === notes)
             ? { ...item, quantity: item.quantity + 1 }
             : item
         );
       }
-      return [...prev, { id: Math.random().toString(), product, quantity: 1 }];
+      const productWithAddonPrice = { ...product, price: product.price + addonPrice };
+      return [...prev, { id: cartItemId, product: productWithAddonPrice, quantity: 1, notes }];
     });
+    setIsCartOpen(true);
+    setIsOptionsModalOpen(false);
   };
 
   const updateQuantity = (id: string, delta: number) => {
     setCart(prev => prev.map(item => {
       if (item.id === id) {
         const newQuantity = Math.max(0, item.quantity + delta);
+        const maxStock = getProductStock(item.product.id);
+        if (delta > 0 && maxStock !== null && newQuantity > maxStock) {
+          alert(`Maksimal stok yang tersedia hanya ${maxStock}`);
+          return item;
+        }
         return { ...item, quantity: newQuantity };
       }
       return item;
@@ -394,13 +563,7 @@ export default function POSPage() {
   };
 
   const handleCheckoutProcess = async () => {
-    if (checkoutStep === 'confirm') {
-      if (paymentMethod === 'QRIS') {
-        setIsQRISModalOpen(true);
-      } else {
-        await finalizeTransaction();
-      }
-    }
+    await finalizeTransaction();
   };
 
   const handleQRISPaymentSuccess = async () => {
@@ -417,7 +580,7 @@ export default function POSPage() {
         method: paymentMethod,
         total: total,
         cashier_name: userName || 'Unknown',
-        status: 'preparing',
+        status: (paymentMethod === 'Bayar Nanti') ? 'preparing' : (isAllQuickFood ? 'completed' : 'preparing'),
         cash_received: paymentMethod === 'Cash' && cashReceived ? parseInt(cashReceived.replace(/\./g, '')) : null,
         customer_name: customerName || null
     };
@@ -433,67 +596,161 @@ export default function POSPage() {
 
     try {
       // If offline, skip direct to local storage catch block
-      if (!navigator.onLine) throw new Error("Offline Mode");
-
-      const { error: txError } = await supabase.from('transactions').insert([transaction]);
-      if (txError) throw txError;
-
-      const { error: itemsError } = await supabase.from('transaction_items').insert(itemsToInsert);
-      if (itemsError) throw itemsError;
-
-      // Deduct stock based on recipe
-      const productIds = cart.map(item => item.product.id);
-      const { data: recipes } = await supabase.from('product_ingredients').select('*').in('product_id', productIds);
-      
-      if (recipes && recipes.length > 0) {
-        const stockDeductions: Record<string, number> = {};
-        for (const cartItem of cart) {
-          const itemRecipes = recipes.filter(r => r.product_id === cartItem.product.id);
-          for (const recipe of itemRecipes) {
-            if (!stockDeductions[recipe.stock_id]) stockDeductions[recipe.stock_id] = 0;
-            stockDeductions[recipe.stock_id] += (recipe.quantity_required * cartItem.quantity);
-          }
+      if (!navigator.onLine) {
+        if (isEditMode) {
+          alert("⚠️ Tidak bisa mengedit pesanan dalam Offline Mode. Harap tunggu koneksi kembali.");
+          setIsProcessingCheckout(false);
+          return;
         }
+        throw new Error("Offline Mode");
+      }
 
-        const stockIds = Object.keys(stockDeductions);
-        const { data: currentStocks } = await supabase.from('stocks').select('id, quantity').in('id', stockIds);
-        
-        if (currentStocks) {
-          for (const stock of currentStocks) {
-            const amountToDeduct = stockDeductions[stock.id];
-            if (amountToDeduct) {
-              const newQuantity = Math.max(0, stock.quantity - amountToDeduct);
-              await supabase.from('stocks').update({ quantity: newQuantity, last_updated: new Date().toISOString() }).eq('id', stock.id);
+      const dbOperations = async () => {
+        if (isEditMode) {
+          const { error: txError } = await supabase.from('transactions').update({
+            method: paymentMethod,
+            total: total,
+            status: (paymentMethod === 'Bayar Nanti') ? 'preparing' : (isAllQuickFood ? 'completed' : 'preparing'),
+            cash_received: paymentMethod === 'Cash' && cashReceived ? parseInt(cashReceived.replace(/\./g, '')) : null,
+            customer_name: customerName || null
+          }).eq('id', transactionId);
+          if (txError) throw txError;
+
+          await supabase.from('transaction_items').delete().eq('transaction_id', transactionId);
+          const { error: itemsError } = await supabase.from('transaction_items').insert(itemsToInsert);
+          if (itemsError) throw itemsError;
+
+          // Stock adjustment (Delta)
+          const allProductIds = Array.from(new Set([
+            ...cart.map(i => i.product.id),
+            ...oldCartItems.map(i => products.find(p => p.name === i.product_name)?.id).filter(Boolean)
+          ]));
+          
+          const { data: recipes } = await supabase.from('product_ingredients').select('*').in('product_id', allProductIds as string[]);
+          
+          if (recipes && recipes.length > 0) {
+            const stockDelta: Record<string, number> = {};
+            
+            for (const cartItem of cart) {
+              const itemRecipes = recipes.filter(r => r.product_id === cartItem.product.id);
+              for (const recipe of itemRecipes) {
+                if (!stockDelta[recipe.stock_id]) stockDelta[recipe.stock_id] = 0;
+                stockDelta[recipe.stock_id] += (recipe.quantity_required * cartItem.quantity);
+              }
+            }
+            
+            for (const oldItem of oldCartItems) {
+              const productId = products.find(p => p.name === oldItem.product_name)?.id;
+              const itemRecipes = recipes.filter(r => r.product_id === productId);
+              for (const recipe of itemRecipes) {
+                if (!stockDelta[recipe.stock_id]) stockDelta[recipe.stock_id] = 0;
+                stockDelta[recipe.stock_id] -= (recipe.quantity_required * oldItem.quantity);
+              }
+            }
+
+            const stockIds = Object.keys(stockDelta).filter(id => stockDelta[id] !== 0);
+            if (stockIds.length > 0) {
+              const { data: currentStocks } = await supabase.from('stocks').select('id, quantity').in('id', stockIds);
+              if (currentStocks) {
+                for (const stock of currentStocks) {
+                  const delta = stockDelta[stock.id];
+                  if (delta) {
+                    const newQuantity = Math.max(0, stock.quantity - delta);
+                    await supabase.from('stocks').update({ quantity: newQuantity, last_updated: new Date().toISOString() }).eq('id', stock.id);
+                  }
+                }
+              }
+            }
+          }
+        } else {
+          const { error: txError } = await supabase.from('transactions').insert([transaction]);
+          if (txError) throw txError;
+
+          const { error: itemsError } = await supabase.from('transaction_items').insert(itemsToInsert);
+          if (itemsError) throw itemsError;
+
+          // Deduct stock based on recipe
+          const productIds = cart.map(item => item.product.id);
+          const { data: recipes } = await supabase.from('product_ingredients').select('*').in('product_id', productIds);
+          
+          if (recipes && recipes.length > 0) {
+            const stockDeductions: Record<string, number> = {};
+            for (const cartItem of cart) {
+              const itemRecipes = recipes.filter(r => r.product_id === cartItem.product.id);
+              for (const recipe of itemRecipes) {
+                if (!stockDeductions[recipe.stock_id]) stockDeductions[recipe.stock_id] = 0;
+                stockDeductions[recipe.stock_id] += (recipe.quantity_required * cartItem.quantity);
+              }
+            }
+
+            const stockIds = Object.keys(stockDeductions);
+            const { data: currentStocks } = await supabase.from('stocks').select('id, quantity').in('id', stockIds);
+            
+            if (currentStocks) {
+              for (const stock of currentStocks) {
+                const amountToDeduct = stockDeductions[stock.id];
+                if (amountToDeduct) {
+                  const newQuantity = Math.max(0, stock.quantity - amountToDeduct);
+                  await supabase.from('stocks').update({ quantity: newQuantity, last_updated: new Date().toISOString() }).eq('id', stock.id);
+                }
+              }
             }
           }
         }
-      }
+      };
+
+      // Wrap in 5-second timeout to prevent UI freezing on bad network
+      await Promise.race([
+        dbOperations(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout: Jaringan lambat")), 5000))
+      ]);
+
     } catch (error: any) {
       console.warn("Failed to sync to Supabase, saving to offline queue:", error);
       // Offline Queueing Logic
       const offlineQueue = JSON.parse(localStorage.getItem('offline_transactions') || '[]');
       offlineQueue.push({ transaction, itemsToInsert });
       localStorage.setItem('offline_transactions', JSON.stringify(offlineQueue));
-      // Notify cashier indirectly via UI (you can add toast here if preferred)
-      alert("⚠️ Offline Mode: Transaksi disimpan secara lokal. Pastikan jangan me-refresh browser dan tunggu hingga koneksi kembali.");
     }
 
     setIsProcessingCheckout(false);
     setCheckoutStep('success');
   };
 
-  const completeAndNewOrder = () => {
+  const completeAndNewOrder = async () => {
     setCart([]);
     setCheckoutStep('none');
     setPaymentMethod(null);
     setCashReceived('');
     setCustomerName('');
-    setOrderNumber(Math.floor(Math.random() * 10000).toString().padStart(4, '0'));
+    const newId = await generateNextOrderId();
+    setOrderNumber(newId);
   };
 
   const subtotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
   const total = subtotal;
   const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const isAllQuickFood = cart.length > 0 && cart.every(item => item.product.is_quick === true);
+
+  const getQuickCashSuggestions = (totalAmount: number) => {
+    console.log("Computing quick cash suggestions for:", totalAmount);
+    const defaults = [10000, 15000, 20000, 30000, 50000, 100000];
+    const suggestions = [totalAmount];
+    defaults.forEach(d => {
+      if (d > totalAmount && !suggestions.includes(d)) {
+        suggestions.push(d);
+      }
+    });
+    
+    if (totalAmount > 100000) {
+      const next50k = Math.ceil(totalAmount / 50000) * 50000;
+      if (!suggestions.includes(next50k)) suggestions.push(next50k);
+      const next100k = Math.ceil(totalAmount / 100000) * 100000;
+      if (next100k !== next50k && !suggestions.includes(next100k)) suggestions.push(next100k);
+    }
+    
+    return suggestions.slice(0, 6);
+  };
 
   const renderCartContent = () => (
     <>
@@ -595,15 +852,6 @@ export default function POSPage() {
 
       <div className="p-4 xl:p-6 bg-zinc-950 border-t border-white/5 mt-auto relative shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.5)]">
         <div className="space-y-4 mb-6 relative z-10">
-          <div className="relative">
-            <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={24} strokeWidth={1.5} />
-            <Input
-              placeholder="Nama Customer"
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              className="w-full bg-zinc-900/50 border-white/10 h-14 pl-12 text-zinc-100 font-semibold text-lg md:text-xl placeholder:font-normal placeholder:text-base placeholder:text-zinc-500 rounded-xl focus-visible:ring-1 focus-visible:ring-primary shadow-inner transition-all hover:bg-zinc-900/80"
-            />
-          </div>
           <div className="bg-zinc-900/40 rounded-xl p-4 border border-white/5 space-y-3">
             <div className="flex justify-between text-zinc-400 text-sm">
               <span>Subtotal</span>
@@ -634,8 +882,8 @@ export default function POSPage() {
         ) : (
           <Button 
             className="w-full h-14 rounded-xl text-lg font-bold bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 shadow-xl shadow-primary/20 hover:shadow-primary/30 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none"
-            disabled={cart.length === 0 || customerName.trim() === ''}
-            onClick={() => setCheckoutStep('method')}
+            disabled={cart.length === 0}
+            onClick={() => { setPaymentMethod(null); setCashReceived(''); setCheckoutStep('method'); }}
           >
             Charge / Checkout
           </Button>
@@ -753,53 +1001,50 @@ export default function POSPage() {
                 return (
                   <div 
                     key={product.id}
-                    onClick={() => addToCart(product)}
-                    className={`group relative bg-zinc-900/60 backdrop-blur-md border rounded-[24px] overflow-hidden transition-all duration-500 flex flex-col justify-between ${
+                    onClick={() => handleProductClick(product)}
+                    className={`group relative bg-zinc-900/40 border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between h-[120px] ${
                       isLocked
                         ? 'border-white/5 opacity-90 cursor-pointer hover:border-amber-500/50'
-                        : `cursor-pointer ${qtyInCart > 0 ? 'border-primary/50 bg-primary/5 hover:border-primary' : 'border-white/5 hover:border-white/20 hover:bg-zinc-800/80 hover:shadow-2xl hover:shadow-primary/10'} hover:-translate-y-1.5`
+                        : `cursor-pointer ${qtyInCart > 0 ? 'border-primary/50 bg-primary/10' : 'border-white/5 hover:border-white/20 hover:bg-zinc-800/60'} hover:-translate-y-1`
                     }`}
                   >
-                    <div className="aspect-[4/3] relative overflow-hidden bg-gradient-to-b from-zinc-800/50 to-zinc-900/80">
-                      {product.image_url && !product.image_url.includes('placehold.co') ? (
-                        <>
-                          <div className={`absolute inset-0 transition-colors duration-500 z-10 ${qtyInCart > 0 ? 'bg-black/10' : 'bg-black/30 group-hover:bg-black/10'}`} />
-                          <img 
-                            src={product.image_url} 
-                            alt={product.name}
-                            className={`w-full h-full object-cover transition-transform duration-700 ease-out ${qtyInCart > 0 ? 'scale-105' : 'group-hover:scale-110'}`}
-                          />
-                        </>
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center text-zinc-600 group-hover:text-primary/70 group-hover:scale-110 transition-all duration-500">
-                          <Utensils size={40} strokeWidth={1} className="opacity-40 group-hover:opacity-100 transition-opacity" />
-                        </div>
-                      )}
-                      
-                      {!isLocked && (
-                        <div className={`absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-0 transition-opacity duration-300 z-20 flex items-end justify-end p-4 ${qtyInCart > 0 ? 'opacity-100 from-black/60' : 'group-hover:opacity-100'}`}>
-                          <div className={`text-primary-foreground rounded-full flex items-center justify-center shadow-lg transform transition-all duration-300 ease-out hover:scale-110 hover:bg-primary ${qtyInCart > 0 ? 'w-11 h-11 bg-primary text-base font-bold shadow-[0_0_20px_rgba(234,179,8,0.4)] translate-y-0 ring-2 ring-background' : 'w-11 h-11 bg-primary/90 translate-y-4 group-hover:translate-y-0'}`}>
-                            {qtyInCart > 0 ? `${qtyInCart}x` : <Plus size={24} strokeWidth={2.5} />}
-                          </div>
-                        </div>
-                      )}
-
-                      {isLocked && (
-                        <div className="absolute top-3 right-3 bg-black/70 backdrop-blur-md text-amber-400 p-2 rounded-xl border border-amber-500/30 z-20">
-                          <LockKeyhole size={16} />
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-5 flex flex-col justify-between flex-1 relative z-30">
-                      <div>
-                        <h3 className={`font-semibold transition-colors line-clamp-2 leading-tight tracking-tight ${qtyInCart > 0 ? 'text-primary' : 'text-zinc-100 group-hover:text-primary/80'}`}>
-                          {product.name}
-                        </h3>
-                        <p className={`text-base font-bold mt-2 ${qtyInCart > 0 ? 'text-zinc-100' : 'text-primary/90'}`}>
-                          Rp {product.price.toLocaleString('id-ID')}
-                        </p>
+                    <div>
+                      <div className="flex justify-between items-start mb-2">
+                         <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider truncate pr-2">
+                           {categories.find(c => c.id === product.category_id)?.name || 'MENU'}
+                         </span>
+                         <div className="flex items-center gap-1.5 shrink-0">
+                           {product.variants && product.variants.length > 0 && (
+                             <div className="text-[9px] text-primary/80 bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded-md flex items-center gap-1 font-bold">
+                               <ListPlus size={10} /> OPSI
+                             </div>
+                           )}
+                           {qtyInCart > 0 && (
+                             <div className="bg-primary text-primary-foreground text-[10px] font-bold px-2 py-0.5 rounded-full">
+                               {qtyInCart}x
+                             </div>
+                           )}
+                         </div>
                       </div>
+                      <h3 className={`text-[13px] md:text-sm font-bold line-clamp-2 leading-tight ${qtyInCart > 0 ? 'text-primary' : 'text-zinc-200 group-hover:text-white'}`}>
+                        {product.name}
+                      </h3>
                     </div>
+                    
+                    <div className="flex justify-between items-end mt-2">
+                      <p className={`text-sm font-bold ${qtyInCart > 0 ? 'text-zinc-200' : 'text-zinc-400'}`}>
+                        Rp {product.price.toLocaleString('id-ID')}
+                      </p>
+                      <span className={`text-[11px] font-bold ${!isStockEmpty(product) ? 'text-emerald-500' : 'text-rose-500'}`}>
+                        {getStockString(product)}
+                      </span>
+                    </div>
+
+                    {isLocked && (
+                      <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-md text-amber-400 p-1.5 rounded-lg border border-amber-500/30 z-20">
+                        <LockKeyhole size={14} />
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -809,11 +1054,152 @@ export default function POSPage() {
       </div>
 
       {/* Desktop Cart Sidebar */}
-      {isCartOpen && (
+      {(isCartOpen && cartItemCount > 0) && (
         <div className="hidden lg:flex w-72 xl:w-80 border-l border-border bg-card flex-col h-full shrink-0 transition-all duration-300">
           {renderCartContent()}
         </div>
       )}
+
+      {/* Product Options Modal */}
+      <Dialog open={isOptionsModalOpen} onOpenChange={setIsOptionsModalOpen}>
+        <DialogContent className="bg-zinc-950 border-white/10 sm:max-w-lg max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-3xl shadow-2xl">
+          <div className="px-6 pt-6 pb-4 border-b border-white/5 bg-zinc-900/40 relative">
+            <h2 className="text-2xl font-bold text-zinc-100 pr-8">{selectedProductForOptions?.name}</h2>
+            <p className="text-sm text-zinc-400 mt-1">
+              Sesuaikan pesanan dengan pilihan varian dan topping di bawah ini.
+            </p>
+          </div>
+          
+          <ScrollArea className="flex-1 px-6 py-4 bg-zinc-950">
+            {selectedProductForOptions?.variants?.map((variant, idx) => {
+              const isRequired = variant.is_required;
+              return (
+                <div key={idx} className="mb-8 last:mb-2 animate-in fade-in slide-in-from-bottom-2" style={{animationDelay: `${idx * 100}ms`}}>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-1.5 h-5 rounded-full ${isRequired ? 'bg-primary' : 'bg-amber-500'}`}></div>
+                      <h4 className="font-bold text-zinc-100 uppercase tracking-wider text-sm">{variant.name}</h4>
+                    </div>
+                    {isRequired ? (
+                      <span className="text-[10px] font-bold bg-primary/10 text-primary border border-primary/20 px-2.5 py-1 rounded-md uppercase tracking-wider">Wajib Pilih 1</span>
+                    ) : (
+                      <span className="text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2.5 py-1 rounded-md uppercase tracking-wider">Opsional</span>
+                    )}
+                  </div>
+                  
+                  <div className={`grid gap-3 ${variant.choices.length > 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                    {variant.choices.map((choice, cIdx) => {
+                      const isSelected = selectedVariantChoices[variant.name]?.includes(choice.name);
+                      return (
+                        <div 
+                          key={cIdx} 
+                          onClick={() => {
+                            setSelectedVariantChoices(prev => {
+                              const current = prev[variant.name] || [];
+                              if (variant.is_required || !variant.is_multiple) {
+                                // Single Select (Required OR Optional but not multi)
+                                if (!variant.is_required && current.includes(choice.name)) {
+                                  // Deselect if optional and already selected
+                                  return { ...prev, [variant.name]: [] };
+                                }
+                                return { ...prev, [variant.name]: [choice.name] };
+                              } else {
+                                // Multi Select (Optional & is_multiple=true)
+                                if (current.includes(choice.name)) {
+                                  return { ...prev, [variant.name]: current.filter(c => c !== choice.name) };
+                                } else {
+                                  return { ...prev, [variant.name]: [...current, choice.name] };
+                                }
+                              }
+                            });
+                          }}
+                          className={`relative flex flex-col justify-center p-4 rounded-2xl border-2 transition-all duration-200 cursor-pointer select-none overflow-hidden group min-h-[80px]
+                            ${isSelected 
+                              ? isRequired 
+                                ? 'bg-primary/10 border-primary text-primary' 
+                                : 'bg-amber-500/10 border-amber-500 text-amber-500' 
+                              : 'bg-zinc-900/60 border-transparent hover:border-white/10 hover:bg-zinc-800 text-zinc-300'
+                            }`}
+                        >
+                          {isSelected && (
+                            <div className={`absolute top-0 right-0 w-8 h-8 rounded-bl-2xl flex items-center justify-center
+                              ${isRequired ? 'bg-primary text-zinc-950' : 'bg-amber-500 text-zinc-950'}
+                            `}>
+                              <CheckCircle2 size={16} className="text-current" />
+                            </div>
+                          )}
+                          
+                          <div className="flex items-start justify-between gap-2 z-10">
+                            <span className={`font-bold leading-tight ${isSelected ? (isRequired ? 'text-primary' : 'text-amber-500') : 'text-zinc-200 group-hover:text-white'}`}>
+                              {choice.name}
+                            </span>
+                            
+                            {/* Checkbox / Radio Visual */}
+                            <div className={`shrink-0 w-5 h-5 flex items-center justify-center border-2 transition-colors mt-0.5
+                              ${!variant.is_multiple ? 'rounded-full' : 'rounded-md'}
+                              ${isSelected 
+                                ? (isRequired ? 'border-primary' : 'border-amber-500') 
+                                : 'border-zinc-600 group-hover:border-zinc-400'
+                              }
+                            `}>
+                              {isSelected && (
+                                <div className={`w-2.5 h-2.5 ${!variant.is_multiple ? (isRequired ? 'bg-primary' : 'bg-amber-500') + ' rounded-full' : 'bg-amber-500 rounded-sm'}`} />
+                              )}
+                            </div>
+                          </div>
+                          
+                          {choice.price > 0 && (
+                            <div className={`text-sm font-bold mt-2 z-10 ${isSelected ? (isRequired ? 'text-primary/80' : 'text-amber-500/80') : 'text-zinc-500'}`}>
+                              +Rp {choice.price.toLocaleString('id-ID')}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </ScrollArea>
+          
+          <div className="px-6 py-5 border-t border-white/5 bg-zinc-900/80 flex items-center justify-between gap-4">
+            <Button variant="outline" className="h-14 px-8 rounded-2xl border-white/10 hover:bg-white/5 text-zinc-300 font-bold transition-all hover:scale-[1.02]" onClick={() => setIsOptionsModalOpen(false)}>
+              Batal
+            </Button>
+            <Button 
+              className="flex-1 h-14 rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90 gap-2 font-bold shadow-lg shadow-primary/20 text-base transition-all hover:scale-[1.02]"
+              onClick={() => {
+                if (!selectedProductForOptions) return;
+                
+                const missingRequired = selectedProductForOptions.variants?.find(v => v.is_required && (!selectedVariantChoices[v.name] || selectedVariantChoices[v.name].length === 0));
+                if (missingRequired) {
+                  alert(`Harap pilih opsi pada grup: ${missingRequired.name}`);
+                  return;
+                }
+                
+                let addonPrice = 0;
+                let notesArr: string[] = [];
+                
+                selectedProductForOptions.variants?.forEach(v => {
+                  const choices = selectedVariantChoices[v.name] || [];
+                  if (choices.length > 0) {
+                    notesArr.push(`${v.name}: ${choices.join(', ')}`);
+                    choices.forEach(cName => {
+                      const cObj = v.choices.find(c => c.name === cName);
+                      if (cObj) addonPrice += cObj.price;
+                    });
+                  }
+                });
+                
+                addToCart(selectedProductForOptions, notesArr.join(' | '), addonPrice);
+              }}
+            >
+              <ShoppingCart size={20} />
+              Tambahkan ke Pesanan
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Note Dialog */}
       <Dialog open={isNoteDialogOpen} onOpenChange={setIsNoteDialogOpen}>
@@ -958,29 +1344,134 @@ export default function POSPage() {
                 <DialogTitle>Select Payment Method</DialogTitle>
                 <DialogDescription>Total Amount: <span className="font-bold text-primary">Rp {total.toLocaleString('id-ID')}</span></DialogDescription>
               </DialogHeader>
-              <div className="grid grid-cols-2 gap-4 py-6">
+              <div className="grid grid-cols-3 gap-4 py-6">
                 <button 
-                  onClick={() => { 
-                    setPaymentMethod('QRIS'); 
-                    setCheckoutStep('confirm'); 
-                  }}
-                  className="p-6 rounded-2xl bg-background border border-border hover:border-primary flex flex-col items-center justify-center gap-3 transition-all group"
+                  onClick={() => setPaymentMethod('QRIS')}
+                  className="p-4 sm:p-6 rounded-2xl bg-background border border-border hover:border-primary flex flex-col items-center justify-center gap-3 transition-all group"
                 >
                   <div className="p-3 bg-blue-500/10 text-blue-500 rounded-xl group-hover:scale-110 transition-transform">
-                    <QrCode size={32} />
+                    <QrCode size={28} />
                   </div>
-                  <span className="font-bold">QRIS / E-Wallet</span>
+                  <span className="font-bold text-sm text-center">QRIS</span>
                 </button>
                 <button 
-                  onClick={() => { setPaymentMethod('Cash'); setCheckoutStep('confirm'); }}
-                  className="p-6 rounded-2xl bg-background border border-border hover:border-primary flex flex-col items-center justify-center gap-3 transition-all group"
+                  onClick={() => setPaymentMethod('Cash')}
+                  className="p-4 sm:p-6 rounded-2xl bg-background border border-border hover:border-primary flex flex-col items-center justify-center gap-3 transition-all group"
                 >
                   <div className="p-3 bg-green-500/10 text-green-500 rounded-xl group-hover:scale-110 transition-transform">
-                    <Banknote size={32} />
+                    <Banknote size={28} />
                   </div>
-                  <span className="font-bold">Cash</span>
+                  <span className="font-bold text-sm text-center">Cash</span>
+                </button>
+                <button 
+                  onClick={() => setPaymentMethod('Bayar Nanti')}
+                  className="p-4 sm:p-6 rounded-2xl bg-background border border-border hover:border-amber-500 flex flex-col items-center justify-center gap-3 transition-all group"
+                >
+                  <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl group-hover:scale-110 transition-transform">
+                    <Clock size={28} />
+                  </div>
+                  <span className="font-bold text-sm text-center">Bayar Nanti</span>
                 </button>
               </div>
+
+              {/* Inline Payment Details */}
+              {paymentMethod && (
+                <div className="pt-2 space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                  
+                  <div className="space-y-1.5 text-left bg-zinc-900/40 p-4 rounded-2xl border border-white/5">
+                    <label className="text-xs font-semibold text-zinc-400 flex justify-between items-center">
+                      <span>Nama Customer {paymentMethod === 'Bayar Nanti' ? <span className="text-red-500">*</span> : <span className="font-normal">(Opsional)</span>}</span>
+                      {!isAllQuickFood && paymentMethod !== 'Bayar Nanti' && (
+                        <span className="text-[10px] text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full">Dianjurkan (Ada antrian masak)</span>
+                      )}
+                    </label>
+                    <Input 
+                      placeholder="Masukkan nama customer..." 
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      className={`bg-zinc-900/80 border h-12 text-base rounded-xl focus-visible:ring-1 transition-all shadow-inner ${
+                        paymentMethod === 'Bayar Nanti' && !customerName 
+                          ? 'border-red-500/50 focus-visible:ring-red-500' 
+                          : 'border-white/10 focus-visible:ring-primary focus-visible:border-primary/50'
+                      }`}
+                      autoFocus={!isAllQuickFood}
+                    />
+                  </div>
+
+                  {paymentMethod === 'Cash' && (
+                    <div className="space-y-3 bg-background p-4 rounded-2xl border border-border">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Uang Diterima (Rp)</label>
+                        <Input 
+                          placeholder="0" 
+                          value={cashReceived ? parseInt(cashReceived).toLocaleString('id-ID') : ''}
+                          onChange={(e) => {
+                            const rawValue = e.target.value.replace(/\./g, '');
+                            if (/^\d*$/.test(rawValue)) {
+                              setCashReceived(rawValue);
+                            }
+                          }}
+                          autoFocus
+                          className="bg-card border-border text-lg font-bold h-12"
+                        />
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {getQuickCashSuggestions(total).map((val) => (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() => setCashReceived(val.toString())}
+                            className={`p-2 rounded-xl text-xs font-semibold transition-all duration-300 border ${
+                              parseInt(cashReceived.replace(/\./g, '') || '0') === val
+                                ? 'bg-primary text-primary-foreground border-primary'
+                                : 'bg-zinc-900 text-zinc-300 border-white/5 hover:bg-zinc-800'
+                            }`}
+                          >
+                            {val === total ? 'Uang Pas' : `Rp ${val.toLocaleString('id-ID')}`}
+                          </button>
+                        ))}
+                      </div>
+                      {cashReceived && parseInt(cashReceived.replace(/\./g, '')) >= total && (
+                        <div className="bg-green-500/10 text-green-500 p-3 rounded-lg border border-green-500/20 text-center font-bold text-lg animate-in fade-in slide-in-from-bottom-2">
+                          Kembalian: Rp {(parseInt(cashReceived.replace(/\./g, '')) - total).toLocaleString('id-ID')}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {paymentMethod === 'QRIS' && (
+                    <div className="bg-blue-500/5 border border-blue-500/20 rounded-2xl p-4 text-center space-y-2">
+                      <QrCode size={32} className="text-blue-500 mx-auto" />
+                      <p className="text-sm font-medium text-zinc-300">Pastikan customer sudah scan & bayar via <span className="text-blue-400 font-bold">GoPay/QRIS</span></p>
+                      <p className="text-xs text-zinc-500">Cek notifikasi GoPay Merchant sebelum konfirmasi</p>
+                    </div>
+                  )}
+                  {paymentMethod === 'Bayar Nanti' && (
+                    <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-4 space-y-3">
+                      <div className="text-center space-y-2">
+                        <Clock size={32} className="text-amber-500 mx-auto" />
+                        <p className="text-sm font-medium text-zinc-300">Catat pesanan sekarang, bayar nanti.</p>
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex gap-3 pt-2">
+                    <Button variant="outline" className="flex-1" onClick={() => { setCheckoutStep('none'); setPaymentMethod(null); }}>Batal</Button>
+                    <Button 
+                      onClick={handleCheckoutProcess} 
+                      className={`flex-1 font-bold ${
+                        paymentMethod === 'QRIS' ? 'bg-blue-600 hover:bg-blue-500 text-white' : 
+                        paymentMethod === 'Bayar Nanti' ? 'bg-amber-600 hover:bg-amber-500 text-white' :
+                        'bg-primary text-primary-foreground hover:bg-primary/90'
+                      }`}
+                      disabled={isProcessingCheckout || (paymentMethod === 'Cash' && (!cashReceived || parseInt(cashReceived.replace(/\./g, '')) < total)) || (paymentMethod === 'Bayar Nanti' && !customerName)}
+                    >
+                      {isProcessingCheckout ? 'Processing...' : 
+                        paymentMethod === 'QRIS' ? '✓ Konfirmasi Lunas' : 
+                        paymentMethod === 'Bayar Nanti' ? '📝 Catat Hutang' :
+                        '💵 Bayar Cash'}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </>
           )}
 
@@ -1018,14 +1509,18 @@ export default function POSPage() {
                     </div>
 
                     <div className="grid grid-cols-3 gap-2">
-                      {[total, 50000, 100000].map((val) => (
+                      {getQuickCashSuggestions(total).map((val) => (
                         <button
                           key={val}
                           type="button"
                           onClick={() => setCashReceived(val.toString())}
-                          className="py-1.5 px-2 bg-muted hover:bg-primary/20 text-xs font-semibold rounded-lg border border-border transition-colors"
+                          className={`p-2 rounded-xl text-xs font-semibold transition-all duration-300 border ${
+                            parseInt(cashReceived.replace(/\./g, '') || '0') === val
+                              ? 'bg-primary text-primary-foreground border-primary'
+                              : 'bg-zinc-900 text-zinc-300 border-white/5 hover:bg-zinc-800'
+                          }`}
                         >
-                          Rp {val.toLocaleString('id-ID')}
+                          {val === total ? 'Uang Pas' : `Rp ${val.toLocaleString('id-ID')}`}
                         </button>
                       ))}
                     </div>
@@ -1061,20 +1556,36 @@ export default function POSPage() {
               <div>
                 <DialogTitle className="text-2xl font-bold">Pembayaran Berhasil!</DialogTitle>
                 <p className="text-xs text-muted-foreground mt-1">Order <span className="font-mono font-bold text-foreground">#{orderNumber}</span> telah dicatat ke sistem.</p>
+                {!navigator.onLine && (
+                  <p className="text-[10px] text-amber-500 font-bold mt-2 bg-amber-500/10 py-1 px-2 rounded-md inline-block">
+                    Offline Mode: Disimpan secara lokal
+                  </p>
+                )}
               </div>
 
-              <div className="bg-amber-500/10 border border-amber-500/20 p-3.5 rounded-xl text-left flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-amber-500 text-white rounded-lg text-xs font-bold animate-pulse">
-                    ⏳
+              {isAllQuickFood ? (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 p-3.5 rounded-xl text-left flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-emerald-500 text-white rounded-lg text-xs font-bold">✓</div>
+                    <div>
+                      <p className="text-xs font-bold text-emerald-400">Langsung Serahkan ke Customer</p>
+                      <p className="text-[11px] text-muted-foreground">Pesanan siap, tidak perlu antrean</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs font-bold text-amber-700 dark:text-amber-400">Masuk Antrean Dapur</p>
-                    <p className="text-[11px] text-muted-foreground">Status: Sedang Dibuat (Preparing)</p>
-                  </div>
+                  <span className="text-xs font-semibold text-primary">Rp {total.toLocaleString('id-ID')}</span>
                 </div>
-                <span className="text-xs font-semibold text-primary">Rp {total.toLocaleString('id-ID')}</span>
-              </div>
+              ) : (
+                <div className="bg-amber-500/10 border border-amber-500/20 p-3.5 rounded-xl text-left flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-amber-500 text-white rounded-lg text-xs font-bold animate-pulse">⏳</div>
+                    <div>
+                      <p className="text-xs font-bold text-amber-700 dark:text-amber-400">Masuk Antrean Dapur</p>
+                      <p className="text-[11px] text-muted-foreground">Status: Sedang Dibuat (Preparing)</p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold text-primary">Rp {total.toLocaleString('id-ID')}</span>
+                </div>
+              )}
 
               <div className="flex flex-col sm:flex-row gap-2 pt-2">
                 <Button 

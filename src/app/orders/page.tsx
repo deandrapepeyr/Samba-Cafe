@@ -22,7 +22,9 @@ import {
   Utensils,
   PackageCheck,
   Printer,
-  FileEdit
+  FileEdit,
+  Banknote,
+  Trash2
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
@@ -61,9 +63,13 @@ export default function OrdersPage() {
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [isEditingOrder, setIsEditingOrder] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [editedItems, setEditedItems] = useState<OrderItem[]>([]);
   const [now, setNow] = useState(new Date());
 
   const prevOrderCountRef = useRef<number>(0);
+  const localUpdatesRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     if (!isLoading && !role) {
@@ -167,7 +173,21 @@ export default function OrdersPage() {
       }
       prevOrderCountRef.current = activePreparingCount;
 
-      setOrders(formattedOrders);
+      // Guard: don't overwrite recently locally-updated orders (fixes race condition)
+      setOrders(prev => {
+        const now = Date.now();
+        return formattedOrders.map(order => {
+          const localUpdateTime = localUpdatesRef.current[order.id];
+          if (localUpdateTime && now - localUpdateTime < 10000) {
+            const existingOrder = prev.find(o => o.id === order.id);
+            if (existingOrder) return existingOrder;
+          }
+          if (localUpdateTime && now - localUpdateTime >= 10000) {
+            delete localUpdatesRef.current[order.id];
+          }
+          return order;
+        });
+      });
     } else {
       setOrders([]);
     }
@@ -195,7 +215,7 @@ export default function OrdersPage() {
       // Fallback polling every 5s
       const pollInterval = setInterval(() => {
         fetchOrders(false);
-      }, 5000);
+      }, 30000);
 
       return () => {
         supabase.removeChannel(channel);
@@ -206,6 +226,7 @@ export default function OrdersPage() {
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
     setUpdatingId(orderId);
+    localUpdatesRef.current[orderId] = Date.now();
     
     // Optimistic UI update
     setOrders(prev => prev.map(o => o.id === orderId ? { 
@@ -233,6 +254,56 @@ export default function OrdersPage() {
       }
     }
     setUpdatingId(null);
+  };
+
+  const startEditOrder = () => {
+    if (selectedOrder) {
+      setEditedItems([...selectedOrder.items]);
+      setIsEditingOrder(true);
+    }
+  };
+
+  const handleDeleteOrder = () => {
+    if (!selectedOrder) return;
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteOrder = async () => {
+    if (!selectedOrder) return;
+    setUpdatingId(selectedOrder.id);
+    await supabase.from('transactions').delete().eq('id', selectedOrder.id);
+    fetchOrders(false);
+    setSelectedOrder(null);
+    setUpdatingId(null);
+    setIsDeleteDialogOpen(false);
+  };
+
+  const saveEditedOrder = async () => {
+    if (!selectedOrder) return;
+    setUpdatingId(selectedOrder.id);
+    const finalItems = editedItems.filter(i => i.qty > 0);
+    if (finalItems.length === 0) {
+      alert('Pesanan harus punya minimal 1 item.');
+      setUpdatingId(null);
+      return;
+    }
+    const newTotal = finalItems.reduce((sum, i) => sum + (i.price * i.qty), 0);
+    await supabase.from('transactions').update({ total: newTotal }).eq('id', selectedOrder.id);
+    await supabase.from('transaction_items').delete().eq('transaction_id', selectedOrder.id);
+    await supabase.from('transaction_items').insert(
+      finalItems.map(item => ({
+        transaction_id: selectedOrder.id,
+        product_name: item.name,
+        price: item.price,
+        quantity: item.qty,
+        notes: item.notes || null
+      }))
+    );
+    setSelectedOrder(prev => prev ? { ...prev, items: finalItems, total: newTotal } : null);
+    setIsEditingOrder(false);
+    setUpdatingId(null);
+    localUpdatesRef.current[selectedOrder.id] = Date.now();
+    fetchOrders(false);
   };
 
   const getElapsedTimeText = (order: Order) => {
@@ -289,8 +360,6 @@ export default function OrdersPage() {
   });
 
   const renderOrderCard = (order: Order) => {
-    const displayItems = order.items.slice(0, 2);
-    const remainingItems = order.items.length - 2;
 
     return (
       <div 
@@ -312,9 +381,11 @@ export default function OrdersPage() {
           <div className="flex items-start justify-between gap-2 mb-1">
             <div className="flex flex-col gap-0.5 min-w-0">
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="font-mono font-bold text-sm text-zinc-100">#{order.id}</span>
+                <span className="font-mono font-bold text-sm text-zinc-100">{order.id.startsWith('order_') ? order.id : `order_${order.id}`}</span>
                 <span className={`shrink-0 whitespace-nowrap text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${
-                  order.method === 'QRIS' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                  order.method === 'QRIS' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 
+                  order.method === 'Bayar Nanti' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20 animate-pulse' :
+                  'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                 }`}>
                   {order.method}
                 </span>
@@ -333,15 +404,12 @@ export default function OrdersPage() {
 
           {/* Items Summary */}
           <div className="space-y-1 bg-black/20 p-2 rounded-lg border border-white/5">
-            {displayItems.map((item, idx) => (
+            {order.items.map((item, idx) => (
               <div key={idx} className="flex items-start text-[11px] leading-tight">
                 <span className="text-primary font-bold mr-1.5 shrink-0">{item.qty}x</span>
                 <span className="text-zinc-300 truncate">{item.name}</span>
               </div>
             ))}
-            {remainingItems > 0 && (
-              <p className="text-[10px] text-zinc-500 italic pt-0.5">+{remainingItems} item lainnya...</p>
-            )}
           </div>
 
           {/* Divider */}
@@ -371,8 +439,8 @@ export default function OrdersPage() {
                 >
                   {updatingId === order.id ? <RefreshCw size={12} className="animate-spin" /> : (
                     <>
-                      <Bell size={12} />
-                      Siap
+                      <ChefHat size={12} />
+                      Selesai Masak
                     </>
                   )}
                 </button>
@@ -387,7 +455,7 @@ export default function OrdersPage() {
                   {updatingId === order.id ? <RefreshCw size={12} className="animate-spin" /> : (
                     <>
                       <CheckCircle2 size={12} />
-                      Serahkan
+                      Pesanan Selesai
                     </>
                   )}
                 </button>
@@ -396,7 +464,7 @@ export default function OrdersPage() {
               {order.status === 'completed' && (
                 <button
                   disabled={updatingId === order.id}
-                  onClick={() => updateOrderStatus(order.id, 'ready')}
+                  onClick={() => updateOrderStatus(order.id, 'preparing')}
                   className="h-7 px-2 text-[10px] font-medium text-zinc-500 hover:text-zinc-300 bg-transparent hover:bg-zinc-900 rounded-lg transition-all flex items-center gap-1 shrink-0 whitespace-nowrap"
                 >
                   <RotateCcw size={10} />
@@ -445,9 +513,9 @@ export default function OrdersPage() {
         </div>
 
         {/* Status Counters */}
-        <div className="grid grid-cols-3 gap-3 md:gap-4 shrink-0">
+        <div className="grid grid-cols-2 gap-4 shrink-0">
           <button 
-            className={`group text-left p-3.5 rounded-xl transition-all duration-300 relative overflow-hidden ${
+            className={`group text-left p-4 rounded-2xl transition-all duration-300 relative overflow-hidden ${
               statusFilter === 'preparing' 
                 ? 'bg-amber-500/10 border-amber-500/30 ring-1 ring-amber-500/20 shadow-lg shadow-amber-500/5' 
                 : 'bg-zinc-900/40 border-white/5 hover:bg-zinc-900/60 hover:border-white/10'
@@ -455,31 +523,15 @@ export default function OrdersPage() {
             onClick={() => setStatusFilter(statusFilter === 'preparing' ? 'all' : 'preparing')}
           >
             {statusFilter === 'preparing' && <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 to-transparent" />}
-            <p className="relative text-[10px] font-bold text-zinc-400 uppercase tracking-widest group-hover:text-amber-500/70 transition-colors">Antrean</p>
-            <div className="relative flex items-center justify-between mt-1">
-              <span className={`text-2xl font-black tracking-tighter ${statusFilter === 'preparing' ? 'text-amber-500' : 'text-zinc-100 group-hover:text-amber-500 transition-colors'}`}>{preparingOrders.length}</span>
-              <Utensils size={18} className={statusFilter === 'preparing' ? 'text-amber-500' : 'text-zinc-600 group-hover:text-amber-500/50 transition-colors'} strokeWidth={1.5} />
+            <p className="relative text-xs font-bold text-zinc-400 uppercase tracking-widest group-hover:text-amber-500/70 transition-colors">Pesanan Aktif</p>
+            <div className="relative flex items-center justify-between mt-2">
+              <span className={`text-3xl font-black tracking-tighter ${statusFilter === 'preparing' ? 'text-amber-500' : 'text-zinc-100 group-hover:text-amber-500 transition-colors'}`}>{preparingOrders.length + readyOrders.length}</span>
+              <Utensils size={24} className={statusFilter === 'preparing' ? 'text-amber-500' : 'text-zinc-600 group-hover:text-amber-500/50 transition-colors'} strokeWidth={1.5} />
             </div>
           </button>
 
           <button 
-            className={`group text-left p-3.5 rounded-xl transition-all duration-300 relative overflow-hidden ${
-              statusFilter === 'ready' 
-                ? 'bg-emerald-500/10 border-emerald-500/30 ring-1 ring-emerald-500/20 shadow-lg shadow-emerald-500/5' 
-                : 'bg-zinc-900/40 border-white/5 hover:bg-zinc-900/60 hover:border-white/10'
-            } border backdrop-blur-md`}
-            onClick={() => setStatusFilter(statusFilter === 'ready' ? 'all' : 'ready')}
-          >
-            {statusFilter === 'ready' && <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent" />}
-            <p className="relative text-[10px] font-bold text-zinc-400 uppercase tracking-widest group-hover:text-emerald-500/70 transition-colors">Siap Disajikan</p>
-            <div className="relative flex items-center justify-between mt-1">
-              <span className={`text-2xl font-black tracking-tighter ${statusFilter === 'ready' ? 'text-emerald-500' : 'text-zinc-100 group-hover:text-emerald-500 transition-colors'}`}>{readyOrders.length}</span>
-              <Bell size={18} className={statusFilter === 'ready' ? 'text-emerald-500' : 'text-zinc-600 group-hover:text-emerald-500/50 transition-colors'} strokeWidth={1.5} />
-            </div>
-          </button>
-
-          <button 
-            className={`group text-left p-3.5 rounded-xl transition-all duration-300 relative overflow-hidden ${
+            className={`group text-left p-4 rounded-2xl transition-all duration-300 relative overflow-hidden ${
               statusFilter === 'completed' 
                 ? 'bg-zinc-800 border-zinc-600 ring-1 ring-zinc-500 shadow-lg' 
                 : 'bg-zinc-900/40 border-white/5 hover:bg-zinc-900/60 hover:border-white/10'
@@ -487,10 +539,10 @@ export default function OrdersPage() {
             onClick={() => setStatusFilter(statusFilter === 'completed' ? 'all' : 'completed')}
           >
             {statusFilter === 'completed' && <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent" />}
-            <p className="relative text-[10px] font-bold text-zinc-400 uppercase tracking-widest group-hover:text-zinc-300 transition-colors">Selesai</p>
-            <div className="relative flex items-center justify-between mt-1">
-              <span className={`text-2xl font-black tracking-tighter ${statusFilter === 'completed' ? 'text-zinc-300' : 'text-zinc-100 group-hover:text-zinc-300 transition-colors'}`}>{completedOrders.length}</span>
-              <PackageCheck size={18} className={statusFilter === 'completed' ? 'text-zinc-400' : 'text-zinc-600 group-hover:text-zinc-400 transition-colors'} strokeWidth={1.5} />
+            <p className="relative text-xs font-bold text-zinc-400 uppercase tracking-widest group-hover:text-zinc-300 transition-colors">Selesai</p>
+            <div className="relative flex items-center justify-between mt-2">
+              <span className={`text-3xl font-black tracking-tighter ${statusFilter === 'completed' ? 'text-zinc-300' : 'text-zinc-100 group-hover:text-zinc-300 transition-colors'}`}>{completedOrders.length}</span>
+              <PackageCheck size={24} className={statusFilter === 'completed' ? 'text-zinc-400' : 'text-zinc-600 group-hover:text-zinc-400 transition-colors'} strokeWidth={1.5} />
             </div>
           </button>
         </div>
@@ -527,6 +579,50 @@ export default function OrdersPage() {
           </div>
         </div>
 
+        {/* Antrian Masak Section */}
+        {orders.filter(o => o.status === 'preparing').length > 0 && (
+          <div className="bg-primary/5 border border-primary/20 rounded-2xl p-4 shrink-0 flex flex-col gap-3">
+            <div className="flex items-center gap-2 text-primary">
+              <ChefHat size={16} />
+              <h3 className="font-bold text-sm">Antrian Masak (Sedang Disiapkan)</h3>
+              <span className="text-xs text-primary/70 ml-2">— Klik pesanan untuk Edit (Belum Lunas) atau Selesai (Lunas)</span>
+            </div>
+            <div className="flex overflow-x-auto gap-3 pb-2 snap-x scrollbar-thin scrollbar-thumb-primary/20 scrollbar-track-transparent">
+              {orders.filter(o => o.status === 'preparing').map(order => (
+                <button
+                  key={`cook-${order.id}`}
+                  onClick={() => {
+                    if (order.method === 'Bayar Nanti') {
+                      router.push(`/pos?edit=${order.id}`);
+                    } else {
+                      updateOrderStatus(order.id, 'completed');
+                    }
+                  }}
+                  className={`snap-start shrink-0 bg-zinc-950 border ${order.method === 'Bayar Nanti' ? 'border-amber-500/30 hover:border-amber-500 hover:bg-amber-500/10' : 'border-primary/30 hover:border-primary hover:bg-primary/10'} cursor-pointer hover:-translate-y-0.5 rounded-xl p-3 flex flex-col min-w-[200px] max-w-[250px] text-left transition-all`}
+                >
+                  <div className="flex justify-between items-start mb-2 gap-2">
+                    <span className="text-xs font-mono text-zinc-400">{order.id.startsWith('order_') ? order.id : `order_${order.id}`}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold whitespace-nowrap ${order.method === 'Bayar Nanti' ? 'bg-amber-500/20 text-amber-500' : 'bg-primary/20 text-primary'}`}>
+                      {order.method === 'Bayar Nanti' ? 'Belum Lunas' : 'Lunas'}
+                    </span>
+                  </div>
+                  <span className="font-bold text-zinc-100 truncate w-full mb-1">
+                    {order.customer_name || 'Tanpa Nama'}
+                  </span>
+                  <div className="text-xs text-zinc-400 mt-1 space-y-1">
+                    {order.items.map((i, idx) => (
+                      <div key={idx} className="flex gap-2">
+                        <span className="font-bold text-zinc-300">{i.qty}x</span>
+                        <span className="line-clamp-1">{i.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Main Content View */}
         {isLoadingData ? (
           <div className="py-20 text-center space-y-4">
@@ -534,59 +630,41 @@ export default function OrdersPage() {
             <p className="text-sm text-zinc-500 font-medium">Sinkronisasi data pesanan...</p>
           </div>
         ) : activeTab === 'kanban' ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
             
-            {/* Column 1: Sedang Dibuat */}
-            <div className="flex flex-col bg-black/20 rounded-3xl p-4 lg:p-5 border border-white/5 shadow-inner min-h-[400px]">
-              <div className="flex items-center justify-between px-1 pb-4 mb-4 border-b border-white/10 shrink-0">
-                <div className="flex items-center gap-2.5">
+            {/* Column 1: Pesanan Aktif (Preparing + Ready) */}
+            <div className="flex flex-col bg-zinc-950/50 rounded-3xl p-5 lg:p-6 border border-white/5 shadow-2xl min-h-[500px]">
+              <div className="flex items-center justify-between px-2 pb-5 mb-5 border-b border-white/10 shrink-0">
+                <div className="flex items-center gap-3">
                   <div className="relative flex items-center justify-center w-3 h-3">
                     <span className="absolute w-full h-full rounded-full bg-amber-500 animate-ping opacity-75" />
                     <span className="relative w-2 h-2 rounded-full bg-amber-500" />
                   </div>
-                  <h2 className="font-bold text-sm text-zinc-300 uppercase tracking-widest">Antrean</h2>
+                  <h2 className="font-bold text-base text-zinc-200 tracking-wide">Pesanan Aktif</h2>
                 </div>
-                <span className="text-xs font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-full">{preparingOrders.length}</span>
+                <span className="text-sm font-bold text-amber-500 bg-amber-500/10 px-3 py-1 rounded-full">{preparingOrders.length + readyOrders.length}</span>
               </div>
 
               <div className="space-y-4 pb-4">
-                {preparingOrders.length === 0 ? (
-                  <div className="border border-dashed border-white/10 rounded-2xl p-10 text-center text-zinc-500 text-sm font-medium">
-                    Belum ada antrean masuk
+                {preparingOrders.length === 0 && readyOrders.length === 0 ? (
+                  <div className="border border-dashed border-white/10 rounded-2xl p-12 text-center text-zinc-500 text-sm font-medium">
+                    Belum ada pesanan aktif
                   </div>
                 ) : (
-                  preparingOrders.map(renderOrderCard)
+                  <>
+                    {preparingOrders.map(renderOrderCard)}
+                    {readyOrders.map(renderOrderCard)}
+                  </>
                 )}
               </div>
             </div>
 
-            {/* Column 2: Siap Disajikan */}
-            <div className="flex flex-col bg-black/20 rounded-3xl p-4 lg:p-5 border border-white/5 shadow-inner min-h-[400px]">
-              <div className="flex items-center justify-between px-1 pb-4 mb-4 border-b border-white/10 shrink-0">
-                <div className="flex items-center gap-2.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
-                  <h2 className="font-bold text-sm text-zinc-300 uppercase tracking-widest">Siap Disajikan</h2>
-                </div>
-                <span className="text-xs font-bold text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full">{readyOrders.length}</span>
-              </div>
-
-              <div className="space-y-4 pb-4">
-                {readyOrders.length === 0 ? (
-                  <div className="border border-dashed border-white/10 rounded-2xl p-10 text-center text-zinc-500 text-sm font-medium">
-                    Belum ada pesanan siap saji
-                  </div>
-                ) : (
-                  readyOrders.map(renderOrderCard)
-                )}
-              </div>
-            </div>
-
-            {/* Column 3: Selesai */}
-            <div className="flex flex-col bg-black/20 rounded-3xl p-4 lg:p-5 border border-white/5 shadow-inner min-h-[400px]">
-              <div className="flex items-center justify-between px-1 pb-4 mb-4 border-b border-white/10 shrink-0">
-                <div className="flex items-center gap-2.5">
+            {/* Column 2: Selesai */}
+            <div className="flex flex-col bg-zinc-950/50 rounded-3xl p-5 lg:p-6 border border-white/5 shadow-2xl min-h-[500px]">
+              <div className="flex items-center justify-between px-2 pb-5 mb-5 border-b border-white/10 shrink-0">
+                <div className="flex items-center gap-3">
                   <span className="w-2.5 h-2.5 rounded-full bg-zinc-600" />
-                  <h2 className="font-bold text-sm text-zinc-400 uppercase tracking-widest">Selesai</h2>
+                  <h2 className="font-bold text-base text-zinc-400 tracking-wide">Selesai</h2>
                 </div>
                 <span className="text-xs font-bold text-zinc-400 bg-zinc-800 border border-zinc-700 px-3 py-1 rounded-full">{completedOrders.length}</span>
               </div>
@@ -619,7 +697,7 @@ export default function OrdersPage() {
       </div>
 
       {/* Order Detail & Receipt Dialog */}
-      <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
+      <Dialog open={!!selectedOrder} onOpenChange={() => { setSelectedOrder(null); setIsEditingOrder(false); }}>
         {selectedOrder && (
           <DialogContent className="sm:max-w-[380px] p-0 bg-[#141414] border border-[#2a2a2a] rounded-2xl overflow-hidden shadow-2xl shadow-black/50 print:border-none print:shadow-none print:bg-white print:rounded-none print:max-w-none print:w-full">
             <div className="relative">
@@ -635,7 +713,7 @@ export default function OrdersPage() {
                 <div className="flex items-center justify-between mb-1 print:hidden">
                   <DialogHeader className="space-y-0 p-0">
                     <DialogTitle className="font-mono text-lg font-bold text-white">
-                      #{selectedOrder.id}
+                      {selectedOrder.id.startsWith('order_') ? selectedOrder.id : `order_${selectedOrder.id}`}
                     </DialogTitle>
                   </DialogHeader>
                   <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-full ${
@@ -655,7 +733,7 @@ export default function OrdersPage() {
                 <div id="print-receipt" className="mt-5 bg-[#0a0a0a] rounded-xl border border-[#222] overflow-hidden print:mt-0 print:bg-white print:border-none print:rounded-none">
                   <div className="px-4 py-3 border-b border-dashed border-[#222] text-center print:border-black print:py-4">
                     <p className="font-bold text-sm text-white tracking-wide print:text-black print:text-lg">SAMBA CAFE</p>
-                    <p className="text-[10px] text-[#555] mt-0.5 print:text-black print:text-xs print:mt-1">Order Slip #{selectedOrder.id}</p>
+                    <p className="text-[10px] text-[#555] mt-0.5 print:text-black print:text-xs print:mt-1">Order Slip {selectedOrder.id.startsWith('order_') ? selectedOrder.id : `order_${selectedOrder.id}`}</p>
                     {selectedOrder.customer_name && (
                       <p className="text-[12px] font-bold text-white mt-1 print:text-black print:text-sm">
                         Pelanggan: {selectedOrder.customer_name}
@@ -667,13 +745,39 @@ export default function OrdersPage() {
                   </div>
 
                   <div className="px-4 py-3 space-y-2 print:py-4 print:space-y-3">
-                    {selectedOrder.items.map((item, idx) => (
+                    {(isEditingOrder ? editedItems : selectedOrder.items).map((item, idx) => (
                       <div key={idx}>
-                        <div className="flex justify-between text-[12px] print:text-sm">
-                          <span className="text-[#ccc] print:text-black">{item.qty}× {item.name}</span>
-                          <span className="text-[#666] font-mono print:text-black">Rp {(item.price * item.qty).toLocaleString('id-ID')}</span>
+                        <div className="flex justify-between items-center text-[12px] print:text-sm gap-2">
+                          {isEditingOrder ? (
+                            <>
+                              <span className={`flex-1 truncate ${item.qty === 0 ? 'text-zinc-600 line-through' : 'text-[#ccc]'}`}>{item.name}</span>
+                              <div className="flex items-center gap-2 shrink-0 bg-zinc-900 rounded-lg p-1 border border-white/5">
+                                <button 
+                                  onClick={() => setEditedItems(prev => prev.map((it, i) => i === idx ? { ...it, qty: Math.max(0, it.qty - 1) } : it))} 
+                                  className="w-7 h-7 rounded-md bg-black text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors flex items-center justify-center text-sm font-bold shadow-sm"
+                                >
+                                  −
+                                </button>
+                                <span className={`w-5 text-center font-bold text-xs ${item.qty === 0 ? 'text-zinc-600' : 'text-white'}`}>{item.qty}</span>
+                                <button 
+                                  onClick={() => setEditedItems(prev => prev.map((it, i) => i === idx ? { ...it, qty: it.qty + 1 } : it))} 
+                                  className="w-7 h-7 rounded-md bg-black text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors flex items-center justify-center text-sm font-bold shadow-sm"
+                                >
+                                  +
+                                </button>
+                              </div>
+                              <span className={`w-[60px] text-right font-mono text-[11px] ${item.qty === 0 ? 'text-zinc-600' : 'text-[#666]'}`}>
+                                Rp {(item.price * item.qty).toLocaleString('id-ID')}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-[#ccc] print:text-black">{item.qty}× {item.name}</span>
+                              <span className="text-[#666] font-mono print:text-black">Rp {(item.price * item.qty).toLocaleString('id-ID')}</span>
+                            </>
+                          )}
                         </div>
-                        {item.notes && (
+                        {item.notes && !isEditingOrder && (
                           <p className="text-[11px] text-amber-500/80 italic pl-4 mt-0.5 print:text-gray-600 print:text-xs print:not-italic print:pl-5">
                             Catatan: {item.notes}
                           </p>
@@ -684,7 +788,7 @@ export default function OrdersPage() {
 
                   <div className="px-4 py-3 border-t border-dashed border-[#222] flex justify-between items-center print:border-black print:py-4">
                     <span className="text-[11px] font-semibold text-[#888] uppercase tracking-wider print:text-black print:text-sm">Total</span>
-                    <span className="font-bold text-primary print:text-black print:text-base">Rp {selectedOrder.total.toLocaleString('id-ID')}</span>
+                    <span className="font-bold text-primary print:text-black print:text-base">Rp {(isEditingOrder ? editedItems.filter(i => i.qty > 0).reduce((s, i) => s + i.price * i.qty, 0) : selectedOrder.total).toLocaleString('id-ID')}</span>
                   </div>
 
                   {/* Print-only footer */}
@@ -695,39 +799,122 @@ export default function OrdersPage() {
                 </div>
 
                 {/* Actions — hidden on print */}
-                <div className="flex gap-2 mt-5 print:hidden">
-                  <button
-                    onClick={() => window.print()}
-                    className="flex-1 h-9 text-[11px] font-medium text-[#888] bg-[#1a1a1a] hover:bg-[#222] border border-[#2a2a2a] rounded-lg transition-all flex items-center justify-center gap-1.5"
-                  >
-                    <Printer size={13} />
-                    Cetak
-                  </button>
+                <div className="flex flex-col gap-3 mt-6 print:hidden">
+                  {isEditingOrder ? (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setIsEditingOrder(false)}
+                        className="flex-1 h-11 text-[12px] font-medium text-[#888] bg-[#1a1a1a] hover:bg-[#222] border border-[#2a2a2a] rounded-xl transition-all flex items-center justify-center gap-1.5"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        onClick={saveEditedOrder}
+                        disabled={updatingId === selectedOrder.id}
+                        className="flex-1 h-11 text-[12px] font-bold text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-blue-500/20"
+                      >
+                        {updatingId === selectedOrder.id ? 'Menyimpan...' : '✓ Simpan Perubahan'}
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Secondary Actions (Row) */}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => window.print()}
+                          className="flex-1 flex items-center justify-center gap-2 h-10 text-[11px] font-semibold text-zinc-300 bg-zinc-900 border border-white/10 hover:bg-zinc-800 rounded-xl transition-all"
+                        >
+                          <Printer size={14} /> Cetak Struk
+                        </button>
 
-                  {selectedOrder.status === 'preparing' && (
-                    <button
-                      onClick={() => updateOrderStatus(selectedOrder.id, 'ready')}
-                      className="flex-1 h-9 text-[11px] font-semibold text-black bg-amber-500 hover:bg-amber-400 rounded-lg transition-all flex items-center justify-center gap-1.5"
-                    >
-                      <Bell size={13} />
-                      Tandai Siap
-                    </button>
-                  )}
+                        {selectedOrder.status === 'preparing' && (
+                          <>
+                            <button
+                              onClick={startEditOrder}
+                              className="flex-1 flex items-center justify-center gap-2 h-10 text-[11px] font-semibold text-blue-400 bg-blue-500/10 border border-blue-500/20 hover:bg-blue-500/20 rounded-xl transition-all"
+                            >
+                              <FileEdit size={14} /> Edit
+                            </button>
+                            <button
+                              onClick={handleDeleteOrder}
+                              disabled={updatingId === selectedOrder.id}
+                              className="flex-1 flex items-center justify-center gap-2 h-10 text-[11px] font-semibold text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 rounded-xl transition-all"
+                            >
+                              <Trash2 size={14} /> Hapus
+                            </button>
+                          </>
+                        )}
+                      </div>
 
-                  {selectedOrder.status === 'ready' && (
-                    <button
-                      onClick={() => updateOrderStatus(selectedOrder.id, 'completed')}
-                      className="flex-1 h-9 text-[11px] font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-all flex items-center justify-center gap-1.5"
-                    >
-                      <CheckCircle2 size={13} />
-                      Serahkan
-                    </button>
+                      {/* Primary Actions */}
+                      <div className="flex flex-col gap-2 mt-2">
+                        {selectedOrder.method === 'Bayar Nanti' && (
+                          <button
+                            onClick={async () => {
+                              setUpdatingId(selectedOrder.id);
+                              await supabase.from('transactions').update({ method: 'Cash (Lunas)' }).eq('id', selectedOrder.id);
+                              localUpdatesRef.current[selectedOrder.id] = Date.now();
+                              fetchOrders(false);
+                              setUpdatingId(null);
+                              setSelectedOrder({...selectedOrder, method: 'Cash (Lunas)'});
+                            }}
+                            className="w-full h-12 text-[13px] font-bold text-black bg-amber-500 hover:bg-amber-400 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20"
+                          >
+                            <Banknote size={16} /> Tandai Lunas
+                          </button>
+                        )}
+
+                        {selectedOrder.status === 'preparing' && (
+                          <button
+                            onClick={() => updateOrderStatus(selectedOrder.id, 'ready')}
+                            className="w-full h-12 text-[13px] font-bold text-white bg-primary hover:bg-primary/90 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/20"
+                          >
+                            <ChefHat size={16} /> Selesai Masak
+                          </button>
+                        )}
+
+                        {selectedOrder.status === 'ready' && (
+                          <button
+                            onClick={() => updateOrderStatus(selectedOrder.id, 'completed')}
+                            className="w-full h-12 text-[13px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
+                          >
+                            <CheckCircle2 size={16} /> Pesanan Selesai
+                          </button>
+                        )}
+                      </div>
+                    </>
                   )}
                 </div>
               </div>
             </div>
           </DialogContent>
         )}
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="bg-zinc-950 border-white/10 sm:max-w-md rounded-2xl z-[200]">
+          <DialogHeader>
+            <DialogTitle className="text-xl text-red-500 flex items-center gap-2">
+              <Trash2 size={24} /> Hapus Pesanan
+            </DialogTitle>
+            <DialogDescription className="text-zinc-400 mt-2">
+              Apakah Anda yakin ingin menghapus pesanan <span className="text-zinc-100 font-bold">{selectedOrder?.id?.startsWith('order_') ? selectedOrder.id : `order_${selectedOrder?.id}`}</span> secara permanen?
+              <br/><br/>
+              <span className="text-amber-500 font-medium">Perhatian:</span> Stok bahan yang sudah terpotong tidak akan dikembalikan otomatis.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="pt-4 mt-2 border-t border-white/5 gap-2 sm:gap-0">
+            <Button variant="outline" className="border-white/10 hover:bg-white/5 rounded-xl text-zinc-300" onClick={() => setIsDeleteDialogOpen(false)}>Batal</Button>
+            <Button 
+              className="bg-red-500 text-white hover:bg-red-600 rounded-xl shadow-lg shadow-red-500/20"
+              onClick={confirmDeleteOrder}
+              disabled={updatingId === selectedOrder?.id}
+            >
+              {updatingId === selectedOrder?.id ? 'Menghapus...' : 'Ya, Hapus'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
     </MainLayout>
   );
