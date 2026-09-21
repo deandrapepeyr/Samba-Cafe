@@ -291,8 +291,8 @@ export default function DashboardPage() {
               <p className="text-[#666] text-sm mt-1">{dateStr}</p>
             </div>
 
-            {/* Top Metrics - 4 Columns */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+            {/* Top Metrics - 5 Columns */}
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 lg:gap-6">
               
               {/* Pendapatan Cafe */}
               <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-5 hover:bg-zinc-900/60 transition-colors shadow-sm flex flex-col justify-between">
@@ -352,8 +352,25 @@ export default function DashboardPage() {
                 </div>
               </div>
 
+              {/* Laba Kotor */}
+              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-5 hover:bg-zinc-900/60 transition-colors shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h2 className="text-[11px] font-bold text-zinc-400 tracking-widest uppercase">Laba Kotor</h2>
+                    {getDiffNode(todayProfit, yesterdayProfit)}
+                  </div>
+                  <div className="text-3xl font-extrabold text-white tracking-tight mt-1 mb-1.5">Rp {todayProfit.toLocaleString('id-ID')}</div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-white/5">
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-zinc-500 font-bold uppercase">Kemarin</span>
+                    <span className="text-white font-semibold">Rp {yesterdayProfit.toLocaleString('id-ID')}</span>
+                  </div>
+                </div>
+              </div>
+
               {/* Total Omzet Keseluruhan */}
-              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-5 hover:bg-zinc-900/60 transition-colors shadow-sm relative">
+              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-5 hover:bg-zinc-900/60 transition-colors shadow-sm relative flex flex-col justify-between">
                 <div className="flex items-center justify-between mb-2">
                   <h2 className="text-[11px] font-bold text-zinc-400 tracking-widest uppercase">Total Omzet</h2>
                 </div>
