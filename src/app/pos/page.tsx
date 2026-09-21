@@ -1340,40 +1340,40 @@ export default function POSPage() {
 
       {/* Checkout Step Dialog */}
       <Dialog open={checkoutStep !== 'none'} onOpenChange={(open) => !open && setCheckoutStep('none')}>
-        <DialogContent className="bg-card border-border sm:max-w-md">
+        <DialogContent className="bg-card border-border sm:max-w-md max-h-[90vh] overflow-y-auto">
           {checkoutStep === 'method' && (
             <>
               <DialogHeader>
                 <DialogTitle>Select Payment Method</DialogTitle>
                 <DialogDescription>Total Amount: <span className="font-bold text-primary">Rp {total.toLocaleString('id-ID')}</span></DialogDescription>
               </DialogHeader>
-              <div className="grid grid-cols-3 gap-4 py-6">
+              <div className="grid grid-cols-3 gap-3 py-4">
                 <button 
                   onClick={() => setPaymentMethod('QRIS')}
-                  className="p-4 sm:p-6 rounded-2xl bg-background border border-border hover:border-primary flex flex-col items-center justify-center gap-3 transition-all group"
+                  className="p-3 sm:p-4 rounded-2xl bg-background border border-border hover:border-primary flex flex-col items-center justify-center gap-2 transition-all group"
                 >
-                  <div className="p-3 bg-blue-500/10 text-blue-500 rounded-xl group-hover:scale-110 transition-transform">
-                    <QrCode size={28} />
+                  <div className="p-2 sm:p-3 bg-blue-500/10 text-blue-500 rounded-xl group-hover:scale-110 transition-transform">
+                    <QrCode size={24} />
                   </div>
-                  <span className="font-bold text-sm text-center">QRIS</span>
+                  <span className="font-bold text-xs sm:text-sm text-center">QRIS</span>
                 </button>
                 <button 
                   onClick={() => setPaymentMethod('Cash')}
-                  className="p-4 sm:p-6 rounded-2xl bg-background border border-border hover:border-primary flex flex-col items-center justify-center gap-3 transition-all group"
+                  className="p-3 sm:p-4 rounded-2xl bg-background border border-border hover:border-primary flex flex-col items-center justify-center gap-2 transition-all group"
                 >
-                  <div className="p-3 bg-green-500/10 text-green-500 rounded-xl group-hover:scale-110 transition-transform">
-                    <Banknote size={28} />
+                  <div className="p-2 sm:p-3 bg-green-500/10 text-green-500 rounded-xl group-hover:scale-110 transition-transform">
+                    <Banknote size={24} />
                   </div>
-                  <span className="font-bold text-sm text-center">Cash</span>
+                  <span className="font-bold text-xs sm:text-sm text-center">Cash</span>
                 </button>
                 <button 
                   onClick={() => setPaymentMethod('Bayar Nanti')}
-                  className="p-4 sm:p-6 rounded-2xl bg-background border border-border hover:border-amber-500 flex flex-col items-center justify-center gap-3 transition-all group"
+                  className="p-3 sm:p-4 rounded-2xl bg-background border border-border hover:border-amber-500 flex flex-col items-center justify-center gap-2 transition-all group"
                 >
-                  <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl group-hover:scale-110 transition-transform">
-                    <Clock size={28} />
+                  <div className="p-2 sm:p-3 bg-amber-500/10 text-amber-500 rounded-xl group-hover:scale-110 transition-transform">
+                    <Clock size={24} />
                   </div>
-                  <span className="font-bold text-sm text-center">Bayar Nanti</span>
+                  <span className="font-bold text-xs sm:text-sm text-center">Nanti</span>
                 </button>
               </div>
 
