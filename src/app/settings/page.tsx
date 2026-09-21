@@ -162,8 +162,13 @@ export default function SettingsPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [resetPassword, setResetPassword] = useState('');
 
   const handleResetTransactions = async () => {
+    if (resetPassword !== 'samba123') {
+      alert("Password salah! Fitur ini terkunci.");
+      return;
+    }
     setIsResetting(true);
     try {
       // Menghapus semua item transaksi
@@ -1668,7 +1673,10 @@ export default function SettingsPage() {
       </Dialog>
 
       {/* Reset Data Dialog */}
-      <Dialog open={isResetDialogOpen} onOpenChange={setIsResetDialogOpen}>
+      <Dialog open={isResetDialogOpen} onOpenChange={(open) => {
+        setIsResetDialogOpen(open);
+        if (!open) setResetPassword('');
+      }}>
         <DialogContent className="bg-card border-border sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle className="text-destructive">Reset Data Transaksi</DialogTitle>
@@ -1682,12 +1690,19 @@ export default function SettingsPage() {
               <li>Semua item transaksi yang terjual</li>
             </ul>
             <p className="font-medium text-foreground">
-              Tindakan ini tidak dapat dibatalkan.
+              Masukkan password untuk melanjutkan:
             </p>
+            <Input 
+              type="password" 
+              placeholder="Password..." 
+              value={resetPassword}
+              onChange={(e) => setResetPassword(e.target.value)}
+              className="w-full bg-background border-border text-foreground"
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsResetDialogOpen(false)}>Batal</Button>
-            <Button variant="destructive" onClick={handleResetTransactions} disabled={isResetting}>
+            <Button variant="destructive" onClick={handleResetTransactions} disabled={isResetting || !resetPassword}>
               {isResetting ? "Mereset..." : "Ya, Reset Semua Data"}
             </Button>
           </DialogFooter>
