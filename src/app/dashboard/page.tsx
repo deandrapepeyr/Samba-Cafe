@@ -342,7 +342,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Top Metrics - 5 Columns */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 lg:gap-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 lg:gap-6">
               
               {/* Pendapatan Cafe */}
               <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-5 hover:bg-zinc-900/60 transition-colors shadow-sm flex flex-col justify-between">
