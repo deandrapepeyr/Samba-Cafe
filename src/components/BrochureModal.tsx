@@ -35,7 +35,11 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
     window.print();
   };
 
-  const displayCategories = categories.filter(c => c.id !== '1' && products.some(p => p.category_id === c.id));
+  const displayCategories = categories.filter(c => 
+    c.id !== '1' && 
+    c.name.toLowerCase() !== 'ciki snack ring' && 
+    products.some(p => p.category_id === c.id)
+  );
 
   const heroProduct = products.find(p => p.name.toLowerCase().includes('katsu') && p.image_url) || products.find(p => p.image_url);
 
@@ -212,7 +216,7 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
                           {catProducts.map((product) => (
                             <div key={product.id} className="flex flex-col">
                               <div className="flex items-end justify-between font-bold">
-                                <span className={`whitespace-nowrap max-w-[130px] overflow-hidden text-ellipsis ${theme === 'dark' ? 'text-zinc-100' : 'text-[#3e2723]'}`}>{product.name}</span>
+                                <span className={`whitespace-nowrap max-w-[170px] overflow-hidden text-ellipsis ${theme === 'dark' ? 'text-zinc-100' : 'text-[#3e2723]'}`}>{product.name}</span>
                                 <div className="menu-leader"></div>
                                 <span className={`${theme === 'dark' ? 'text-[#ffb300]' : 'text-[#e65100]'}`}>
                                   {product.price / 1000}K
