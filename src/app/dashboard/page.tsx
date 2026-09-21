@@ -293,51 +293,63 @@ export default function DashboardPage() {
 
             {/* Top Metrics - 4 Columns */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-              {/* Omzet */}
-              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-5 hover:bg-zinc-900/60 transition-colors shadow-sm">
-                <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-[11px] font-bold text-zinc-400 tracking-widest uppercase">Omzet Hari Ini</h2>
-                  {getDiffNode(todayOmzet, yesterdayOmzet)}
+              
+              {/* Pendapatan Cafe */}
+              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-5 hover:bg-zinc-900/60 transition-colors shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h2 className="text-[11px] font-bold text-zinc-400 tracking-widest uppercase">Pendapatan Cafe</h2>
+                    {getDiffNode(todaySamba, yesterdaySamba)}
+                  </div>
+                  <div className="text-3xl font-extrabold text-[#38a169] tracking-tight mt-1 mb-1.5">Rp {todaySamba.toLocaleString('id-ID')}</div>
                 </div>
-                <div className="text-3xl font-extrabold text-white tracking-tight mt-1 mb-1.5">Rp {todayOmzet.toLocaleString('id-ID')}</div>
-                <div className="grid grid-cols-2 gap-y-2.5 mt-3 pt-3 border-t border-white/5">
-                  <div className="flex flex-col">
-                    <span className="text-[9px] font-bold text-zinc-500 uppercase">Samba</span>
-                    <span className="text-[11px] font-semibold text-emerald-400">Rp {todaySamba.toLocaleString('id-ID')}</span>
+                <div className="mt-3 pt-3 border-t border-white/5 flex flex-col gap-1">
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-zinc-500 font-bold uppercase">Omzet Kotor</span>
+                    <span className="text-white font-semibold">Rp {todayOmzet.toLocaleString('id-ID')}</span>
                   </div>
-                  <div className="flex flex-col">
-                    <span className="text-[9px] font-bold text-zinc-500 uppercase">Titipan</span>
-                    <span className="text-[11px] font-semibold text-amber-500">Rp {(todayOmzet - todaySamba).toLocaleString('id-ID')}</span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-[9px] font-bold text-zinc-500 uppercase">QRIS</span>
-                    <span className="text-[11px] font-semibold text-zinc-300">Rp {todayQris.toLocaleString('id-ID')}</span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-[9px] font-bold text-zinc-500 uppercase">Tunai</span>
-                    <span className="text-[11px] font-semibold text-zinc-300">Rp {todayCash.toLocaleString('id-ID')}</span>
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-zinc-500 font-bold uppercase">Uang Titipan</span>
+                    <span className="text-amber-500 font-semibold">Rp {(todayOmzet - todaySamba).toLocaleString('id-ID')}</span>
                   </div>
                 </div>
               </div>
 
-              {/* Transaksi */}
-              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-5 hover:bg-zinc-900/60 transition-colors shadow-sm">
-                <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-[11px] font-bold text-zinc-400 tracking-widest uppercase">Transaksi</h2>
-                  {getDiffNode(todayTx, yesterdayTx)}
+              {/* Kas & Bank */}
+              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-5 hover:bg-zinc-900/60 transition-colors shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h2 className="text-[11px] font-bold text-zinc-400 tracking-widest uppercase">Penerimaan Tunai</h2>
+                  </div>
+                  <div className="text-3xl font-extrabold text-white tracking-tight mt-1 mb-1.5">Rp {todayCash.toLocaleString('id-ID')}</div>
                 </div>
-                <div className="text-3xl font-extrabold text-white tracking-tight mt-1 mb-1.5">{todayTx}</div>
-                <p className="text-xs text-zinc-500 font-medium">Kemarin {yesterdayTx} transaksi</p>
+                <div className="mt-3 pt-3 border-t border-white/5">
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-zinc-500 font-bold uppercase">Masuk via QRIS</span>
+                    <span className="text-[#e53e3e] font-bold">Rp {todayQris.toLocaleString('id-ID')}</span>
+                  </div>
+                </div>
               </div>
 
-              {/* Item Terjual */}
-              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-5 hover:bg-zinc-900/60 transition-colors shadow-sm">
-                <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-[11px] font-bold text-zinc-400 tracking-widest uppercase">Item Terjual</h2>
-                  {getDiffNode(todayItems, yesterdayItems)}
+              {/* Statistik Penjualan */}
+              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-5 hover:bg-zinc-900/60 transition-colors shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h2 className="text-[11px] font-bold text-zinc-400 tracking-widest uppercase">Total Transaksi</h2>
+                    {getDiffNode(todayTx, yesterdayTx)}
+                  </div>
+                  <div className="text-3xl font-extrabold text-white tracking-tight mt-1 mb-1.5">{todayTx}</div>
                 </div>
-                <div className="text-3xl font-extrabold text-white tracking-tight mt-1 mb-1.5">{todayItems}</div>
-                <p className="text-xs text-zinc-500 font-medium">Kemarin {yesterdayItems} item</p>
+                <div className="mt-3 pt-3 border-t border-white/5 flex flex-col gap-1">
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-zinc-500 font-bold uppercase">Item Terjual</span>
+                    <span className="text-white font-semibold">{todayItems} pcs</span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-zinc-500 font-bold uppercase">Rata-rata/Trx</span>
+                    <span className="text-white font-semibold">Rp {(todayTx > 0 ? todayOmzet / todayTx : 0).toLocaleString('id-ID', { maximumFractionDigits: 0 })}</span>
+                  </div>
+                </div>
               </div>
 
               {/* Total Omzet Keseluruhan */}
