@@ -46,6 +46,7 @@ export default function RecipesPage() {
   // Dialog State
   const [isAddIngredientOpen, setIsAddIngredientOpen] = useState(false);
   const [newIngredient, setNewIngredient] = useState({ stock_id: '', quantity: '' });
+  const [ingredientSearch, setIngredientSearch] = useState('');
   
   const [isQuickAddStockOpen, setIsQuickAddStockOpen] = useState(false);
   const [newQuickStock, setNewQuickStock] = useState({ name: '', unit: '' });
@@ -448,64 +449,107 @@ export default function RecipesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Add Ingredient Dialog */}
-      <Dialog open={isAddIngredientOpen} onOpenChange={setIsAddIngredientOpen}>
-        <DialogContent className="sm:max-w-[425px] bg-card border-border">
-          <DialogHeader>
-            <DialogTitle>Tambah Bahan Baku</DialogTitle>
-            <DialogDescription className="text-xs">
-              Pilih bahan baku dan tentukan takaran yang dibutuhkan untuk 1 porsi <strong className="text-foreground">{selectedProduct?.name}</strong>.
+      {/* Add Ingredient Dialog (Professional & Touch Friendly) */}
+      <Dialog open={isAddIngredientOpen} onOpenChange={(open) => {
+        setIsAddIngredientOpen(open);
+        if (!open) {
+          setIngredientSearch('');
+          setNewIngredient({ stock_id: '', quantity: '' });
+        }
+      }}>
+        <DialogContent className="sm:max-w-2xl bg-zinc-950 border border-white/10 text-white p-0 overflow-hidden flex flex-col max-h-[85vh]">
+          <DialogHeader className="px-6 py-5 border-b border-white/10 bg-black/40 shrink-0">
+            <DialogTitle className="text-2xl font-bold">Pilih Bahan Baku</DialogTitle>
+            <DialogDescription className="text-zinc-400 text-base mt-1">
+              Untuk menu: <strong className="text-amber-500">{selectedProduct?.name}</strong>
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <div className="flex justify-between items-center">
-                <label className="text-xs font-semibold">Bahan Baku (Stock)</label>
-                <span 
-                  className="text-[10px] text-amber-500 hover:text-amber-400 cursor-pointer hover:underline font-bold"
-                  onClick={() => setIsQuickAddStockOpen(true)}
-                >
-                  + Tambah Bahan Baru
-                </span>
-              </div>
-              <select 
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                value={newIngredient.stock_id}
-                onChange={(e) => setNewIngredient({...newIngredient, stock_id: e.target.value})}
-              >
-                <option value="" disabled>Pilih bahan...</option>
-                {stocks.map(s => (
-                  <option key={s.id} value={s.id}>{s.name} (satuan: {s.unit})</option>
-                ))}
-              </select>
-            </div>
-            <div className="grid gap-2">
-              <label className="text-xs font-semibold">Takaran (Quantity per porsi)</label>
-              <div className="relative">
-                <Input
-                  type="number"
-                  step="0.01"
-                  placeholder="Misal: 15"
-                  value={newIngredient.quantity}
-                  onChange={(e) => setNewIngredient({...newIngredient, quantity: e.target.value})}
-                  className="pr-16"
+          
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Search and Action Bar */}
+            <div className="p-4 border-b border-white/5 bg-zinc-900/50 shrink-0 flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={20} />
+                <Input 
+                  placeholder="Cari nama bahan baku..." 
+                  className="pl-12 h-12 text-base bg-zinc-950 border-white/10 focus-visible:ring-amber-500 rounded-xl w-full"
+                  value={ingredientSearch}
+                  onChange={(e) => setIngredientSearch(e.target.value)}
+                  autoFocus
                 />
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">
-                  {(() => {
-                    const unit = newIngredient.stock_id ? stocks.find(s => s.id === newIngredient.stock_id)?.unit : 'Unit';
-                    return /^\d/.test(unit || '') ? `(${unit})` : unit;
-                  })()}
-                </div>
               </div>
+              <Button 
+                onClick={() => setIsQuickAddStockOpen(true)}
+                className="h-12 px-5 bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 border border-amber-500/20 rounded-xl font-bold whitespace-nowrap w-full sm:w-auto"
+              >
+                <Plus size={20} className="mr-2" />
+                Bahan Baru
+              </Button>
+            </div>
+
+            {/* Scrollable Stock List */}
+            <ScrollArea className="flex-1 min-h-[300px] bg-black/20">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4">
+                {stocks
+                  .filter(s => s.name.toLowerCase().includes(ingredientSearch.toLowerCase()))
+                  .map(s => (
+                  <div 
+                    key={s.id}
+                    onClick={() => setNewIngredient({...newIngredient, stock_id: s.id})}
+                    className={`flex flex-col p-4 rounded-xl border cursor-pointer transition-all ${
+                      newIngredient.stock_id === s.id 
+                        ? 'bg-amber-500/10 border-amber-500/50 ring-2 ring-amber-500/50' 
+                        : 'bg-zinc-900/40 border-white/5 hover:border-white/20 hover:bg-zinc-900'
+                    }`}
+                  >
+                    <div className="font-bold text-lg text-zinc-100 truncate">{s.name}</div>
+                    <div className="text-sm text-zinc-500 mt-1">Satuan: <span className="text-amber-500/80 font-medium">{s.unit}</span></div>
+                  </div>
+                ))}
+                {stocks.filter(s => s.name.toLowerCase().includes(ingredientSearch.toLowerCase())).length === 0 && (
+                  <div className="col-span-full py-12 text-center text-zinc-500">
+                    <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Search className="text-zinc-600" size={24} />
+                    </div>
+                    Bahan tidak ditemukan.<br/>Klik <strong>Bahan Baru</strong> untuk menambahkan.
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+
+            {/* Selected Item Quantity Input */}
+            <div className="p-4 sm:p-6 border-t border-white/10 bg-zinc-900/80 shrink-0">
+              {newIngredient.stock_id ? (
+                <div className="flex flex-col sm:flex-row gap-4 items-end">
+                  <div className="flex-1 w-full">
+                    <label className="text-sm font-semibold text-zinc-300 mb-2 block">
+                      Takaran per Porsi <span className="text-amber-500">({stocks.find(s => s.id === newIngredient.stock_id)?.unit})</span>
+                    </label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="Misal: 1.5"
+                      value={newIngredient.quantity}
+                      onChange={(e) => setNewIngredient({...newIngredient, quantity: e.target.value})}
+                      className="h-14 text-xl font-bold bg-zinc-950 border-white/20 focus-visible:ring-amber-500 rounded-xl w-full"
+                    />
+                  </div>
+                  <Button 
+                    onClick={handleAddIngredient} 
+                    disabled={!newIngredient.quantity || isSaving}
+                    className="h-14 px-10 w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-black font-black text-lg rounded-xl shadow-lg shadow-amber-500/20"
+                  >
+                    {isSaving ? <Loader2 size={24} className="animate-spin mr-2" /> : <Save size={24} className="mr-2" />}
+                    Simpan
+                  </Button>
+                </div>
+              ) : (
+                <div className="h-14 flex items-center justify-center text-zinc-500 italic text-sm">
+                  Pilih bahan baku dari daftar di atas terlebih dahulu
+                </div>
+              )}
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddIngredientOpen(false)}>Batal</Button>
-            <Button onClick={handleAddIngredient} disabled={!newIngredient.stock_id || !newIngredient.quantity || isSaving}>
-              {isSaving ? <Loader2 size={16} className="animate-spin mr-2" /> : <Save size={16} className="mr-2" />}
-              Simpan
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
