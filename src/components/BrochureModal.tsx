@@ -48,15 +48,13 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
       if (containerRef.current) {
         // A5 Landscape width is approx 794px, height is approx 559px
         const containerWidth = containerRef.current.clientWidth - 32; // subtract padding
-        const containerHeight = containerRef.current.clientHeight - 32;
+        
+        // Since we now stack 2 pages vertically, we just want to scale to fit width mainly,
+        // or ensure it fits height if window is super wide and short. 
+        // We'll scale to fit width since user can scroll vertically.
         const targetWidth = 794;
-        const targetHeight = 559;
         
-        const scaleWidth = containerWidth / targetWidth;
-        const scaleHeight = containerHeight / targetHeight;
-        
-        // Take the smaller scale to ensure both width and height fit completely
-        let newScale = Math.min(scaleWidth, scaleHeight);
+        let newScale = containerWidth / targetWidth;
         if (newScale > 1.2) newScale = 1.2; // don't scale up too much on large screens
         
         setScale(newScale);
@@ -79,7 +77,7 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
           <div className="flex items-center gap-4">
             <h2 className="text-xl font-semibold text-white flex items-center gap-2">
               <Printer className="text-primary" size={20} />
-              Brochure Generator (A5)
+              Brochure Generator (A5 - 2 Pages)
             </h2>
           </div>
           <div className="flex items-center gap-3">
@@ -107,14 +105,14 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
         {/* Canvas Container */}
         <div 
           ref={containerRef}
-          className="flex-1 overflow-hidden p-4 sm:p-8 bg-zinc-950 flex items-center justify-center print:p-0 print:bg-transparent print:block print:overflow-visible relative"
+          className="flex-1 overflow-y-auto p-4 sm:p-8 bg-zinc-950 flex flex-col items-center print:p-0 print:bg-transparent print:block print:overflow-visible relative"
         >
           
           <style dangerouslySetInnerHTML={{__html: `
             @media print {
               body * { visibility: hidden; }
               .print-wrapper, .print-wrapper * { visibility: visible; }
-              .print-wrapper { position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; transform: none !important; }
+              .print-wrapper { position: absolute; left: 0; top: 0; width: 100%; transform: none !important; }
               @page { size: A5 landscape; margin: 0; }
               * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             }
@@ -128,95 +126,117 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
             .a5-canvas {
               width: 210mm;
               height: 148mm;
-              transform-origin: center center;
             }
           `}} />
 
-          {/* The A5 Canvas with dynamic scaling */}
+          {/* The Wrapper containing both A5 canvases */}
           <div 
-            className="print-wrapper w-full flex justify-center items-center transition-transform duration-300 ease-out" 
-            style={{ transform: `scale(${scale})` }}
+            className="print-wrapper w-full max-w-[210mm] flex flex-col gap-10 items-center transition-transform duration-300 ease-out pb-20 print:pb-0" 
+            style={{ transform: `scale(${scale})`, transformOrigin: 'top center' }}
           >
+            
+            {/* PAGE 1: COVER & BRANDING */}
             <div 
-              ref={printRef}
               className={`a5-canvas relative shadow-2xl shrink-0 overflow-hidden print:shadow-none ${
                 theme === 'dark' 
                   ? 'bg-[#151515] text-zinc-200' 
                   : 'bg-[#f4ebd0] text-[#3e2723]'
               }`}
               style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gridTemplateRows: '100%',
-                fontFamily: "'Inter', sans-serif"
+                fontFamily: "'Inter', sans-serif",
+                pageBreakAfter: 'always',
+                breakAfter: 'page'
               }}
             >
-              
-              {/* === COLUMN 1: COVER & BRANDING === */}
-              <div className={`p-6 flex flex-col justify-between border-r ${theme === 'dark' ? 'border-[#ffb300]/20 bg-[#0d0d0d]' : 'border-[#4e342e]/10 bg-[#fff8e1]'} relative overflow-hidden`}>
+              <div className={`w-full h-full p-8 flex flex-col justify-center items-center border-x-[12px] ${theme === 'dark' ? 'border-[#ffb300]/20 bg-[#0d0d0d]' : 'border-[#4e342e]/10 bg-[#fff8e1]'} relative overflow-hidden`}>
                 
                 {/* Decorative border top/bottom */}
-                <div className={`absolute top-0 left-0 w-full h-2 ${theme === 'dark' ? 'bg-[#ffb300]' : 'bg-[#e65100]'}`}></div>
-                <div className={`absolute bottom-0 left-0 w-full h-2 ${theme === 'dark' ? 'bg-[#ffb300]' : 'bg-[#e65100]'}`}></div>
+                <div className={`absolute top-0 left-0 w-full h-3 ${theme === 'dark' ? 'bg-[#ffb300]' : 'bg-[#e65100]'}`}></div>
+                <div className={`absolute bottom-0 left-0 w-full h-3 ${theme === 'dark' ? 'bg-[#ffb300]' : 'bg-[#e65100]'}`}></div>
 
                 <div className="text-center mt-6 relative z-10">
-                  <div className={`inline-block p-3 rounded-full mb-4 shadow-xl border-2 ${theme === 'dark' ? 'bg-[#1a1a1a] border-[#ffb300]/20' : 'bg-white border-[#e65100]/20'}`}>
-                    <Utensils size={40} className={theme === 'dark' ? 'text-[#ffb300]' : 'text-[#e65100]'} />
+                  <div className={`inline-flex p-4 rounded-full mb-6 shadow-xl border-4 ${theme === 'dark' ? 'bg-[#1a1a1a] border-[#ffb300]/20' : 'bg-white border-[#e65100]/20'}`}>
+                    <Utensils size={56} className={theme === 'dark' ? 'text-[#ffb300]' : 'text-[#e65100]'} />
                   </div>
-                  <h1 className="text-4xl font-black tracking-tighter mb-2 leading-none">
+                  <h1 className="text-6xl font-black tracking-tighter mb-4 leading-none">
                     SAMBA <br/><span className={theme === 'dark' ? 'text-[#ffb300] italic font-serif' : 'text-[#e65100] italic font-serif'}>CAFE</span>
                   </h1>
-                  <p className={`text-xs uppercase tracking-[0.25em] font-bold ${theme === 'dark' ? 'text-zinc-500' : 'text-[#5d4037]'}`}>
+                  <p className={`text-sm uppercase tracking-[0.4em] font-bold ${theme === 'dark' ? 'text-zinc-500' : 'text-[#5d4037]'}`}>
                     Premium Taste
                   </p>
                 </div>
 
                 {heroProduct?.image_url && (
-                  <div className={`w-32 h-32 mx-auto rounded-full overflow-hidden border-4 relative shadow-2xl z-10 ${theme === 'dark' ? 'border-[#ffb300]' : 'border-[#e65100]'}`}>
+                  <div className={`w-40 h-40 mx-auto rounded-full overflow-hidden border-[6px] relative shadow-2xl z-10 my-6 ${theme === 'dark' ? 'border-[#ffb300]' : 'border-[#e65100]'}`}>
                     <img src={heroProduct.image_url} alt="Signature" className="w-full h-full object-cover scale-110" />
                   </div>
                 )}
 
-                <div className="text-center mb-4 relative z-10">
-                  <h3 className={`font-black mb-2 text-sm uppercase tracking-widest ${theme === 'dark' ? 'text-[#ffb300]' : 'text-[#e65100]'}`}>Lokasi Kami</h3>
-                  <p className={`text-[10px] leading-relaxed font-medium ${theme === 'dark' ? 'text-zinc-400' : 'text-[#5d4037]'}`}>
+                {(() => {
+                  const galleryItems = products.filter(p => displayCategories.some(c => c.id === p.category_id) && p.image_url).slice(0, 8);
+                  if (galleryItems.length === 0) return null;
+                  return (
+                    <div className="flex flex-wrap gap-3 justify-center items-center my-4 z-10 w-full max-w-xl">
+                      {galleryItems.map(p => (
+                        <div key={p.id} className={`shrink-0 w-16 h-16 rounded-full overflow-hidden shadow-lg border-2 ${theme === 'dark' ? 'border-[#2a2a2a] shadow-black/50' : 'border-white shadow-[#4e342e]/10'}`}>
+                          <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+
+                <div className="text-center mt-auto mb-2 relative z-10">
+                  <h3 className={`font-black mb-3 text-base uppercase tracking-widest ${theme === 'dark' ? 'text-[#ffb300]' : 'text-[#e65100]'}`}>Lokasi Kami</h3>
+                  <p className={`text-xs leading-relaxed font-bold ${theme === 'dark' ? 'text-zinc-400' : 'text-[#5d4037]'}`}>
                     Jl. Samba No. 123, Kota Bahagia<br/>
-                    Telp. 0812-3456-7890<br/>
-                    @sambacafe_id
+                    Telp. 0812-3456-7890 &nbsp; | &nbsp; @sambacafe_id
                   </p>
                 </div>
               </div>
+            </div>
 
-              {/* === COLUMN 2 & 3: DYNAMIC MENU ITEMS === */}
-              <div 
-                className="p-4 sm:p-6 relative flex flex-col overflow-hidden"
-                style={{ gridColumn: 'span 2 / span 2' }}
-              >
-                <div className={`absolute top-0 left-0 w-full h-2 ${theme === 'dark' ? 'bg-[#222]' : 'bg-[#d7ccc8]'}`}></div>
-                <div className={`absolute bottom-0 left-0 w-full h-2 ${theme === 'dark' ? 'bg-[#222]' : 'bg-[#d7ccc8]'}`}></div>
+            {/* PAGE 2: MENU LIST */}
+            <div 
+              className={`a5-canvas relative shadow-2xl shrink-0 overflow-hidden print:shadow-none ${
+                theme === 'dark' 
+                  ? 'bg-[#151515] text-zinc-200' 
+                  : 'bg-[#f4ebd0] text-[#3e2723]'
+              }`}
+              style={{
+                fontFamily: "'Inter', sans-serif"
+              }}
+            >
+              <div className="w-full h-full p-6 sm:p-8 relative flex flex-col overflow-hidden">
+                <div className={`absolute top-0 left-0 w-full h-3 ${theme === 'dark' ? 'bg-[#222]' : 'bg-[#d7ccc8]'}`}></div>
+                <div className={`absolute bottom-0 left-0 w-full h-3 ${theme === 'dark' ? 'bg-[#222]' : 'bg-[#d7ccc8]'}`}></div>
+
+                <div className="text-center mb-6 mt-1">
+                   <h2 className={`text-2xl font-black uppercase tracking-[0.2em] ${theme === 'dark' ? 'text-[#ffb300]' : 'text-[#e65100]'}`}>Daftar Menu</h2>
+                </div>
 
                 <div 
                   className="flex-1 w-full" 
                   style={{ 
-                    columnCount: 2, 
-                    columnGap: '3rem',
+                    columnCount: 3, 
+                    columnGap: '2.5rem',
                     columnRule: `1px solid ${theme === 'dark' ? 'rgba(255, 179, 0, 0.2)' : 'rgba(78, 52, 46, 0.1)'}`
                   }}
                 >
                   {displayCategories.map(cat => {
-                    const catProducts = products.filter(p => p.category_id === cat.id).slice(0, 15);
+                    const catProducts = products.filter(p => p.category_id === cat.id).slice(0, 25);
                     return (
-                      <div key={cat.id} className="flex flex-col mb-2" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
-                        <div className={`inline-block py-0.5 px-2 rounded-full mb-1 self-start border ${theme === 'dark' ? 'border-[#ffb300] text-[#ffb300]' : 'border-[#e65100] text-[#e65100] bg-white'}`}>
-                          <h2 className="text-[9px] font-black uppercase tracking-widest">
+                      <div key={cat.id} className="flex flex-col mb-5" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
+                        <div className={`inline-block py-1 px-3 rounded-full mb-2 self-start border ${theme === 'dark' ? 'border-[#ffb300] text-[#ffb300]' : 'border-[#e65100] text-[#e65100] bg-white'}`}>
+                          <h2 className="text-[11px] font-black uppercase tracking-widest">
                             {cat.name}
                           </h2>
                         </div>
-                        <div className="space-y-0.5 text-[8.5px]">
+                        <div className="space-y-1.5 text-[11px]">
                           {catProducts.map((product) => (
                             <div key={product.id} className="flex flex-col">
                               <div className="flex items-end justify-between font-bold">
-                                <span className={`whitespace-nowrap max-w-[170px] overflow-hidden text-ellipsis ${theme === 'dark' ? 'text-zinc-100' : 'text-[#3e2723]'}`}>{product.name}</span>
+                                <span className={`whitespace-nowrap max-w-[150px] overflow-hidden text-ellipsis ${theme === 'dark' ? 'text-zinc-100' : 'text-[#3e2723]'}`}>{product.name}</span>
                                 <div className="menu-leader"></div>
                                 <span className={`${theme === 'dark' ? 'text-[#ffb300]' : 'text-[#e65100]'}`}>
                                   {product.price / 1000}K
@@ -230,48 +250,12 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
                   })}
                 </div>
 
-                {(() => {
-                  const galleryItems = products.filter(p => displayCategories.some(c => c.id === p.category_id) && p.image_url).slice(0, 6);
-                  if (galleryItems.length === 0) return null;
-                  
-                  const half = Math.ceil(galleryItems.length / 2);
-                  const leftItems = galleryItems.slice(0, half);
-                  const rightItems = galleryItems.slice(half);
-
-                  return (
-                    <div className="mt-4 pt-3 relative" style={{ breakInside: 'avoid', borderTop: `1px dashed ${theme === 'dark' ? 'rgba(255, 179, 0, 0.2)' : 'rgba(78, 52, 46, 0.2)'}` }}>
-                      <div className="grid grid-cols-2 gap-[3rem] relative">
-                        <div 
-                          className="absolute top-0 bottom-0 left-1/2 w-[1px] -translate-x-1/2" 
-                          style={{ backgroundColor: theme === 'dark' ? 'rgba(255, 179, 0, 0.2)' : 'rgba(78, 52, 46, 0.1)' }}
-                        />
-                        
-                        <div className="flex flex-nowrap gap-2 justify-center items-center px-1">
-                          {leftItems.map(p => (
-                            <div key={p.id} className={`shrink-0 w-[55px] h-[55px] rounded-full overflow-hidden shadow-lg border-2 ${theme === 'dark' ? 'border-[#2a2a2a] shadow-black/50' : 'border-white shadow-[#4e342e]/10'}`}>
-                              <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
-                            </div>
-                          ))}
-                        </div>
-
-                        <div className="flex flex-nowrap gap-2 justify-center items-center px-1">
-                          {rightItems.map(p => (
-                            <div key={p.id} className={`shrink-0 w-[55px] h-[55px] rounded-full overflow-hidden shadow-lg border-2 ${theme === 'dark' ? 'border-[#2a2a2a] shadow-black/50' : 'border-white shadow-[#4e342e]/10'}`}>
-                              <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                <div className={`mt-3 mb-1 text-center text-[9px] font-bold tracking-widest uppercase ${theme === 'dark' ? 'text-zinc-600' : 'text-[#8d6e63]'}`}>
+                <div className={`mt-4 mb-0 text-center text-[10px] font-bold tracking-widest uppercase ${theme === 'dark' ? 'text-zinc-600' : 'text-[#8d6e63]'}`}>
                   Terima Kasih Atas Kunjungan Anda!
                 </div>
               </div>
-
             </div>
+
           </div>
         </div>
       </DialogContent>
