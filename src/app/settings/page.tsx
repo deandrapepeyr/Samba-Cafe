@@ -84,6 +84,8 @@ export default function SettingsPage() {
   const [categories, setCategories] = useState<any[]>([]);
   const [stocks, setStocks] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+  const [broadcastMessage, setBroadcastMessage] = useState('');
+  const [isUpdatingBroadcast, setIsUpdatingBroadcast] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
 
   useEffect(() => {
@@ -92,11 +94,12 @@ export default function SettingsPage() {
 
   const fetchData = async () => {
     setIsLoadingData(true);
-    const [categoriesRes, productsRes, stocksRes, usersRes] = await Promise.all([
+    const [categoriesRes, productsRes, stocksRes, usersRes, broadcastRes] = await Promise.all([
       supabase.from('categories').select('*'),
       supabase.from('products').select('*'),
       supabase.from('stocks').select('*'),
-      supabase.from('users').select('*')
+      supabase.from('users').select('*'),
+      supabase.from('settings').select('value').eq('key', 'broadcast_message').single()
     ]);
     if (categoriesRes.error) console.error("Error fetching categories:", categoriesRes.error);
     if (productsRes.error) console.error("Error fetching products:", productsRes.error);
@@ -107,6 +110,7 @@ export default function SettingsPage() {
     }
     if (stocksRes.data) setStocks(stocksRes.data);
     if (usersRes.data) setUsers(usersRes.data);
+    if (broadcastRes.data) setBroadcastMessage(broadcastRes.data.value);
     setIsLoadingData(false);
   };
   
@@ -995,7 +999,48 @@ export default function SettingsPage() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="system" className="m-0 border-none p-0 outline-none">
+            <TabsContent value="system" className="m-0 border-none p-0 outline-none space-y-6">
+              
+              {/* Broadcast Settings */}
+              <Card className="bg-card border-border">
+                <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6">
+                  <div>
+                    <CardTitle className="text-xl">Pengaturan Broadcast</CardTitle>
+                    <CardDescription>Atur pesan berjalan (marquee) yang tampil di semua layar kasir dan dashboard.</CardDescription>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-col gap-3">
+                    <label className="text-sm font-medium text-zinc-300">Pesan Pengumuman</label>
+                    <div className="flex gap-3">
+                      <Input
+                        placeholder="Contoh: Promo diskon 20% khusus hari ini!"
+                        value={broadcastMessage}
+                        onChange={(e) => setBroadcastMessage(e.target.value)}
+                        className="bg-zinc-900/50 border-white/10 text-zinc-100 flex-1 h-11"
+                      />
+                      <Button 
+                        disabled={isUpdatingBroadcast}
+                        onClick={async () => {
+                          setIsUpdatingBroadcast(true);
+                          const { error } = await supabase
+                            .from('settings')
+                            .upsert({ key: 'broadcast_message', value: broadcastMessage });
+                          if (error) alert("Gagal update pesan: " + error.message);
+                          else alert("Pesan berhasil diupdate dan disiarkan!");
+                          setIsUpdatingBroadcast(false);
+                        }}
+                        className="bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-6"
+                      >
+                        {isUpdatingBroadcast ? 'Loading...' : 'Siarkan'}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">Kosongkan dan klik "Siarkan" jika ingin menghilangkan pengumuman.</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Danger Zone */}
               <Card className="bg-card border-border border-red-500/20">
                 <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6">
                   <div>

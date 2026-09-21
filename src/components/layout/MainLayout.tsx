@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { BroadcastMarquee } from '@/components/ui/BroadcastMarquee';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -259,6 +260,8 @@ export function MainLayout({ children, onLogoutClick, onLoginClick, title, heade
           </div>
           {headerAction && <div>{headerAction}</div>}
         </header>
+
+        <BroadcastMarquee />
 
         {/* Main Content Area */}
         <div className="flex-1 overflow-y-auto pb-16 md:pb-0 flex flex-col">
