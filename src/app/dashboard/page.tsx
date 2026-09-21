@@ -39,6 +39,10 @@ export default function DashboardPage() {
   const [cashCount, setCashCount] = useState(0);
   const [qrisTotal, setQrisTotal] = useState(0);
   const [cashTotal, setCashTotal] = useState(0);
+  const [sambaQrisTotal, setSambaQrisTotal] = useState(0);
+  const [sambaCashTotal, setSambaCashTotal] = useState(0);
+  const [titipanQrisTotal, setTitipanQrisTotal] = useState(0);
+  const [titipanCashTotal, setTitipanCashTotal] = useState(0);
   
   const [topProducts, setTopProducts] = useState<any[]>([]);
   const [lowStocks, setLowStocks] = useState<any[]>([]);
@@ -111,6 +115,8 @@ export default function DashboardPage() {
 
         let qCount = 0, cCount = 0;
         let qTotal = 0, cTotal = 0;
+        let sQTotal = 0, sCTotal = 0;
+        let tQTotal = 0, tCTotal = 0;
         const productsMap: Record<string, { qty: number, rev: number }> = {};
         const dailyOmzetMap: Record<string, number> = {};
 
@@ -131,22 +137,10 @@ export default function DashboardPage() {
           const isYesterday = txDate >= yesterdayStart && txDate < todayStart;
           
           if (tx.status !== 'cancelled') {
-             if (tx.method === 'QRIS') {
-               qCount++;
-               qTotal += tx.total;
-             }
-             if (tx.method && tx.method.includes('Cash')) {
-               cCount++;
-               cTotal += tx.total;
-             }
-
-             if (dailyOmzetMap[txDateKey] !== undefined) {
-                dailyOmzetMap[txDateKey] += tx.total;
-             }
-             
              let txItemCount = 0;
              let txProfit = 0;
              let txSamba = 0;
+             let txTitipan = 0;
 
              tx.transaction_items?.forEach((item: any) => {
                txItemCount += item.quantity;
@@ -154,6 +148,8 @@ export default function DashboardPage() {
                
                if (!titipanNames.has(item.product_name)) {
                  txSamba += item.price * item.quantity;
+               } else {
+                 txTitipan += item.price * item.quantity;
                }
                
                if (!productsMap[item.product_name]) productsMap[item.product_name] = { qty: 0, rev: 0 };
@@ -161,6 +157,23 @@ export default function DashboardPage() {
                productsMap[item.product_name].rev += (item.price * item.quantity);
              });
 
+             if (tx.method === 'QRIS') {
+               qCount++;
+               qTotal += tx.total;
+               sQTotal += txSamba;
+               tQTotal += txTitipan;
+             }
+             if (tx.method && tx.method.includes('Cash')) {
+               cCount++;
+               cTotal += tx.total;
+               sCTotal += txSamba;
+               tCTotal += txTitipan;
+             }
+
+             if (dailyOmzetMap[txDateKey] !== undefined) {
+                dailyOmzetMap[txDateKey] += tx.total;
+             }
+             
              if (isToday) {
                tOmzet += tx.total;
                tTx++;
@@ -192,6 +205,8 @@ export default function DashboardPage() {
         
         setQrisCount(qCount); setCashCount(cCount);
         setQrisTotal(qTotal); setCashTotal(cTotal);
+        setSambaQrisTotal(sQTotal); setSambaCashTotal(sCTotal);
+        setTitipanQrisTotal(tQTotal); setTitipanCashTotal(tCTotal);
         setRecentTransactions(recentTxs);
 
         const sortedProducts = Object.entries(productsMap)
@@ -374,9 +389,13 @@ export default function DashboardPage() {
                 
                 <div className="space-y-6">
                   <div>
-                    <div className="flex justify-between text-[13px] font-bold mb-2 text-white">
-                      <span>Tunai</span>
-                      <span className="text-zinc-400">Rp {cashTotal.toLocaleString('id-ID')} ({cashCount} trx)</span>
+                    <div className="flex justify-between text-[13px] font-bold mb-1 text-white">
+                      <span>Tunai <span className="text-zinc-500 font-normal ml-1">({cashCount} trx)</span></span>
+                      <span className="text-zinc-300">Rp {cashTotal.toLocaleString('id-ID')}</span>
+                    </div>
+                    <div className="flex justify-between text-[10px] font-medium text-zinc-500 mb-2">
+                      <span>Cafe: <span className="text-[#38a169]">Rp {sambaCashTotal.toLocaleString('id-ID')}</span></span>
+                      <span>Titipan: <span className="text-amber-500">Rp {titipanCashTotal.toLocaleString('id-ID')}</span></span>
                     </div>
                     <div className="h-2.5 w-full bg-zinc-800 rounded-full overflow-hidden">
                       <div className="h-full bg-[#38a169] rounded-full transition-all duration-1000" style={{ width: `${cashPercent}%` }} />
@@ -384,9 +403,13 @@ export default function DashboardPage() {
                   </div>
                   
                   <div>
-                    <div className="flex justify-between text-[13px] font-bold mb-2 text-white">
-                      <span>QRIS</span>
-                      <span className="text-zinc-400">Rp {qrisTotal.toLocaleString('id-ID')} ({qrisCount} trx)</span>
+                    <div className="flex justify-between text-[13px] font-bold mb-1 text-white">
+                      <span>QRIS <span className="text-zinc-500 font-normal ml-1">({qrisCount} trx)</span></span>
+                      <span className="text-zinc-300">Rp {qrisTotal.toLocaleString('id-ID')}</span>
+                    </div>
+                    <div className="flex justify-between text-[10px] font-medium text-zinc-500 mb-2">
+                      <span>Cafe: <span className="text-[#e53e3e]">Rp {sambaQrisTotal.toLocaleString('id-ID')}</span></span>
+                      <span>Titipan: <span className="text-amber-500">Rp {titipanQrisTotal.toLocaleString('id-ID')}</span></span>
                     </div>
                     <div className="h-2.5 w-full bg-zinc-800 rounded-full overflow-hidden">
                       <div className="h-full bg-[#e53e3e] rounded-full transition-all duration-1000" style={{ width: `${qrisPercent}%` }} />
