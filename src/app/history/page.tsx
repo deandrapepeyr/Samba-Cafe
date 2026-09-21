@@ -184,7 +184,7 @@ export default function HistoryPage() {
   const filteredShifts = shifts.filter(shift => {
     const d = new Date(shift.start_time);
     const shiftDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const isShiftActiveToday = shift.status === 'active' && dateFilter.mode === 'date' && dateFilter.date && shiftDate === todayStr;
+    const isShiftActiveToday = Boolean(shift.status === 'active' && dateFilter.mode === 'date' && dateFilter.date && shiftDate === todayStr);
     
     let matchesDate = true;
     if (dateFilter.mode === 'date' && dateFilter.date) {
