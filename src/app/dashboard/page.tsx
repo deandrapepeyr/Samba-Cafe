@@ -418,10 +418,7 @@ export default function DashboardPage() {
                       <span>Tunai <span className="text-zinc-500 font-normal ml-1">({cashCount} trx)</span></span>
                       <span className="text-zinc-300">Rp {cashTotal.toLocaleString('id-ID')}</span>
                     </div>
-                    <div className="flex justify-between text-[10px] font-medium text-zinc-500 mb-2">
-                      <span>Cafe: <span className="text-[#38a169]">Rp {sambaCashTotal.toLocaleString('id-ID')}</span></span>
-                      <span>Titipan: <span className="text-amber-500">Rp {titipanCashTotal.toLocaleString('id-ID')}</span></span>
-                    </div>
+
                     <div className="h-2.5 w-full bg-zinc-800 rounded-full overflow-hidden">
                       <div className="h-full bg-[#38a169] rounded-full transition-all duration-1000" style={{ width: `${cashPercent}%` }} />
                     </div>
@@ -432,10 +429,7 @@ export default function DashboardPage() {
                       <span>QRIS <span className="text-zinc-500 font-normal ml-1">({qrisCount} trx)</span></span>
                       <span className="text-zinc-300">Rp {qrisTotal.toLocaleString('id-ID')}</span>
                     </div>
-                    <div className="flex justify-between text-[10px] font-medium text-zinc-500 mb-2">
-                      <span>Cafe: <span className="text-[#e53e3e]">Rp {sambaQrisTotal.toLocaleString('id-ID')}</span></span>
-                      <span>Titipan: <span className="text-amber-500">Rp {titipanQrisTotal.toLocaleString('id-ID')}</span></span>
-                    </div>
+
                     <div className="h-2.5 w-full bg-zinc-800 rounded-full overflow-hidden">
                       <div className="h-full bg-[#e53e3e] rounded-full transition-all duration-1000" style={{ width: `${qrisPercent}%` }} />
                     </div>
