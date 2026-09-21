@@ -37,6 +37,8 @@ export function MainLayout({ children, onLogoutClick, onLoginClick, title, heade
       if (offlineQueue.length === 0) return;
 
       console.log(`Attempting to sync ${offlineQueue.length} offline transactions...`);
+      let successCount = 0;
+      const newQueue = [];
       
       try {
         for (const item of offlineQueue) {
@@ -44,17 +46,35 @@ export function MainLayout({ children, onLogoutClick, onLoginClick, title, heade
           
           // Retry pushing to supabase
           const { error: txError } = await supabase.from('transactions').insert([transaction]);
-          if (txError) throw txError;
+          
+          if (txError) {
+             // If transaction already exists (23505) or foreign key fails, we can't do much. Skip it.
+             if (txError.code === '23505' || txError.code === '23503') {
+                console.warn("Skipping bad/duplicate offline transaction:", transaction.id);
+                continue;
+             }
+             throw txError;
+          }
           
           const { error: itemsError } = await supabase.from('transaction_items').insert(itemsToInsert);
-          if (itemsError) throw itemsError;
+          if (itemsError) {
+             if (itemsError.code === '23503' || itemsError.code === '23505') {
+                 console.warn("Skipping bad items for transaction:", transaction.id);
+                 continue;
+             }
+             throw itemsError;
+          }
+          successCount++;
         }
         
-        // If all succeeded, clear the queue
+        // If all succeeded (or skipped), clear the queue
         localStorage.removeItem('offline_transactions');
-        alert("✅ Sinkronisasi Berhasil: Data transaksi offline telah dikirim ke server.");
+        if (successCount > 0) {
+           alert(`✅ Sinkronisasi Berhasil: ${successCount} data transaksi offline telah dikirim ke server.`);
+           window.dispatchEvent(new CustomEvent('refresh-dashboard'));
+        }
       } catch (error) {
-        console.error("Sync failed, will keep in queue:", error);
+        console.error("Sync failed for some items, keeping them in queue:", error);
       }
     };
 
@@ -72,8 +92,11 @@ export function MainLayout({ children, onLogoutClick, onLoginClick, title, heade
     window.addEventListener('offline', handleOffline);
     
     // Also try syncing right away if already online on mount
+    // Delay slightly to allow auth session to initialize
     if (navigator.onLine) {
-      syncOfflineQueue();
+      setTimeout(() => {
+        syncOfflineQueue();
+      }, 3000);
     }
 
     return () => {
