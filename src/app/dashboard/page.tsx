@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Loader2 } from 'lucide-react';
+import { DateFilter, DateFilterValue } from '@/components/ui/DateFilter';
 
 export default function DashboardPage() {
   const { role } = useAuth();
@@ -22,14 +23,62 @@ export default function DashboardPage() {
   
   const [todayProfit, setTodayProfit] = useState(0);
   const [yesterdayProfit, setYesterdayProfit] = useState(0);
+  const [todaySamba, setTodaySamba] = useState(0);
+  const [yesterdaySamba, setYesterdaySamba] = useState(0);
+  
+  const [totalOmzetValue, setTotalOmzetValue] = useState(0);
+  const [omzetFilter, setOmzetFilter] = useState<DateFilterValue>({
+    mode: 'month',
+    month: new Date().getMonth(),
+    year: new Date().getFullYear()
+  });
+  const [isFetchingTotalOmzet, setIsFetchingTotalOmzet] = useState(false);
   
   const [chartData, setChartData] = useState<any[]>([]);
   const [qrisCount, setQrisCount] = useState(0);
   const [cashCount, setCashCount] = useState(0);
+  const [qrisTotal, setQrisTotal] = useState(0);
+  const [cashTotal, setCashTotal] = useState(0);
   
   const [topProducts, setTopProducts] = useState<any[]>([]);
   const [lowStocks, setLowStocks] = useState<any[]>([]);
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
+
+
+
+  useEffect(() => {
+    const fetchTotalOmzet = async () => {
+      if (!role) return;
+      setIsFetchingTotalOmzet(true);
+      
+      let query = supabase.from('transactions').select('total').neq('status', 'cancelled');
+      
+      if (omzetFilter.mode === 'month') {
+        const start = new Date(omzetFilter.year || new Date().getFullYear(), omzetFilter.month || 0, 1);
+        const end = new Date(omzetFilter.year || new Date().getFullYear(), (omzetFilter.month || 0) + 1, 1);
+        query = query.gte('created_at', start.toISOString()).lt('created_at', end.toISOString());
+      } else if (omzetFilter.mode === 'year') {
+        const start = new Date(omzetFilter.year || new Date().getFullYear(), 0, 1);
+        const end = new Date((omzetFilter.year || new Date().getFullYear()) + 1, 0, 1);
+        query = query.gte('created_at', start.toISOString()).lt('created_at', end.toISOString());
+      } else if (omzetFilter.mode === 'date' && omzetFilter.date) {
+        const start = new Date(omzetFilter.date);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(omzetFilter.date);
+        end.setHours(23, 59, 59, 999);
+        query = query.gte('created_at', start.toISOString()).lte('created_at', end.toISOString());
+      }
+
+      const { data } = await query;
+      if (data) {
+        const total = data.reduce((sum, tx) => sum + tx.total, 0);
+        setTotalOmzetValue(total);
+      }
+      setIsFetchingTotalOmzet(false);
+    };
+    
+    fetchTotalOmzet();
+  }, [role, omzetFilter]);
 
   useEffect(() => {
     if (!role) return;
@@ -50,13 +99,18 @@ export default function DashboardPage() {
         .gte('created_at', sevenDaysAgo.toISOString())
         .order('created_at', { ascending: false });
 
+      const { data: products } = await supabase.from('products').select('name, is_titipan');
+      const titipanNames = new Set(products?.filter(p => p.is_titipan).map(p => p.name) || []);
+
       if (txs) {
         let tOmzet = 0, yOmzet = 0;
         let tTx = 0, yTx = 0;
         let tItems = 0, yItems = 0;
         let tProfit = 0, yProfit = 0;
+        let tSamba = 0, ySamba = 0;
 
         let qCount = 0, cCount = 0;
+        let qTotal = 0, cTotal = 0;
         const productsMap: Record<string, { qty: number, rev: number }> = {};
         const dailyOmzetMap: Record<string, number> = {};
 
@@ -77,8 +131,14 @@ export default function DashboardPage() {
           const isYesterday = txDate >= yesterdayStart && txDate < todayStart;
           
           if (tx.status !== 'cancelled') {
-             if (tx.method === 'QRIS') qCount++;
-             if (tx.method && tx.method.includes('Cash')) cCount++;
+             if (tx.method === 'QRIS') {
+               qCount++;
+               qTotal += tx.total;
+             }
+             if (tx.method && tx.method.includes('Cash')) {
+               cCount++;
+               cTotal += tx.total;
+             }
 
              if (dailyOmzetMap[txDateKey] !== undefined) {
                 dailyOmzetMap[txDateKey] += tx.total;
@@ -86,10 +146,15 @@ export default function DashboardPage() {
              
              let txItemCount = 0;
              let txProfit = 0;
+             let txSamba = 0;
 
              tx.transaction_items?.forEach((item: any) => {
                txItemCount += item.quantity;
                txProfit += (item.price - (item.supplier_price || 0)) * item.quantity;
+               
+               if (!titipanNames.has(item.product_name)) {
+                 txSamba += item.price * item.quantity;
+               }
                
                if (!productsMap[item.product_name]) productsMap[item.product_name] = { qty: 0, rev: 0 };
                productsMap[item.product_name].qty += item.quantity;
@@ -101,11 +166,13 @@ export default function DashboardPage() {
                tTx++;
                tItems += txItemCount;
                tProfit += txProfit;
+               tSamba += txSamba;
              } else if (isYesterday) {
                yOmzet += tx.total;
                yTx++;
                yItems += txItemCount;
                yProfit += txProfit;
+               ySamba += txSamba;
              }
 
              if (recentTxs.length < 5) {
@@ -121,8 +188,10 @@ export default function DashboardPage() {
         setTodayTx(tTx); setYesterdayTx(yTx);
         setTodayItems(tItems); setYesterdayItems(yItems);
         setTodayProfit(tProfit); setYesterdayProfit(yProfit);
+        setTodaySamba(tSamba); setYesterdaySamba(ySamba);
         
         setQrisCount(qCount); setCashCount(cCount);
+        setQrisTotal(qTotal); setCashTotal(cTotal);
         setRecentTransactions(recentTxs);
 
         const sortedProducts = Object.entries(productsMap)
@@ -163,7 +232,7 @@ export default function DashboardPage() {
   };
 
   const getDiffNode = (today: number, yesterday: number) => {
-    if (yesterday === 0 && today === 0) return null;
+    if (today === 0) return null;
     const diff = yesterday === 0 ? 100 : ((today - yesterday) / yesterday) * 100;
     const isUp = diff > 0;
     const isZero = diff === 0;
@@ -210,7 +279,17 @@ export default function DashboardPage() {
                   {getDiffNode(todayOmzet, yesterdayOmzet)}
                 </div>
                 <div className="text-3xl font-extrabold text-white tracking-tight mt-1 mb-1.5">Rp {todayOmzet.toLocaleString('id-ID')}</div>
-                <p className="text-xs text-zinc-500 font-medium">Kemarin Rp {yesterdayOmzet.toLocaleString('id-ID')}</p>
+                <div className="flex items-center gap-3 mt-3 pt-3 border-t border-white/5">
+                  <div className="flex flex-col">
+                    <span className="text-[9px] font-bold text-zinc-500 uppercase">Samba</span>
+                    <span className="text-xs font-semibold text-emerald-400">Rp {todaySamba.toLocaleString('id-ID')}</span>
+                  </div>
+                  <div className="w-px h-6 bg-white/5"></div>
+                  <div className="flex flex-col">
+                    <span className="text-[9px] font-bold text-zinc-500 uppercase">Titipan</span>
+                    <span className="text-xs font-semibold text-amber-400">Rp {(todayOmzet - todaySamba).toLocaleString('id-ID')}</span>
+                  </div>
+                </div>
               </div>
 
               {/* Transaksi */}
@@ -233,14 +312,24 @@ export default function DashboardPage() {
                 <p className="text-xs text-zinc-500 font-medium">Kemarin {yesterdayItems} item</p>
               </div>
 
-              {/* Laba Kotor */}
-              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-5 hover:bg-zinc-900/60 transition-colors shadow-sm">
+              {/* Total Omzet Keseluruhan */}
+              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-5 hover:bg-zinc-900/60 transition-colors shadow-sm relative">
                 <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-[11px] font-bold text-zinc-400 tracking-widest uppercase">Laba Kotor</h2>
-                  {getDiffNode(todayProfit, yesterdayProfit)}
+                  <h2 className="text-[11px] font-bold text-zinc-400 tracking-widest uppercase">Total Omzet</h2>
                 </div>
-                <div className="text-3xl font-extrabold text-white tracking-tight mt-1 mb-1.5">Rp {todayProfit.toLocaleString('id-ID')}</div>
-                <p className="text-xs text-zinc-500 font-medium">Kemarin Rp {yesterdayProfit.toLocaleString('id-ID')}</p>
+                
+                <div className="text-3xl font-extrabold text-white tracking-tight mt-1 mb-1.5 flex items-center gap-2">
+                  Rp {totalOmzetValue.toLocaleString('id-ID')}
+                  {isFetchingTotalOmzet && <Loader2 className="w-4 h-4 animate-spin text-zinc-500" />}
+                </div>
+                
+                <div className="relative mt-2">
+                  <DateFilter
+                    value={omzetFilter}
+                    onChange={setOmzetFilter}
+                    align="left"
+                  />
+                </div>
               </div>
             </div>
 
@@ -287,6 +376,7 @@ export default function DashboardPage() {
                   <div>
                     <div className="flex justify-between text-[13px] font-bold mb-2 text-white">
                       <span>Tunai</span>
+                      <span className="text-zinc-400">Rp {cashTotal.toLocaleString('id-ID')} ({cashCount} trx)</span>
                     </div>
                     <div className="h-2.5 w-full bg-zinc-800 rounded-full overflow-hidden">
                       <div className="h-full bg-[#38a169] rounded-full transition-all duration-1000" style={{ width: `${cashPercent}%` }} />
@@ -296,6 +386,7 @@ export default function DashboardPage() {
                   <div>
                     <div className="flex justify-between text-[13px] font-bold mb-2 text-white">
                       <span>QRIS</span>
+                      <span className="text-zinc-400">Rp {qrisTotal.toLocaleString('id-ID')} ({qrisCount} trx)</span>
                     </div>
                     <div className="h-2.5 w-full bg-zinc-800 rounded-full overflow-hidden">
                       <div className="h-full bg-[#e53e3e] rounded-full transition-all duration-1000" style={{ width: `${qrisPercent}%` }} />

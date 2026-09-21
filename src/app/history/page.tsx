@@ -12,6 +12,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { DateFilter, DateFilterValue } from '@/components/ui/DateFilter';
 
 type Transaction = {
   id: string;
@@ -62,7 +63,12 @@ export default function HistoryPage() {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   
-  const [filterDate, setFilterDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [dateFilter, setDateFilter] = useState<DateFilterValue>({
+    mode: 'date',
+    date: new Date(),
+    month: new Date().getMonth(),
+    year: new Date().getFullYear(),
+  });
 
   useEffect(() => {
     if (!isLoading && !role) {
@@ -158,7 +164,18 @@ export default function HistoryPage() {
   const filteredTransactions = transactions.filter(trx => {
     const matchesFilter = activeFilter === 'All' || trx.method === activeFilter;
     const matchesSearch = trx.id.includes(searchQuery);
-    const matchesDate = !filterDate || trx.rawDate === filterDate;
+    
+    let matchesDate = true;
+    if (dateFilter.mode === 'date' && dateFilter.date) {
+      const dStr = `${dateFilter.date.getFullYear()}-${String(dateFilter.date.getMonth() + 1).padStart(2, '0')}-${String(dateFilter.date.getDate()).padStart(2, '0')}`;
+      matchesDate = trx.rawDate === dStr;
+    } else if (dateFilter.mode === 'month') {
+      const prefix = `${dateFilter.year}-${String((dateFilter.month || 0) + 1).padStart(2, '0')}`;
+      matchesDate = trx.rawDate.startsWith(prefix);
+    } else if (dateFilter.mode === 'year') {
+      matchesDate = trx.rawDate.startsWith(`${dateFilter.year}`);
+    }
+    
     return matchesFilter && matchesSearch && matchesDate;
   });
   
@@ -167,8 +184,20 @@ export default function HistoryPage() {
   const filteredShifts = shifts.filter(shift => {
     const d = new Date(shift.start_time);
     const shiftDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const isShiftActiveToday = shift.status === 'active' && filterDate === todayStr;
-    return !filterDate || shiftDate === filterDate || isShiftActiveToday;
+    const isShiftActiveToday = shift.status === 'active' && dateFilter.mode === 'date' && dateFilter.date && shiftDate === todayStr;
+    
+    let matchesDate = true;
+    if (dateFilter.mode === 'date' && dateFilter.date) {
+      const dStr = `${dateFilter.date.getFullYear()}-${String(dateFilter.date.getMonth() + 1).padStart(2, '0')}-${String(dateFilter.date.getDate()).padStart(2, '0')}`;
+      matchesDate = shiftDate === dStr || isShiftActiveToday;
+    } else if (dateFilter.mode === 'month') {
+      const prefix = `${dateFilter.year}-${String((dateFilter.month || 0) + 1).padStart(2, '0')}`;
+      matchesDate = shiftDate.startsWith(prefix);
+    } else if (dateFilter.mode === 'year') {
+      matchesDate = shiftDate.startsWith(`${dateFilter.year}`);
+    }
+    
+    return matchesDate;
   });
 
   // Group shifts by Cashier and sort active ones to the top
@@ -226,22 +255,13 @@ export default function HistoryPage() {
             <p className="text-muted-foreground text-sm lg:text-base">View and filter past transactions & shifts</p>
           </div>
           
-          <div className="flex items-center gap-2 bg-card border border-border p-2 rounded-lg">
-            <Calendar size={18} className="text-muted-foreground ml-2" />
-            <input 
-              type="date" 
-              className="bg-transparent border-none outline-none text-sm font-medium mr-2"
-              value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
+          <div className="flex items-center gap-2">
+            <DateFilter 
+              value={dateFilter} 
+              onChange={setDateFilter} 
+              align="right"
+              className="z-50"
             />
-            {filterDate && (
-              <button 
-                onClick={() => setFilterDate('')}
-                className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded bg-muted"
-              >
-                Clear
-              </button>
-            )}
           </div>
         </div>
 

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChefHat, Search, Plus, Trash2, Loader2, Save, Pencil } from 'lucide-react';
+import { ChefHat, Search, Plus, Trash2, Loader2, Save, Pencil, Wand2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/AuthContext';
@@ -51,6 +51,11 @@ export default function RecipesPage() {
   const [editingIngredient, setEditingIngredient] = useState<RecipeIngredient | null>(null);
   const [editQuantity, setEditQuantity] = useState('');
   
+  // Auto Match State
+  const [isAutoMatchModalOpen, setIsAutoMatchModalOpen] = useState(false);
+  const [autoMatchPendingItems, setAutoMatchPendingItems] = useState<any[]>([]);
+  const [autoMatchStatus, setAutoMatchStatus] = useState<'idle' | 'success'>('idle');
+
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -137,6 +142,71 @@ export default function RecipesPage() {
     }
   };
 
+  const handleOpenAutoMatch = () => {
+    const newRecipesToInsert: any[] = [];
+    
+    products.forEach(p => {
+      const hasRecipe = recipes.some(r => r.product_id === p.id);
+      if (!hasRecipe) {
+        const pName = p.name.toLowerCase().trim();
+        const pNameNoSpace = pName.replace(/\s+/g, '');
+        
+        let matchedStock = stocks.find(s => s.name.toLowerCase().trim() === pName);
+        
+        if (!matchedStock) {
+           matchedStock = stocks.find(s => {
+              const sName = s.name.toLowerCase().trim();
+              const sNameNoSpace = sName.replace(/\s+/g, '');
+              
+              if (sNameNoSpace === pNameNoSpace) return true;
+              if (pName.length > 3 && sName.length > 3) {
+                 if (sName.includes(pName) || pName.includes(sName)) return true;
+              }
+              return false;
+           });
+        }
+
+        if (matchedStock) {
+          newRecipesToInsert.push({
+            product_id: p.id,
+            product_name: p.name,
+            stock_id: matchedStock.id,
+            stock_name: matchedStock.name,
+            quantity_required: 1
+          });
+        }
+      }
+    });
+
+    setAutoMatchPendingItems(newRecipesToInsert);
+    setAutoMatchStatus('idle');
+    setIsAutoMatchModalOpen(true);
+  };
+
+  const confirmAutoMatch = async () => {
+    if (autoMatchPendingItems.length === 0) {
+      setIsAutoMatchModalOpen(false);
+      return;
+    }
+    
+    setIsSaving(true);
+    const inserts = autoMatchPendingItems.map(item => ({
+      product_id: item.product_id,
+      stock_id: item.stock_id,
+      quantity_required: item.quantity_required
+    }));
+
+    const { data, error } = await supabase.from('product_ingredients').insert(inserts).select();
+    
+    if (data && !error) {
+      setRecipes([...recipes, ...data]);
+      setAutoMatchStatus('success');
+    } else {
+      alert("Gagal melakukan auto-match.");
+    }
+    setIsSaving(false);
+  };
+
   const filteredProducts = products.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   if (!role) return null;
@@ -146,9 +216,19 @@ export default function RecipesPage() {
       <div className="flex flex-col space-y-6 p-4 lg:p-8 max-w-[1600px] mx-auto w-full h-[calc(100vh-64px)] md:h-screen">
         
         {/* Premium Header */}
-        <div className="flex flex-col gap-1.5 shrink-0">
-          <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-white">Resep Menu</h1>
-          <p className="text-sm text-zinc-400">Kelola komposisi bahan baku (BOM) untuk pemotongan stok otomatis saat menu terjual.</p>
+        <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between shrink-0">
+          <div className="flex flex-col gap-1.5">
+            <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-white">Resep Menu</h1>
+            <p className="text-sm text-zinc-400">Kelola komposisi bahan baku (BOM) untuk pemotongan stok otomatis saat menu terjual.</p>
+          </div>
+          <Button 
+            onClick={handleOpenAutoMatch}
+            disabled={isSaving}
+            className="gap-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-black border border-emerald-500/20 transition-all"
+          >
+            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 size={16} />}
+            Auto-Match Resep (1:1)
+          </Button>
         </div>
 
         <div className="flex flex-col md:flex-row gap-6 flex-1 min-h-0 overflow-hidden">
@@ -291,6 +371,55 @@ export default function RecipesPage() {
         </Card>
         </div>
       </div>
+
+      {/* Auto-Match Dialog */}
+      <Dialog open={isAutoMatchModalOpen} onOpenChange={setIsAutoMatchModalOpen}>
+        <DialogContent className="sm:max-w-md bg-zinc-950 border border-white/10 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <Wand2 className="text-amber-500" size={20} />
+              {autoMatchStatus === 'success' ? 'Sukses Auto-Match!' : 'Auto-Match Resep'}
+            </DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              {autoMatchStatus === 'success' 
+                ? 'Semua menu telah berhasil dihubungkan dengan stok.' 
+                : autoMatchPendingItems.length === 0
+                  ? 'Tidak ada menu baru yang bisa dicocokkan (semua sudah memiliki resep, atau tidak ada kecocokan nama).'
+                  : `Ditemukan ${autoMatchPendingItems.length} menu yang namanya mirip dengan bahan baku. Lanjutkan menghubungkan otomatis?`
+              }
+            </DialogDescription>
+          </DialogHeader>
+          
+          {autoMatchStatus === 'idle' && autoMatchPendingItems.length > 0 && (
+            <ScrollArea className="max-h-[300px] mt-4 border border-white/5 rounded-xl bg-black/50 p-2">
+              {autoMatchPendingItems.map((item, idx) => (
+                <div key={idx} className="flex justify-between items-center text-sm p-2 border-b border-white/5 last:border-0">
+                  <span className="font-medium">{item.product_name}</span>
+                  <span className="text-amber-500">↔ {item.stock_name}</span>
+                </div>
+              ))}
+            </ScrollArea>
+          )}
+
+          <DialogFooter className="mt-6 flex gap-2">
+            {autoMatchStatus === 'success' || autoMatchPendingItems.length === 0 ? (
+              <Button onClick={() => setIsAutoMatchModalOpen(false)} className="w-full bg-amber-500 hover:bg-amber-600 text-black font-bold">
+                Tutup
+              </Button>
+            ) : (
+              <>
+                <Button variant="outline" onClick={() => setIsAutoMatchModalOpen(false)} className="border-white/10 hover:bg-white/5 text-zinc-300">
+                  Batal
+                </Button>
+                <Button onClick={confirmAutoMatch} disabled={isSaving} className="bg-amber-500 hover:bg-amber-600 text-black font-bold">
+                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                  Ya, Hubungkan {autoMatchPendingItems.length} Menu
+                </Button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Ingredient Dialog */}
       <Dialog open={isAddIngredientOpen} onOpenChange={setIsAddIngredientOpen}>

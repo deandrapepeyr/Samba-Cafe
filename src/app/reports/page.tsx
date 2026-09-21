@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabase';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
+import { DateFilter, DateFilterValue } from '@/components/ui/DateFilter';
 
 type DailyReport = {
   date: string;
@@ -53,12 +54,13 @@ export default function ReportsPage() {
   const [dailyReports, setDailyReports] = useState<DailyReport[]>([]);
   const [shiftReports, setShiftReports] = useState<ShiftReport[]>([]);
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
-  const [filterType, setFilterType] = useState<'daily'|'weekly'|'monthly'|'yearly'>('daily');
+  const [dateFilter, setDateFilter] = useState<DateFilterValue>({
+    mode: 'month',
+    month: new Date().getMonth(),
+    year: new Date().getFullYear(),
+  });
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [titipanProductNames, setTitipanProductNames] = useState<Map<string, string | null>>(new Map());
-
-  // States for Details Dialog
-  const [selectedDailyReport, setSelectedDailyReport] = useState<DailyReport | null>(null);
 
   useEffect(() => {
     if (!isLoading && role !== 'manager') {
@@ -143,30 +145,36 @@ export default function ReportsPage() {
         let dateStr = '';
         let rawDate = '';
         
-        if (filterType === 'daily') {
+        let shouldInclude = true;
+        // Filter based on selected dateFilter
+        if (dateFilter.mode === 'date' && dateFilter.date) {
+           const txDateStr = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+           const filterDateStr = `${dateFilter.date.getFullYear()}-${String(dateFilter.date.getMonth() + 1).padStart(2, '0')}-${String(dateFilter.date.getDate()).padStart(2, '0')}`;
+           if (txDateStr !== filterDateStr) shouldInclude = false;
+        } else if (dateFilter.mode === 'month') {
+           if (dateObj.getMonth() !== dateFilter.month || dateObj.getFullYear() !== dateFilter.year) shouldInclude = false;
+        } else if (dateFilter.mode === 'year') {
+           if (dateObj.getFullYear() !== dateFilter.year) shouldInclude = false;
+        }
+
+        if (!shouldInclude) return acc;
+        
+        // Grouping based on filter mode
+        if (dateFilter.mode === 'date' || dateFilter.mode === 'month') {
+          // group by day
           rawDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
           groupKey = rawDate;
           dateStr = dateObj.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-        } else if (filterType === 'monthly') {
+        } else if (dateFilter.mode === 'year') {
+          // group by month
           groupKey = `${dateObj.getFullYear()}-${(dateObj.getMonth() + 1).toString().padStart(2, '0')}`;
           rawDate = groupKey;
           dateStr = dateObj.toLocaleDateString('id-ID', { year: 'numeric', month: 'long' });
-        } else if (filterType === 'yearly') {
+        } else if (dateFilter.mode === 'all') {
+          // group by year
           groupKey = `${dateObj.getFullYear()}`;
           rawDate = groupKey;
           dateStr = `${dateObj.getFullYear()}`;
-        } else if (filterType === 'weekly') {
-          const d = new Date(dateObj);
-          const day = d.getDay();
-          const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-          const startOfWeek = new Date(d.setDate(diff));
-          
-          const endOfWeek = new Date(startOfWeek);
-          endOfWeek.setDate(endOfWeek.getDate() + 6);
-          
-          groupKey = `${startOfWeek.getFullYear()}-W${Math.ceil((startOfWeek.getTime() - new Date(startOfWeek.getFullYear(), 0, 1).getTime()) / 86400000 / 7)}`;
-          rawDate = groupKey;
-          dateStr = `${startOfWeek.toLocaleDateString('id-ID', {day: 'numeric', month: 'short'})} - ${endOfWeek.toLocaleDateString('id-ID', {day: 'numeric', month: 'short', year: 'numeric'})}`;
         }
         
         if (!acc[groupKey]) {
@@ -215,14 +223,9 @@ export default function ReportsPage() {
     } else {
       setDailyReports([]);
     }
-  }, [allTransactions, filterType, titipanProductNames]);
+  }, [allTransactions, dateFilter, titipanProductNames]);
 
   if (role !== 'manager') return null;
-
-  // Filter transactions for the selected date dialog
-  const selectedTransactions = selectedDailyReport 
-    ? allTransactions.filter(tx => new Date(tx.created_at).toISOString().split('T')[0] === selectedDailyReport.rawDate)
-    : [];
 
   return (
     <MainLayout title="Reports">
@@ -252,17 +255,12 @@ export default function ReportsPage() {
                   <CardTitle className="text-lg">Ringkasan Pendapatan Harian</CardTitle>
                   <span className="text-xs text-muted-foreground italic">* Klik pada baris untuk melihat detail transaksi</span>
                 </div>
-                <div>
-                  <select
-                    value={filterType}
-                    onChange={(e) => setFilterType(e.target.value as any)}
-                    className="bg-card border border-border text-sm rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary font-medium"
-                  >
-                    <option value="daily">Harian (Daily)</option>
-                    <option value="weekly">Mingguan (Weekly)</option>
-                    <option value="monthly">Bulanan (Monthly)</option>
-                    <option value="yearly">Tahunan (Yearly)</option>
-                  </select>
+                <div className="z-50">
+                  <DateFilter
+                    value={dateFilter}
+                    onChange={setDateFilter}
+                    align="right"
+                  />
                 </div>
               </CardHeader>
               <ScrollArea className="flex-1">
@@ -280,7 +278,7 @@ export default function ReportsPage() {
                     dailyReports.map((report, idx) => (
                       <div
                         key={idx}
-                        onClick={() => setSelectedDailyReport(report)}
+                        onClick={() => router.push(`/reports/detail/${report.rawDate}`)}
                         className="p-4 bg-card border border-border rounded-xl shadow-sm hover:border-primary/50 transition-all cursor-pointer space-y-3"
                       >
                         <div className="flex items-center justify-between border-b border-border/60 pb-2">
@@ -306,19 +304,12 @@ export default function ReportsPage() {
                             <p className="text-[10px] uppercase font-semibold text-emerald-500">Pendapatan Kafe</p>
                             <p className="font-bold text-emerald-400 mt-0.5">Rp {report.regularRevenue.toLocaleString('id-ID')}</p>
                           </div>
-                          <div className="bg-orange-500/10 p-2 rounded border border-orange-500/20">
-                            <p className="text-[10px] uppercase font-semibold text-orange-500">Uang Titipan</p>
-                            <p className="font-bold text-orange-400 mt-0.5">Rp {report.titipanRevenue.toLocaleString('id-ID')}</p>
-                            {Object.keys(report.titipanBreakdown).length > 0 && (
-                              <div className="mt-1 pt-1 border-t border-orange-500/20 text-[10px] space-y-0.5 text-orange-500/80">
-                                {Object.entries(report.titipanBreakdown).map(([name, amount]) => (
-                                  <div key={name} className="flex justify-between">
-                                    <span>{name}:</span>
-                                    <span>Rp {amount.toLocaleString('id-ID')}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
+                          <div className="bg-orange-500/10 p-2 rounded border border-orange-500/20 flex flex-col justify-between">
+                            <div>
+                              <p className="text-[10px] uppercase font-semibold text-orange-500">Uang Titipan</p>
+                              <p className="font-bold text-orange-400 mt-0.5">Rp {report.titipanRevenue.toLocaleString('id-ID')}</p>
+                            </div>
+                            <span className="text-[9px] text-orange-500/60 mt-1">Ketuk untuk detail</span>
                           </div>
                         </div>
 
@@ -338,8 +329,9 @@ export default function ReportsPage() {
                       <tr>
                         <th className="font-medium p-5 pl-8">Tanggal</th>
                         <th className="font-medium p-5 text-center">Total Pesanan</th>
-                        <th className="font-medium p-5 text-right">Pendapatan QRIS</th>
-                        <th className="font-semibold p-5 text-right">Pendapatan Kafe</th>
+                        <th className="font-medium p-5 text-right">QRIS</th>
+                        <th className="font-medium p-5 text-right">Tunai</th>
+                        <th className="font-semibold p-5 text-right text-emerald-500">Pendapatan Kafe</th>
                         <th className="font-semibold p-5 text-right text-orange-400">Uang Titipan</th>
                         <th className="font-bold p-5 text-right pr-8 text-primary">Total Omzet</th>
                       </tr>
@@ -347,7 +339,7 @@ export default function ReportsPage() {
                     <tbody className="divide-y divide-border">
                       {isLoadingData ? (
                         <tr>
-                          <td colSpan={6} className="p-12 text-center text-muted-foreground">
+                          <td colSpan={7} className="p-12 text-center text-muted-foreground">
                             <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
                           </td>
                         </tr>
@@ -356,7 +348,7 @@ export default function ReportsPage() {
                           {dailyReports.map((report, idx) => (
                             <tr 
                               key={idx} 
-                              onClick={() => setSelectedDailyReport(report)}
+                              onClick={() => router.push(`/reports/detail/${report.rawDate}`)}
                               className="hover:bg-primary/5 cursor-pointer transition-colors group"
                             >
                               <td className="p-5 pl-8 font-medium group-hover:text-primary transition-colors">{report.date}</td>
@@ -365,24 +357,16 @@ export default function ReportsPage() {
                                   {report.totalTransactions}
                                 </span>
                               </td>
-                              <td className="p-5 text-right font-medium">Rp {report.qrisRevenue.toLocaleString('id-ID')}</td>
-                              <td className="p-5 text-right font-medium text-emerald-400 transition-colors">Rp {report.regularRevenue.toLocaleString('id-ID')}</td>
-                              <td className="p-5 text-right font-medium text-orange-400 transition-colors">
-                                <div>Rp {report.titipanRevenue.toLocaleString('id-ID')}</div>
-                                {Object.keys(report.titipanBreakdown).length > 0 && (
-                                  <div className="text-[10px] text-orange-500/70 mt-1 flex flex-col items-end space-y-0.5">
-                                    {Object.entries(report.titipanBreakdown).map(([name, amount]) => (
-                                      <div key={name} className="whitespace-nowrap">{name}: Rp {amount.toLocaleString('id-ID')}</div>
-                                    ))}
-                                  </div>
-                                )}
-                              </td>
+                              <td className="p-5 text-right font-medium text-muted-foreground">Rp {report.qrisRevenue.toLocaleString('id-ID')}</td>
+                              <td className="p-5 text-right font-medium text-muted-foreground">Rp {report.cashRevenue.toLocaleString('id-ID')}</td>
+                              <td className="p-5 text-right font-medium text-emerald-400">Rp {report.regularRevenue.toLocaleString('id-ID')}</td>
+                              <td className="p-5 text-right font-medium text-orange-400">Rp {report.titipanRevenue.toLocaleString('id-ID')}</td>
                               <td className="p-5 text-right pr-8 font-bold text-lg text-primary">Rp {report.totalRevenue.toLocaleString('id-ID')}</td>
                             </tr>
                           ))}
                           {dailyReports.length === 0 && (
                             <tr>
-                              <td colSpan={6} className="p-12 text-center text-muted-foreground">
+                              <td colSpan={7} className="p-12 text-center text-muted-foreground">
                                 Belum ada data transaksi.
                               </td>
                             </tr>
@@ -541,74 +525,6 @@ export default function ReportsPage() {
           </TabsContent>
         </Tabs>
       </div>
-
-      {/* Detail Laporan Harian Dialog */}
-      <Dialog open={!!selectedDailyReport} onOpenChange={(open) => !open && setSelectedDailyReport(null)}>
-        <DialogContent className="bg-card border-border sm:max-w-3xl max-w-[95vw] max-h-[85vh] flex flex-col p-4 sm:p-6 overflow-hidden">
-          <DialogHeader className="pb-4 border-b border-border shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="bg-primary/20 p-2.5 rounded-xl text-primary">
-                <Receipt size={24} />
-              </div>
-              <div>
-                <DialogTitle className="text-xl">Detail Transaksi Harian</DialogTitle>
-                <DialogDescription className="text-base">{selectedDailyReport?.date}</DialogDescription>
-              </div>
-            </div>
-          </DialogHeader>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 py-4 shrink-0">
-            <div className="bg-muted/50 p-4 rounded-xl text-center">
-              <p className="text-muted-foreground text-sm font-medium mb-1">Total Pesanan</p>
-              <p className="text-2xl font-bold">{selectedDailyReport?.totalTransactions}</p>
-            </div>
-            <div className="bg-blue-500/10 p-4 rounded-xl text-center border border-blue-500/20">
-              <p className="text-blue-500 text-sm font-medium mb-1">QRIS</p>
-              <p className="text-2xl font-bold text-blue-500">Rp {selectedDailyReport?.qrisRevenue.toLocaleString('id-ID')}</p>
-            </div>
-            <div className="bg-green-500/10 p-4 rounded-xl text-center border border-green-500/20">
-              <p className="text-green-500 text-sm font-medium mb-1">Cash</p>
-              <p className="text-2xl font-bold text-green-500">Rp {selectedDailyReport?.cashRevenue.toLocaleString('id-ID')}</p>
-            </div>
-          </div>
-
-          <Separator className="bg-border shrink-0" />
-
-          <div className="flex-1 mt-4 overflow-y-auto scrollbar-thin scrollbar-thumb-border pr-2 min-h-0">
-            <div className="space-y-3">
-              {selectedTransactions.map(tx => {
-                const txTime = new Date(tx.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-                return (
-                  <div key={tx.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border border-border bg-card hover:bg-muted/50 transition-colors gap-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center text-muted-foreground font-medium text-sm border border-border shadow-sm">
-                        {txTime}
-                      </div>
-                      <div>
-                        <p className="font-bold text-base">Order #{tx.id}</p>
-                        <p className="text-sm text-muted-foreground mt-0.5">Kasir: {tx.cashier_name || 'Unknown'}</p>
-                      </div>
-                    </div>
-                    <div className="text-left sm:text-right">
-                      <p className="font-bold text-xl text-foreground">Rp {tx.total.toLocaleString('id-ID')}</p>
-                      <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold mt-2 ${
-                        tx.method === 'QRIS' ? 'bg-blue-500/20 text-blue-500 border border-blue-500/20' : 'bg-green-500/20 text-green-500 border border-green-500/20'
-                      }`}>
-                        {tx.method}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-              {selectedTransactions.length === 0 && (
-                <div className="text-center py-8 text-muted-foreground">
-                  Tidak ada transaksi.
-                </div>
-              )}
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </MainLayout>
   );
 }

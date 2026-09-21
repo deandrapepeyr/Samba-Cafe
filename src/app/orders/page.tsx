@@ -351,7 +351,13 @@ export default function OrdersPage() {
   // Filtered lists
   const preparingOrders = orders.filter(o => o.status === 'preparing' && (o.id.includes(searchQuery) || o.items.some(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()))));
   const readyOrders = orders.filter(o => o.status === 'ready' && (o.id.includes(searchQuery) || o.items.some(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()))));
-  const completedOrders = orders.filter(o => o.status === 'completed' && (o.id.includes(searchQuery) || o.items.some(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()))));
+  const completedOrders = orders
+    .filter(o => o.status === 'completed' && (o.id.includes(searchQuery) || o.items.some(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()))))
+    .sort((a, b) => {
+      const timeA = a.completedAt ? a.completedAt.getTime() : a.createdAt.getTime();
+      const timeB = b.completedAt ? b.completedAt.getTime() : b.createdAt.getTime();
+      return timeB - timeA; // Descending: Newest completed at the top
+    });
 
   const filteredAllOrders = orders.filter(o => {
     const matchesSearch = o.id.includes(searchQuery) || o.items.some(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()));
