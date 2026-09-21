@@ -25,6 +25,8 @@ export default function DashboardPage() {
   const [yesterdayProfit, setYesterdayProfit] = useState(0);
   const [todaySamba, setTodaySamba] = useState(0);
   const [yesterdaySamba, setYesterdaySamba] = useState(0);
+  const [todayQris, setTodayQris] = useState(0);
+  const [todayCash, setTodayCash] = useState(0);
   
   const [totalOmzetValue, setTotalOmzetValue] = useState(0);
   const [omzetFilter, setOmzetFilter] = useState<DateFilterValue>({
@@ -112,6 +114,7 @@ export default function DashboardPage() {
         let tItems = 0, yItems = 0;
         let tProfit = 0, yProfit = 0;
         let tSamba = 0, ySamba = 0;
+        let tQris = 0, tCash = 0;
 
         let qCount = 0, cCount = 0;
         let qTotal = 0, cTotal = 0;
@@ -180,6 +183,8 @@ export default function DashboardPage() {
                tItems += txItemCount;
                tProfit += txProfit;
                tSamba += txSamba;
+               if (tx.method === 'QRIS') tQris += tx.total;
+               if (tx.method && tx.method.includes('Cash')) tCash += tx.total;
              } else if (isYesterday) {
                yOmzet += tx.total;
                yTx++;
@@ -202,6 +207,7 @@ export default function DashboardPage() {
         setTodayItems(tItems); setYesterdayItems(yItems);
         setTodayProfit(tProfit); setYesterdayProfit(yProfit);
         setTodaySamba(tSamba); setYesterdaySamba(ySamba);
+        setTodayQris(tQris); setTodayCash(tCash);
         
         setQrisCount(qCount); setCashCount(cCount);
         setQrisTotal(qTotal); setCashTotal(cTotal);
@@ -294,15 +300,22 @@ export default function DashboardPage() {
                   {getDiffNode(todayOmzet, yesterdayOmzet)}
                 </div>
                 <div className="text-3xl font-extrabold text-white tracking-tight mt-1 mb-1.5">Rp {todayOmzet.toLocaleString('id-ID')}</div>
-                <div className="flex items-center gap-3 mt-3 pt-3 border-t border-white/5">
+                <div className="grid grid-cols-2 gap-y-2.5 mt-3 pt-3 border-t border-white/5">
                   <div className="flex flex-col">
                     <span className="text-[9px] font-bold text-zinc-500 uppercase">Samba</span>
-                    <span className="text-xs font-semibold text-emerald-400">Rp {todaySamba.toLocaleString('id-ID')}</span>
+                    <span className="text-[11px] font-semibold text-emerald-400">Rp {todaySamba.toLocaleString('id-ID')}</span>
                   </div>
-                  <div className="w-px h-6 bg-white/5"></div>
                   <div className="flex flex-col">
                     <span className="text-[9px] font-bold text-zinc-500 uppercase">Titipan</span>
-                    <span className="text-xs font-semibold text-amber-400">Rp {(todayOmzet - todaySamba).toLocaleString('id-ID')}</span>
+                    <span className="text-[11px] font-semibold text-amber-500">Rp {(todayOmzet - todaySamba).toLocaleString('id-ID')}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[9px] font-bold text-zinc-500 uppercase">QRIS</span>
+                    <span className="text-[11px] font-semibold text-zinc-300">Rp {todayQris.toLocaleString('id-ID')}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[9px] font-bold text-zinc-500 uppercase">Tunai</span>
+                    <span className="text-[11px] font-semibold text-zinc-300">Rp {todayCash.toLocaleString('id-ID')}</span>
                   </div>
                 </div>
               </div>
@@ -415,9 +428,18 @@ export default function DashboardPage() {
                       <div className="h-full bg-[#e53e3e] rounded-full transition-all duration-1000" style={{ width: `${qrisPercent}%` }} />
                     </div>
                   </div>
-                  
-                  <div className="pt-2">
-                    <p className="text-xs font-semibold text-[#999]">Rata-rata / transaksi: Rp {(totalPaymentMethods > 0 ? chartData.reduce((s, a) => s + a.value, 0) / totalPaymentMethods : 0).toLocaleString('id-ID', { maximumFractionDigits: 0 })}</p>
+                  <div className="pt-4 border-t border-white/5 space-y-2">
+                    <div className="flex justify-between items-center text-[13px] font-bold text-white">
+                      <span>Total Bersih Cafe (Samba)</span>
+                      <span className="text-[#38a169]">Rp {(sambaCashTotal + sambaQrisTotal).toLocaleString('id-ID')}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-[13px] font-bold text-white">
+                      <span>Total Uang Titipan</span>
+                      <span className="text-amber-500">Rp {(titipanCashTotal + titipanQrisTotal).toLocaleString('id-ID')}</span>
+                    </div>
+                    <p className="text-[11px] font-medium text-[#777] mt-2 pt-2 border-t border-white/5">
+                      Rata-rata / transaksi: Rp {(totalPaymentMethods > 0 ? chartData.reduce((s, a) => s + a.value, 0) / totalPaymentMethods : 0).toLocaleString('id-ID', { maximumFractionDigits: 0 })}
+                    </p>
                   </div>
                 </div>
               </div>
