@@ -57,29 +57,42 @@ export default function DashboardPage() {
       if (!role) return;
       setIsFetchingTotalOmzet(true);
       
-      let query = supabase.from('transactions').select('total').neq('status', 'cancelled');
+      let queryTx = supabase.from('transactions').select('total').neq('status', 'cancelled');
+      let querySummary = supabase.from('daily_summaries').select('total_omzet');
       
+      let startDate: Date | null = null;
+      let endDate: Date | null = null;
+
       if (omzetFilter.mode === 'month') {
-        const start = new Date(omzetFilter.year || new Date().getFullYear(), omzetFilter.month || 0, 1);
-        const end = new Date(omzetFilter.year || new Date().getFullYear(), (omzetFilter.month || 0) + 1, 1);
-        query = query.gte('created_at', start.toISOString()).lt('created_at', end.toISOString());
+        startDate = new Date(omzetFilter.year || new Date().getFullYear(), omzetFilter.month || 0, 1);
+        endDate = new Date(omzetFilter.year || new Date().getFullYear(), (omzetFilter.month || 0) + 1, 1);
       } else if (omzetFilter.mode === 'year') {
-        const start = new Date(omzetFilter.year || new Date().getFullYear(), 0, 1);
-        const end = new Date((omzetFilter.year || new Date().getFullYear()) + 1, 0, 1);
-        query = query.gte('created_at', start.toISOString()).lt('created_at', end.toISOString());
+        startDate = new Date(omzetFilter.year || new Date().getFullYear(), 0, 1);
+        endDate = new Date((omzetFilter.year || new Date().getFullYear()) + 1, 0, 1);
       } else if (omzetFilter.mode === 'date' && omzetFilter.date) {
-        const start = new Date(omzetFilter.date);
-        start.setHours(0, 0, 0, 0);
-        const end = new Date(omzetFilter.date);
-        end.setHours(23, 59, 59, 999);
-        query = query.gte('created_at', start.toISOString()).lte('created_at', end.toISOString());
+        startDate = new Date(omzetFilter.date);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(omzetFilter.date);
+        endDate.setHours(23, 59, 59, 999);
       }
 
-      const { data } = await query;
-      if (data) {
-        const total = data.reduce((sum, tx) => sum + tx.total, 0);
-        setTotalOmzetValue(total);
+      if (startDate && endDate) {
+        queryTx = queryTx.gte('created_at', startDate.toISOString()).lt('created_at', endDate.toISOString());
+        
+        const startDateStr = startDate.toLocaleDateString('en-CA');
+        const summaryEndDate = new Date(endDate);
+        summaryEndDate.setMilliseconds(summaryEndDate.getMilliseconds() - 1);
+        const endDateStr = summaryEndDate.toLocaleDateString('en-CA');
+        
+        querySummary = querySummary.gte('date', startDateStr).lte('date', endDateStr);
       }
+
+      const [resTx, resSummary] = await Promise.all([queryTx, querySummary]);
+      let total = 0;
+      if (resTx.data) total += resTx.data.reduce((sum, tx) => sum + tx.total, 0);
+      if (resSummary.data) total += resSummary.data.reduce((sum, s) => sum + Number(s.total_omzet), 0);
+      
+      setTotalOmzetValue(total);
       setIsFetchingTotalOmzet(false);
     };
     
@@ -104,6 +117,13 @@ export default function DashboardPage() {
         .select('*, transaction_items(*)')
         .gte('created_at', sevenDaysAgo.toISOString())
         .order('created_at', { ascending: false });
+        
+      const sevenDaysAgoStr = sevenDaysAgo.toLocaleDateString('en-CA');
+      const { data: summaries } = await supabase
+        .from('daily_summaries')
+        .select('*')
+        .gte('date', sevenDaysAgoStr)
+        .order('date', { ascending: false });
 
       const { data: products } = await supabase.from('products').select('name, is_titipan');
       const titipanNames = new Set(products?.filter(p => p.is_titipan).map(p => p.name) || []);
@@ -201,6 +221,36 @@ export default function DashboardPage() {
              }
           }
         });
+
+        // Merging data from daily_summaries
+        if (summaries) {
+          const yesterdayStr = yesterdayStart.toLocaleDateString('en-CA');
+          
+          summaries.forEach((s: any) => {
+             const sDateKey = s.date;
+             
+             if (dailyOmzetMap[sDateKey] !== undefined) {
+               dailyOmzetMap[sDateKey] += Number(s.total_omzet || 0);
+             }
+             
+             qCount += Number(s.qris_count || 0);
+             cCount += Number(s.cash_count || 0);
+             qTotal += Number(s.total_qris || 0);
+             cTotal += Number(s.total_cash || 0);
+             sQTotal += Number(s.samba_qris || 0);
+             sCTotal += Number(s.samba_cash || 0);
+             tQTotal += Number(s.titipan_qris || 0);
+             tCTotal += Number(s.titipan_cash || 0);
+             
+             if (sDateKey === yesterdayStr) {
+               yOmzet += Number(s.total_omzet || 0);
+               yTx += Number(s.total_transactions || 0);
+               yItems += Number(s.total_items || 0);
+               yProfit += Number(s.total_profit || 0);
+               ySamba += Number(s.samba_qris || 0) + Number(s.samba_cash || 0);
+             }
+          });
+        }
 
         setTodayOmzet(tOmzet); setYesterdayOmzet(yOmzet);
         setTodayTx(tTx); setYesterdayTx(yTx);

@@ -163,6 +163,133 @@ export default function SettingsPage() {
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [resetPassword, setResetPassword] = useState('');
+  
+  const [isArchiveDialogOpen, setIsArchiveDialogOpen] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [archivePassword, setArchivePassword] = useState('');
+
+  const handleArchiveData = async () => {
+    if (archivePassword !== 'samba123') {
+      alert("Password salah! Fitur ini terkunci.");
+      return;
+    }
+    setIsArchiving(true);
+    try {
+      // Archive transactions before today
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      const { data: txs, error: fetchError } = await supabase
+        .from('transactions')
+        .select('*, transaction_items(*)')
+        .lt('created_at', todayStart.toISOString());
+        
+      if (fetchError) throw fetchError;
+      
+      if (!txs || txs.length === 0) {
+        alert("Tidak ada transaksi lama yang perlu diarsipkan.");
+        setIsArchiveDialogOpen(false);
+        setIsArchiving(false);
+        return;
+      }
+      
+      const { data: products } = await supabase.from('products').select('name, is_titipan');
+      const titipanNames = new Set(products?.filter(p => p.is_titipan).map(p => p.name) || []);
+
+      // Group by date
+      const summariesByDate: Record<string, any> = {};
+      
+      txs.forEach((tx) => {
+        if (tx.status === 'cancelled') return;
+        
+        const txDate = new Date(tx.created_at);
+        const dateStr = txDate.toLocaleDateString('en-CA'); // YYYY-MM-DD
+        
+        if (!summariesByDate[dateStr]) {
+          summariesByDate[dateStr] = {
+            date: dateStr,
+            total_omzet: 0,
+            total_qris: 0,
+            total_cash: 0,
+            samba_qris: 0,
+            samba_cash: 0,
+            titipan_qris: 0,
+            titipan_cash: 0,
+            total_transactions: 0,
+            total_items: 0,
+            total_profit: 0,
+            qris_count: 0,
+            cash_count: 0,
+          };
+        }
+        
+        const summary = summariesByDate[dateStr];
+        summary.total_transactions++;
+        summary.total_omzet += tx.total;
+        
+        let txItemCount = 0;
+        let txProfit = 0;
+        let txSamba = 0;
+        let txTitipan = 0;
+        
+        tx.transaction_items?.forEach((item: any) => {
+          txItemCount += item.quantity;
+          txProfit += (item.price - (item.supplier_price || 0)) * item.quantity;
+          
+          if (!titipanNames.has(item.product_name)) {
+            txSamba += item.price * item.quantity;
+          } else {
+            txTitipan += item.price * item.quantity;
+          }
+        });
+        
+        summary.total_items += txItemCount;
+        summary.total_profit += txProfit;
+        
+        if (tx.method === 'QRIS') {
+          summary.qris_count++;
+          summary.total_qris += tx.total;
+          summary.samba_qris += txSamba;
+          summary.titipan_qris += txTitipan;
+        } else {
+          summary.cash_count++;
+          summary.total_cash += tx.total;
+          summary.samba_cash += txSamba;
+          summary.titipan_cash += txTitipan;
+        }
+      });
+      
+      const summariesToInsert = Object.values(summariesByDate);
+      
+      if (summariesToInsert.length > 0) {
+        const { error: upsertError } = await supabase
+          .from('daily_summaries')
+          .upsert(summariesToInsert, { onConflict: 'date' });
+          
+        if (upsertError) {
+          throw upsertError;
+        }
+      }
+      
+      const txIds = txs.map(tx => tx.id);
+      
+      // Batch delete by chunks of 1000
+      for (let i = 0; i < txIds.length; i += 1000) {
+        const chunk = txIds.slice(i, i + 1000);
+        await supabase.from('transaction_items').delete().in('transaction_id', chunk);
+        await supabase.from('transactions').delete().in('id', chunk);
+      }
+      
+      alert(`Berhasil mengarsipkan ${txs.length} transaksi lama.`);
+      setIsArchiveDialogOpen(false);
+      
+    } catch (err: any) {
+      console.error(err);
+      alert("Terjadi kesalahan saat mengarsipkan: " + err.message);
+    } finally {
+      setIsArchiving(false);
+    }
+  };
 
   const handleResetTransactions = async () => {
     if (resetPassword !== 'samba123') {
@@ -878,6 +1005,20 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 border border-blue-500/20 rounded-lg bg-blue-500/5">
+                      <div>
+                        <h3 className="font-semibold text-blue-500">Arsip Data Transaksi</h3>
+                        <p className="text-sm text-muted-foreground mt-1">Mengarsipkan seluruh transaksi sebelum hari ini menjadi ringkasan (summary) agar database tidak penuh.</p>
+                      </div>
+                      <Button 
+                        variant="outline" 
+                        className="w-full sm:w-auto border-blue-500/30 text-blue-500 hover:bg-blue-500 hover:text-white"
+                        onClick={() => setIsArchiveDialogOpen(true)}
+                      >
+                        Arsip Data
+                      </Button>
+                    </div>
+
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 border border-destructive/20 rounded-lg bg-destructive/5">
                       <div>
                         <h3 className="font-semibold text-destructive">Reset Data Transaksi</h3>
@@ -1728,6 +1869,42 @@ export default function SettingsPage() {
               disabled={isUploading}
             >
               {isUploading ? 'Menghapus...' : 'Ya, Hapus'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Archive Data Dialog */}
+      <Dialog open={isArchiveDialogOpen} onOpenChange={(open) => {
+        setIsArchiveDialogOpen(open);
+        if (!open) setArchivePassword('');
+      }}>
+        <DialogContent className="bg-card border-border sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="text-blue-500">Arsip Data Transaksi</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 text-sm text-muted-foreground space-y-4">
+            <p>
+              Apakah Anda yakin ingin mengarsipkan semua data transaksi sebelum hari ini?
+            </p>
+            <p>
+              Data rincian nota transaksi (item) akan dihapus, tetapi laporan omzet, jumlah pengunjung, kas, qris, dll akan tetap tersimpan sebagai rekapan.
+            </p>
+            <p className="font-medium text-foreground">
+              Masukkan password untuk melanjutkan:
+            </p>
+            <Input 
+              type="password" 
+              placeholder="Password..." 
+              value={archivePassword}
+              onChange={(e) => setArchivePassword(e.target.value)}
+              className="w-full bg-background border-border text-foreground"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsArchiveDialogOpen(false)}>Batal</Button>
+            <Button variant="default" className="bg-blue-500 hover:bg-blue-600 text-white" onClick={handleArchiveData} disabled={isArchiving || !archivePassword}>
+              {isArchiving ? "Mengarsipkan..." : "Ya, Arsipkan Data"}
             </Button>
           </DialogFooter>
         </DialogContent>
