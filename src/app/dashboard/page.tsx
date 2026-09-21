@@ -216,7 +216,7 @@ export default function DashboardPage() {
                ySamba += txSamba;
              }
 
-             if (recentTxs.length < 5) {
+             if (recentTxs.length < 5 && tx.cashier_name !== 'System Recovery') {
                recentTxs.push(tx);
              }
           }
