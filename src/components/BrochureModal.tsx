@@ -37,7 +37,7 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
 
   const displayCategories = categories.filter(c => 
     c.id !== '1' && 
-    c.name.toLowerCase() !== 'ciki snack ring' && 
+    !c.name.toLowerCase().includes('ciki') && 
     products.some(p => p.category_id === c.id)
   );
 
@@ -212,7 +212,7 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
                             {cat.name}
                           </h2>
                         </div>
-                        <div className="space-y-1.5 text-[11px]">
+                        <div className="space-y-1.5 text-[10px]">
                           {catProducts.map((product) => (
                             <div key={product.id} className="flex flex-col">
                               <div className="flex items-end justify-between font-bold">
