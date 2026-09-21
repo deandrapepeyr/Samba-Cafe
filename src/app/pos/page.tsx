@@ -158,6 +158,9 @@ export default function POSPage() {
       try {
         const cached = localStorage.getItem('samba_products_cache');
         if (cached) { setProducts(JSON.parse(cached)); setIsLoadingData(false); }
+        
+        const cachedCats = localStorage.getItem('samba_categories_cache');
+        if (cachedCats) { setCategories(JSON.parse(cachedCats)); }
       } catch(e) {}
 
       const [categoriesRes, productsRes, stocksRes, recipesRes] = await Promise.all([
@@ -168,7 +171,9 @@ export default function POSPage() {
       ]);
 
       if (categoriesRes.data) {
-        setCategories([{ id: '1', name: 'All Menu' }, ...categoriesRes.data]);
+        const newCats = [{ id: '1', name: 'All Menu' }, ...categoriesRes.data];
+        setCategories(newCats);
+        try { localStorage.setItem('samba_categories_cache', JSON.stringify(newCats)); } catch(e) {}
       }
       if (stocksRes.data) setStocksData(stocksRes.data);
       if (recipesRes.data) setRecipesData(recipesRes.data);
@@ -966,23 +971,21 @@ export default function POSPage() {
           </div>
         </header>
 
-        <div className="px-4 md:px-6 pt-6 pb-2">
-          <div className="flex flex-wrap gap-2">
-            <div className="flex bg-zinc-900/50 p-1.5 rounded-2xl border border-white/5 w-fit shadow-inner overflow-x-auto scrollbar-hide">
-              {categories.map(cat => (
-                <button
-                  key={cat.id}
-                  onClick={() => setActiveCategory(cat.id)}
-                  className={`px-6 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all duration-300 ${
-                    activeCategory === cat.id 
-                      ? 'bg-zinc-800 text-primary shadow-lg shadow-primary/5' 
-                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5'
-                  }`}
-                >
-                  {cat.name}
-                </button>
-              ))}
-            </div>
+        <div className="px-4 md:px-6 pt-6 pb-2 w-full max-w-[100vw] overflow-hidden">
+          <div className="flex w-full overflow-x-auto snap-x snap-mandatory scrollbar-hide bg-zinc-900/40 p-1.5 rounded-2xl border border-white/5 shadow-inner gap-1">
+            {categories.map(cat => (
+              <button
+                key={cat.id}
+                onClick={() => setActiveCategory(cat.id)}
+                className={`px-5 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all duration-300 snap-start shrink-0 ${
+                  activeCategory === cat.id 
+                    ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20 scale-[1.02]' 
+                    : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/5'
+                }`}
+              >
+                {cat.name}
+              </button>
+            ))}
           </div>
         </div>
 
