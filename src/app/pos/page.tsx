@@ -479,8 +479,8 @@ export default function POSPage() {
   const isLocked = !isPageLoading && (!role || !activeShift);
 
   const filteredProducts = products.filter(p => {
-    const matchesCategory = activeCategory === '1' || p.category_id === activeCategory;
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = searchQuery.trim() !== '' ? true : (activeCategory === '1' || p.category_id === activeCategory);
     return matchesCategory && matchesSearch;
   });
 
