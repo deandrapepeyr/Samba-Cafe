@@ -24,3 +24,4 @@ alter publication supabase_realtime add table settings;
 
 -- Insert default broadcast message
 INSERT INTO settings (key, value) VALUES ('broadcast_message', 'Selamat Datang di Samba Cafe! Semangat puasanya :)') ON CONFLICT (key) DO NOTHING;
+INSERT INTO settings (key, value) VALUES ('broadcast_enabled', 'true') ON CONFLICT (key) DO NOTHING;

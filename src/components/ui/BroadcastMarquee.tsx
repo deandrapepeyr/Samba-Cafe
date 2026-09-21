@@ -7,27 +7,36 @@ import { Megaphone } from 'lucide-react';
 export function BroadcastMarquee() {
   const [message, setMessage] = useState<string>('');
   const [isVisible, setIsVisible] = useState(false);
+  const [isEnabled, setIsEnabled] = useState(true);
 
   useEffect(() => {
     // Initial fetch
     const fetchMessage = async () => {
       const { data } = await supabase
         .from('settings')
-        .select('value')
-        .eq('key', 'broadcast_message')
-        .single();
+        .select('*')
+        .in('key', ['broadcast_message', 'broadcast_enabled']);
         
-      if (data && data.value) {
-        setMessage(data.value);
-        setIsVisible(true);
-      } else {
-        setIsVisible(false);
+      if (data) {
+        const msgData = data.find(s => s.key === 'broadcast_message');
+        const enabledData = data.find(s => s.key === 'broadcast_enabled');
+        
+        if (msgData && msgData.value) {
+          setMessage(msgData.value);
+          setIsVisible(true);
+        } else {
+          setIsVisible(false);
+        }
+        
+        if (enabledData) {
+          setIsEnabled(enabledData.value !== 'false');
+        }
       }
     };
     
     fetchMessage();
 
-    // Subscribe to realtime changes
+    // Subscribe to realtime changes (no key filter so we catch both)
     const channel = supabase.channel('settings_changes')
       .on(
         'postgres_changes',
@@ -35,13 +44,16 @@ export function BroadcastMarquee() {
           event: '*',
           schema: 'public',
           table: 'settings',
-          filter: 'key=eq.broadcast_message'
         },
         (payload) => {
-          if (payload.new && 'value' in payload.new) {
-            const newMsg = payload.new.value;
-            setMessage(newMsg);
-            setIsVisible(!!newMsg);
+          if (payload.new && 'key' in payload.new && 'value' in payload.new) {
+            if (payload.new.key === 'broadcast_message') {
+              const newMsg = payload.new.value;
+              setMessage(newMsg);
+              setIsVisible(!!newMsg);
+            } else if (payload.new.key === 'broadcast_enabled') {
+              setIsEnabled(payload.new.value !== 'false');
+            }
           }
         }
       )
@@ -52,7 +64,7 @@ export function BroadcastMarquee() {
     };
   }, []);
 
-  if (!isVisible || !message) return null;
+  if (!isVisible || !message || !isEnabled) return null;
 
   return (
     <div className="w-full bg-primary/20 border-b border-primary/30 text-primary py-2 px-4 flex items-center overflow-hidden shrink-0">
@@ -60,9 +72,9 @@ export function BroadcastMarquee() {
       <div className="w-full overflow-hidden whitespace-nowrap">
         <div className="inline-block animate-[marquee_20s_linear_infinite] font-semibold text-sm">
           {message}
-          <span className="mx-8 text-primary/50">•</span>
+          <span className="mx-8 text-primary/50">â€¢</span>
           {message}
-          <span className="mx-8 text-primary/50">•</span>
+          <span className="mx-8 text-primary/50">â€¢</span>
           {message}
         </div>
       </div>

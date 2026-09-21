@@ -85,6 +85,7 @@ export default function SettingsPage() {
   const [stocks, setStocks] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [broadcastMessage, setBroadcastMessage] = useState('');
+  const [isBroadcastEnabled, setIsBroadcastEnabled] = useState(true);
   const [isUpdatingBroadcast, setIsUpdatingBroadcast] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
 
@@ -94,12 +95,12 @@ export default function SettingsPage() {
 
   const fetchData = async () => {
     setIsLoadingData(true);
-    const [categoriesRes, productsRes, stocksRes, usersRes, broadcastRes] = await Promise.all([
+    const [categoriesRes, productsRes, stocksRes, usersRes, settingsRes] = await Promise.all([
       supabase.from('categories').select('*'),
       supabase.from('products').select('*'),
       supabase.from('stocks').select('*'),
       supabase.from('users').select('*'),
-      supabase.from('settings').select('value').eq('key', 'broadcast_message').single()
+      supabase.from('settings').select('*').in('key', ['broadcast_message', 'broadcast_enabled'])
     ]);
     if (categoriesRes.error) console.error("Error fetching categories:", categoriesRes.error);
     if (productsRes.error) console.error("Error fetching products:", productsRes.error);
@@ -110,7 +111,12 @@ export default function SettingsPage() {
     }
     if (stocksRes.data) setStocks(stocksRes.data);
     if (usersRes.data) setUsers(usersRes.data);
-    if (broadcastRes.data) setBroadcastMessage(broadcastRes.data.value);
+    if (settingsRes.data) {
+      const msg = settingsRes.data.find(s => s.key === 'broadcast_message');
+      const enabled = settingsRes.data.find(s => s.key === 'broadcast_enabled');
+      if (msg) setBroadcastMessage(msg.value);
+      if (enabled) setIsBroadcastEnabled(enabled.value !== 'false');
+    }
     setIsLoadingData(false);
   };
   
@@ -1012,28 +1018,50 @@ export default function SettingsPage() {
                 <CardContent>
                   <div className="flex flex-col gap-3">
                     <label className="text-sm font-medium text-zinc-300">Pesan Pengumuman</label>
-                    <div className="flex gap-3">
+                    <div className="flex flex-col sm:flex-row gap-3">
                       <Input
                         placeholder="Contoh: Promo diskon 20% khusus hari ini!"
                         value={broadcastMessage}
                         onChange={(e) => setBroadcastMessage(e.target.value)}
                         className="bg-zinc-900/50 border-white/10 text-zinc-100 flex-1 h-11"
                       />
-                      <Button 
-                        disabled={isUpdatingBroadcast}
-                        onClick={async () => {
-                          setIsUpdatingBroadcast(true);
-                          const { error } = await supabase
-                            .from('settings')
-                            .upsert({ key: 'broadcast_message', value: broadcastMessage });
-                          if (error) alert("Gagal update pesan: " + error.message);
-                          else alert("Pesan berhasil diupdate dan disiarkan!");
-                          setIsUpdatingBroadcast(false);
-                        }}
-                        className="bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-6"
-                      >
-                        {isUpdatingBroadcast ? 'Loading...' : 'Siarkan'}
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant={isBroadcastEnabled ? "default" : "outline"}
+                          disabled={isUpdatingBroadcast}
+                          onClick={async () => {
+                            const newState = !isBroadcastEnabled;
+                            setIsUpdatingBroadcast(true);
+                            const { error } = await supabase
+                              .from('settings')
+                              .upsert({ key: 'broadcast_enabled', value: newState.toString() });
+                            if (error) {
+                              alert("Gagal ubah status: " + error.message);
+                            } else {
+                              setIsBroadcastEnabled(newState);
+                            }
+                            setIsUpdatingBroadcast(false);
+                          }}
+                          className={`h-11 px-4 ${isBroadcastEnabled ? 'bg-emerald-500 hover:bg-emerald-600 text-white' : 'border-white/10 text-zinc-400 hover:text-white'}`}
+                        >
+                          {isBroadcastEnabled ? 'Status: ON' : 'Status: OFF'}
+                        </Button>
+                        <Button 
+                          disabled={isUpdatingBroadcast}
+                          onClick={async () => {
+                            setIsUpdatingBroadcast(true);
+                            const { error } = await supabase
+                              .from('settings')
+                              .upsert({ key: 'broadcast_message', value: broadcastMessage });
+                            if (error) alert("Gagal update pesan: " + error.message);
+                            else alert("Pesan berhasil diupdate!");
+                            setIsUpdatingBroadcast(false);
+                          }}
+                          className="bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-6"
+                        >
+                          {isUpdatingBroadcast ? 'Loading...' : 'Simpan'}
+                        </Button>
+                      </div>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">Kosongkan dan klik "Siarkan" jika ingin menghilangkan pengumuman.</p>
                   </div>
