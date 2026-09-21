@@ -47,6 +47,10 @@ export default function RecipesPage() {
   const [isAddIngredientOpen, setIsAddIngredientOpen] = useState(false);
   const [newIngredient, setNewIngredient] = useState({ stock_id: '', quantity: '' });
   
+  const [isQuickAddStockOpen, setIsQuickAddStockOpen] = useState(false);
+  const [newQuickStock, setNewQuickStock] = useState({ name: '', unit: '' });
+  const [isSavingQuickStock, setIsSavingQuickStock] = useState(false);
+  
   const [isEditIngredientOpen, setIsEditIngredientOpen] = useState(false);
   const [editingIngredient, setEditingIngredient] = useState<RecipeIngredient | null>(null);
   const [editQuantity, setEditQuantity] = useState('');
@@ -108,6 +112,29 @@ export default function RecipesPage() {
       alert("Gagal menambah bahan baku. Mungkin tabel product_ingredients belum ada.");
     }
     setIsSaving(false);
+  };
+
+  const handleQuickAddStock = async () => {
+    if (!newQuickStock.name || !newQuickStock.unit) return;
+    setIsSavingQuickStock(true);
+    
+    const { data, error } = await supabase.from('stocks').insert([{
+      name: newQuickStock.name.trim(),
+      unit: newQuickStock.unit.trim(),
+      cost_per_unit: 0,
+      min_stock_alert: 0,
+      quantity: 0
+    }]).select();
+
+    if (data && !error) {
+      setStocks([...stocks, data[0]].sort((a, b) => a.name.localeCompare(b.name)));
+      setNewIngredient({ ...newIngredient, stock_id: data[0].id });
+      setIsQuickAddStockOpen(false);
+      setNewQuickStock({ name: '', unit: '' });
+    } else {
+      alert("Gagal menambahkan bahan baru.");
+    }
+    setIsSavingQuickStock(false);
   };
 
   const handleSaveEdit = async () => {
@@ -432,7 +459,15 @@ export default function RecipesPage() {
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <label className="text-xs font-semibold">Bahan Baku (Stock)</label>
+              <div className="flex justify-between items-center">
+                <label className="text-xs font-semibold">Bahan Baku (Stock)</label>
+                <span 
+                  className="text-[10px] text-amber-500 hover:text-amber-400 cursor-pointer hover:underline font-bold"
+                  onClick={() => setIsQuickAddStockOpen(true)}
+                >
+                  + Tambah Bahan Baru
+                </span>
+              </div>
               <select 
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 value={newIngredient.stock_id}
@@ -469,6 +504,43 @@ export default function RecipesPage() {
             <Button onClick={handleAddIngredient} disabled={!newIngredient.stock_id || !newIngredient.quantity || isSaving}>
               {isSaving ? <Loader2 size={16} className="animate-spin mr-2" /> : <Save size={16} className="mr-2" />}
               Simpan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick Add Stock Dialog */}
+      <Dialog open={isQuickAddStockOpen} onOpenChange={setIsQuickAddStockOpen}>
+        <DialogContent className="sm:max-w-[400px] bg-card border-border">
+          <DialogHeader>
+            <DialogTitle>Tambah Bahan Baru</DialogTitle>
+            <DialogDescription className="text-xs">
+              Bahan yang tidak ada di daftar dapat ditambahkan dengan cepat di sini.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <label className="text-xs font-semibold">Nama Bahan</label>
+              <Input
+                placeholder="Contoh: Susu Indomilk"
+                value={newQuickStock.name}
+                onChange={(e) => setNewQuickStock({...newQuickStock, name: e.target.value})}
+              />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-xs font-semibold">Satuan Takaran</label>
+              <Input
+                placeholder="Contoh: gram, pcs, mililiter, pack"
+                value={newQuickStock.unit}
+                onChange={(e) => setNewQuickStock({...newQuickStock, unit: e.target.value})}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsQuickAddStockOpen(false)}>Batal</Button>
+            <Button onClick={handleQuickAddStock} disabled={!newQuickStock.name || !newQuickStock.unit || isSavingQuickStock}>
+              {isSavingQuickStock ? <Loader2 size={16} className="animate-spin mr-2" /> : <Save size={16} className="mr-2" />}
+              Simpan Bahan
             </Button>
           </DialogFooter>
         </DialogContent>
