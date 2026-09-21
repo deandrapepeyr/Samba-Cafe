@@ -206,13 +206,13 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
                   {displayCategories.map(cat => {
                     const catProducts = products.filter(p => p.category_id === cat.id).slice(0, 15);
                     return (
-                      <div key={cat.id} className="flex flex-col mb-3" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
-                        <div className={`inline-block py-1 px-2.5 rounded-full mb-1.5 self-start border ${theme === 'dark' ? 'border-[#ffb300] text-[#ffb300]' : 'border-[#e65100] text-[#e65100] bg-white'}`}>
-                          <h2 className="text-[10px] font-black uppercase tracking-widest">
+                      <div key={cat.id} className="flex flex-col mb-2" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
+                        <div className={`inline-block py-0.5 px-2 rounded-full mb-1 self-start border ${theme === 'dark' ? 'border-[#ffb300] text-[#ffb300]' : 'border-[#e65100] text-[#e65100] bg-white'}`}>
+                          <h2 className="text-[9px] font-black uppercase tracking-widest">
                             {cat.name}
                           </h2>
                         </div>
-                        <div className="space-y-1 text-[9.5px]">
+                        <div className="space-y-0.5 text-[8.5px]">
                           {catProducts.map((product) => (
                             <div key={product.id} className="flex flex-col">
                               <div className="flex items-end justify-between font-bold">
