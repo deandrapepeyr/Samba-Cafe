@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Loader2 } from 'lucide-react';
 import { DateFilter, DateFilterValue } from '@/components/ui/DateFilter';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 export default function DashboardPage() {
   const { role } = useAuth();
@@ -49,6 +50,8 @@ export default function DashboardPage() {
   const [topProducts, setTopProducts] = useState<any[]>([]);
   const [lowStocks, setLowStocks] = useState<any[]>([]);
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
+  const [selectedTx, setSelectedTx] = useState<any>(null);
+  const [isTxModalOpen, setIsTxModalOpen] = useState(false);
 
 
 
@@ -214,10 +217,7 @@ export default function DashboardPage() {
              }
 
              if (recentTxs.length < 5) {
-               recentTxs.push({
-                 id: tx.id,
-                 customer: tx.customer_name || 'Umum'
-               });
+               recentTxs.push(tx);
              }
           }
         });
@@ -561,9 +561,20 @@ export default function DashboardPage() {
                     <p className="text-sm text-zinc-400">Belum ada transaksi.</p>
                   ) : (
                     recentTransactions.map((tx, i) => (
-                      <div key={i} className="flex items-center gap-3 py-0.5">
-                        <span className="text-xs font-mono font-bold text-zinc-500 shrink-0">{tx.id.startsWith('order_') ? tx.id : `order_${tx.id}`}</span>
-                        <span className="text-sm font-bold text-white truncate">{tx.customer}</span>
+                      <div 
+                        key={i} 
+                        className="flex items-center gap-3 py-1.5 cursor-pointer hover:bg-white/5 p-2 -mx-2 rounded-lg transition-colors group"
+                        onClick={() => {
+                          setSelectedTx(tx);
+                          setIsTxModalOpen(true);
+                        }}
+                      >
+                        <span className="text-xs font-mono font-bold text-zinc-500 shrink-0 group-hover:text-primary transition-colors">
+                          {tx.id.startsWith('order_') ? tx.id : `order_${tx.id}`}
+                        </span>
+                        <span className="text-sm font-bold text-white truncate">
+                          {tx.customer_name || 'Umum'}
+                        </span>
                       </div>
                     ))
                   )}
@@ -573,6 +584,60 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
+
+        <Dialog open={isTxModalOpen} onOpenChange={setIsTxModalOpen}>
+          <DialogContent className="bg-card border-border sm:max-w-md max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Detail Transaksi</DialogTitle>
+            </DialogHeader>
+            {selectedTx && (
+              <div className="space-y-4 py-4">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">ID:</span>
+                  <span className="font-mono text-xs text-right max-w-[60%] truncate" title={selectedTx.id}>
+                    {selectedTx.id}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Waktu:</span>
+                  <span>{new Date(selectedTx.created_at).toLocaleString('id-ID')}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Customer:</span>
+                  <span className="font-semibold">{selectedTx.customer_name || 'Umum'}</span>
+                </div>
+                {selectedTx.cashier_name && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Kasir:</span>
+                    <span>{selectedTx.cashier_name}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Metode:</span>
+                  <span className="font-semibold">{selectedTx.method}</span>
+                </div>
+                
+                <div className="pt-4 border-t border-border space-y-3">
+                  <h4 className="font-semibold text-sm">Item Pesanan:</h4>
+                  {selectedTx.transaction_items?.map((item: any, idx: number) => (
+                    <div key={idx} className="flex justify-between text-sm">
+                      <div className="max-w-[70%]">
+                        <span>{item.quantity}x {item.product_name}</span>
+                        {item.notes && <p className="text-xs text-muted-foreground mt-0.5 break-words">Note: {item.notes}</p>}
+                      </div>
+                      <span className="font-medium whitespace-nowrap">Rp {(item.price * item.quantity).toLocaleString('id-ID')}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="pt-4 border-t border-border flex justify-between font-bold text-lg items-center">
+                  <span>Total</span>
+                  <span className="text-primary">Rp {selectedTx.total?.toLocaleString('id-ID')}</span>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </MainLayout>
   );
