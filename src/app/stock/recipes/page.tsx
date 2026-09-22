@@ -30,6 +30,7 @@ type StockItem = {
   id: string;
   name: string;
   unit: string;
+  titipan_name?: string | null;
 };
 
 type RecipeIngredient = {
