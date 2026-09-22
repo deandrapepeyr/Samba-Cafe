@@ -37,6 +37,7 @@ export type Product = {
   titipan_name: string | null;
   supplier_price?: number;
   is_quick?: boolean;
+  stock?: number;
   variants?: ProductVariant[];
 };
 
@@ -50,6 +51,7 @@ type CartItem = {
   product: Product;
   quantity: number;
   notes?: string;
+  variantChoices?: Record<string, string[]>;
 };
 
 export default function POSPage() {
@@ -167,7 +169,7 @@ export default function POSPage() {
         supabase.from('categories').select('*'),
         supabase.from('products').select('*').eq('is_available', true),
         supabase.from('stocks').select('id, quantity'),
-        supabase.from('product_ingredients').select('product_id, stock_id, quantity_required')
+        supabase.from('product_ingredients').select('product_id, stock_id, quantity_required, variant_name, choice_name')
       ]);
 
       if (categoriesRes.data) {
@@ -379,6 +381,9 @@ export default function POSPage() {
   };
 
   const getProductStock = (productId: string) => {
+    const product = products.find(p => p.id === productId);
+    if (product?.is_titipan) return product.stock ?? null;
+
     const productRecipes = recipesData.filter(r => r.product_id === productId);
     if (productRecipes.length === 0) return null; // Infinite/Not Tracked
     
@@ -507,11 +512,11 @@ export default function POSPage() {
       setSelectedVariantChoices(initialChoices);
       setIsOptionsModalOpen(true);
     } else {
-      addToCart(product, '', 0);
+      addToCart(product, '', 0, {});
     }
   };
 
-  const addToCart = (product: Product, notes: string = '', addonPrice: number = 0) => {
+  const addToCart = (product: Product, notes: string = '', addonPrice: number = 0, variantChoices?: Record<string, string[]>) => {
     const maxStock = getProductStock(product.id);
     const cartItemId = notes ? `${product.id}-${notes}` : product.id;
 
@@ -529,7 +534,7 @@ export default function POSPage() {
         );
       }
       const productWithAddonPrice = { ...product, price: product.price + addonPrice };
-      return [...prev, { id: cartItemId, product: productWithAddonPrice, quantity: 1, notes }];
+      return [...prev, { id: cartItemId, product: productWithAddonPrice, quantity: 1, notes, variantChoices }];
     });
     setIsCartOpen(true);
     setIsOptionsModalOpen(false);
@@ -625,10 +630,35 @@ export default function POSPage() {
           const { error: itemsError } = await supabase.from('transaction_items').insert(itemsToInsert);
           if (itemsError) throw itemsError;
 
-          // Stock adjustment (Delta)
+          // Stock adjustment for Titipan items
+          const titipanDelta: Record<string, number> = {};
+          for (const cartItem of cart.filter(i => i.product.is_titipan)) {
+            titipanDelta[cartItem.product.id] = (titipanDelta[cartItem.product.id] || 0) + cartItem.quantity;
+          }
+          for (const oldItem of oldCartItems) {
+            const p = products.find(prod => prod.name === oldItem.product_name);
+            if (p?.is_titipan) {
+              titipanDelta[p.id] = (titipanDelta[p.id] || 0) - oldItem.quantity;
+            }
+          }
+          for (const id of Object.keys(titipanDelta)) {
+            const delta = titipanDelta[id];
+            if (delta) {
+              const p = products.find(prod => prod.id === id);
+              if (p) {
+                const newStock = Math.max(0, (p.stock || 0) - delta);
+                await supabase.from('products').update({ stock: newStock }).eq('id', id);
+              }
+            }
+          }
+
+          // Stock adjustment (Delta) for Regular items via recipes
           const allProductIds = Array.from(new Set([
-            ...cart.map(i => i.product.id),
-            ...oldCartItems.map(i => products.find(p => p.name === i.product_name)?.id).filter(Boolean)
+            ...cart.filter(i => !i.product.is_titipan).map(i => i.product.id),
+            ...oldCartItems.filter(i => {
+                const p = products.find(prod => prod.name === i.product_name);
+                return p && !p.is_titipan;
+            }).map(i => products.find(p => p.name === i.product_name)?.id).filter(Boolean)
           ]));
           
           const { data: recipes } = await supabase.from('product_ingredients').select('*').in('product_id', allProductIds as string[]);
@@ -639,8 +669,19 @@ export default function POSPage() {
             for (const cartItem of cart) {
               const itemRecipes = recipes.filter(r => r.product_id === cartItem.product.id);
               for (const recipe of itemRecipes) {
-                if (!stockDelta[recipe.stock_id]) stockDelta[recipe.stock_id] = 0;
-                stockDelta[recipe.stock_id] += (recipe.quantity_required * cartItem.quantity);
+                const isBaseRecipe = !recipe.variant_name;
+                let matchesVariant = false;
+                if (!isBaseRecipe && cartItem.variantChoices) {
+                  const selectedOptions = cartItem.variantChoices[recipe.variant_name] || [];
+                  if (selectedOptions.includes(recipe.choice_name)) {
+                    matchesVariant = true;
+                  }
+                }
+                
+                if (isBaseRecipe || matchesVariant) {
+                  if (!stockDelta[recipe.stock_id]) stockDelta[recipe.stock_id] = 0;
+                  stockDelta[recipe.stock_id] += (recipe.quantity_required * cartItem.quantity);
+                }
               }
             }
             
@@ -648,8 +689,17 @@ export default function POSPage() {
               const productId = products.find(p => p.name === oldItem.product_name)?.id;
               const itemRecipes = recipes.filter(r => r.product_id === productId);
               for (const recipe of itemRecipes) {
-                if (!stockDelta[recipe.stock_id]) stockDelta[recipe.stock_id] = 0;
-                stockDelta[recipe.stock_id] -= (recipe.quantity_required * oldItem.quantity);
+                // For old items we cannot reliably know variant choices from notes safely.
+                // However, if the old item had variant choices saved in DB we would parse them.
+                // Currently transaction_items lacks variantChoices, so we only revert base recipes
+                // OR we can revert based on the notes parsed. For simplicity, if notes exist and match choice_name:
+                const isBaseRecipe = !recipe.variant_name;
+                const noteMatches = !isBaseRecipe && oldItem.notes && recipe.choice_name && oldItem.notes.includes(recipe.choice_name);
+                
+                if (isBaseRecipe || noteMatches) {
+                  if (!stockDelta[recipe.stock_id]) stockDelta[recipe.stock_id] = 0;
+                  stockDelta[recipe.stock_id] -= (recipe.quantity_required * oldItem.quantity);
+                }
               }
             }
 
@@ -674,8 +724,15 @@ export default function POSPage() {
           const { error: itemsError } = await supabase.from('transaction_items').insert(itemsToInsert);
           if (itemsError) throw itemsError;
 
-          // Deduct stock based on recipe
-          const productIds = cart.map(item => item.product.id);
+          // Deduct stock directly for titipan items
+          const titipanItems = cart.filter(item => item.product.is_titipan);
+          for (const cartItem of titipanItems) {
+             const newStock = Math.max(0, (cartItem.product.stock || 0) - cartItem.quantity);
+             await supabase.from('products').update({ stock: newStock }).eq('id', cartItem.product.id);
+          }
+
+          // Deduct stock based on recipe for regular items
+          const productIds = cart.filter(item => !item.product.is_titipan).map(item => item.product.id);
           const { data: recipes } = await supabase.from('product_ingredients').select('*').in('product_id', productIds);
           
           if (recipes && recipes.length > 0) {
@@ -683,8 +740,19 @@ export default function POSPage() {
             for (const cartItem of cart) {
               const itemRecipes = recipes.filter(r => r.product_id === cartItem.product.id);
               for (const recipe of itemRecipes) {
-                if (!stockDeductions[recipe.stock_id]) stockDeductions[recipe.stock_id] = 0;
-                stockDeductions[recipe.stock_id] += (recipe.quantity_required * cartItem.quantity);
+                const isBaseRecipe = !recipe.variant_name;
+                let matchesVariant = false;
+                if (!isBaseRecipe && cartItem.variantChoices) {
+                  const selectedOptions = cartItem.variantChoices[recipe.variant_name] || [];
+                  if (selectedOptions.includes(recipe.choice_name)) {
+                    matchesVariant = true;
+                  }
+                }
+                
+                if (isBaseRecipe || matchesVariant) {
+                  if (!stockDeductions[recipe.stock_id]) stockDeductions[recipe.stock_id] = 0;
+                  stockDeductions[recipe.stock_id] += (recipe.quantity_required * cartItem.quantity);
+                }
               }
             }
 
@@ -1182,11 +1250,13 @@ export default function POSPage() {
                 
                 let addonPrice = 0;
                 let notesArr: string[] = [];
+                let selectedChoices: Record<string, string[]> = {};
                 
                 selectedProductForOptions.variants?.forEach(v => {
                   const choices = selectedVariantChoices[v.name] || [];
                   if (choices.length > 0) {
                     notesArr.push(`${v.name}: ${choices.join(', ')}`);
+                    selectedChoices[v.name] = choices;
                     choices.forEach(cName => {
                       const cObj = v.choices.find(c => c.name === cName);
                       if (cObj) addonPrice += cObj.price;
@@ -1194,7 +1264,7 @@ export default function POSPage() {
                   }
                 });
                 
-                addToCart(selectedProductForOptions, notesArr.join(' | '), addonPrice);
+                addToCart(selectedProductForOptions, notesArr.join(' | '), addonPrice, selectedChoices);
               }}
             >
               <ShoppingCart size={20} />

@@ -139,6 +139,7 @@ export default function SettingsPage() {
     titipan_name: '',
     supplier_price: '',
     is_quick: false,
+    stock: '',
     variants: [] as any[]
   });
   const [newIngredients, setNewIngredients] = useState<{stock_id: string, quantity_required: string}[]>([]);
@@ -373,6 +374,7 @@ export default function SettingsPage() {
         is_titipan: newItem.is_titipan,
         titipan_name: newItem.is_titipan ? newItem.titipan_name : null,
         supplier_price: newItem.is_titipan ? parseInt(newItem.supplier_price.toString()) || 0 : 0,
+        stock: newItem.is_titipan ? parseInt(newItem.stock.toString()) || 0 : 0,
         is_quick: newItem.is_quick,
         variants: newItem.variants || []
       };
@@ -403,6 +405,7 @@ export default function SettingsPage() {
           is_titipan: false,
           titipan_name: '',
           supplier_price: '',
+          stock: '',
           is_quick: false,
           variants: [] as any[]
         });
@@ -429,6 +432,9 @@ export default function SettingsPage() {
       if (!updatedItem.is_titipan) {
         updatedItem.titipan_name = null;
         updatedItem.supplier_price = 0;
+        updatedItem.stock = 0;
+      } else {
+        updatedItem.stock = parseInt(updatedItem.stock?.toString()) || 0;
       }
       if (editImageFile) {
         const imageUrl = await uploadImage(editImageFile);
@@ -888,6 +894,11 @@ export default function SettingsPage() {
                                                 {categories.find(c => c.id === product.category_id)?.name || 'Unknown'}
                                               </span>
                                             )}
+                                            {product.is_titipan && (
+                                              <span className="text-orange-400 text-xs font-bold bg-orange-400/10 px-2.5 py-0.5 rounded-full border border-orange-400/20">
+                                                Stok: {product.stock || 0}
+                                              </span>
+                                            )}
                                           </div>
                                         </div>
                                       </div>
@@ -1213,6 +1224,20 @@ export default function SettingsPage() {
                   />
                   <p className="text-[10px] text-zinc-500 font-medium mt-1">Uang ini tidak akan dihitung sebagai Laba Bersih.</p>
                 </div>
+                <div className="grid gap-2">
+                  <label htmlFor="titipan_stock" className="text-sm font-bold text-primary">Stok Titipan</label>
+                  <Input 
+                    id="titipan_stock" 
+                    type="text"
+                    className="bg-zinc-900/80 border-white/10 text-zinc-100 focus-visible:ring-primary h-11 rounded-xl" 
+                    placeholder="Misal: 10"
+                    value={newItem.stock || ''}
+                    onChange={(e) => {
+                      const rawValue = e.target.value.replace(/\D/g, '');
+                      setNewItem({...newItem, stock: rawValue});
+                    }}
+                  />
+                </div>
               </div>
             )}
             
@@ -1382,6 +1407,20 @@ export default function SettingsPage() {
                       }}
                     />
                     <p className="text-[10px] text-zinc-500 font-medium mt-1">Uang ini tidak akan dihitung sebagai Laba Bersih.</p>
+                  </div>
+                  <div className="grid gap-2">
+                    <label htmlFor="edit_titipan_stock" className="text-sm font-bold text-primary">Stok Titipan</label>
+                    <Input 
+                      id="edit_titipan_stock" 
+                      type="text"
+                      className="bg-zinc-900/80 border-white/10 text-zinc-100 focus-visible:ring-primary h-11 rounded-xl" 
+                      placeholder="Misal: 10"
+                      value={editingItem.stock || ''}
+                      onChange={(e) => {
+                        const rawValue = e.target.value.replace(/\D/g, '');
+                        setEditingItem({...editingItem, stock: rawValue});
+                      }}
+                    />
                   </div>
                 </div>
               )}
