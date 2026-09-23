@@ -101,14 +101,40 @@ export default function StockPage() {
     quantity: '',
     is_titipan: false,
     titipan_name: '',
-    sell_price: ''
+    sell_price: '',
+    is_direct_sell: false
   });
 
   const [editUnitValue, setEditUnitValue] = useState('');
   const [editUnitType, setEditUnitType] = useState('pcs');
+  const [editPackPrice, setEditPackPrice] = useState('');
 
   const [stockUpdateAmount, setStockUpdateAmount] = useState('');
-  const [stockUpdateType, setStockUpdateType] = useState<'add' | 'subtract'>('add');
+  const [stockUpdateType, setStockUpdateType] = useState<'add' | 'subtract' | 'set'>('add');
+  const [restockPacks, setRestockPacks] = useState('1');
+  const [restockPackContent, setRestockPackContent] = useState('');
+  const [restockTotalPrice, setRestockTotalPrice] = useState('');
+
+  const [inlineEditId, setInlineEditId] = useState<string | null>(null);
+  const [inlineEditValue, setInlineEditValue] = useState('');
+
+  const [linkedPrice, setLinkedPrice] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (isDetailDialogOpen && selectedStock) {
+      if (selectedStock.is_titipan) {
+        setLinkedPrice((selectedStock as any).price || 0);
+      } else {
+        supabase.from('products').select('price').eq('name', selectedStock.name).eq('is_titipan', false).maybeSingle().then(({ data }) => {
+          if (data) {
+             setLinkedPrice(data.price);
+          } else {
+             setLinkedPrice(null);
+          }
+        });
+      }
+    }
+  }, [isDetailDialogOpen, selectedStock]);
 
   useEffect(() => {
     if (!isLoading && role !== 'manager') {
@@ -121,6 +147,23 @@ export default function StockPage() {
       fetchStocks();
     }
   }, [role]);
+
+  useEffect(() => {
+    if (isUpdateStockDialogOpen && selectedStock) {
+      setStockUpdateType('set');
+      setStockUpdateAmount('');
+      if (!selectedStock.is_titipan) {
+        const unitMatch = selectedStock.unit.match(/^([\d.,]+)/);
+        if (unitMatch) {
+           setRestockPackContent(unitMatch[1]);
+        } else {
+           setRestockPackContent('1');
+        }
+        setRestockPacks('1');
+        setRestockTotalPrice('');
+      }
+    }
+  }, [isUpdateStockDialogOpen, selectedStock]);
 
   const fetchStocks = async () => {
     setIsLoadingData(true);
@@ -143,7 +186,8 @@ export default function StockPage() {
         min_stock_alert: 0,
         last_updated: p.created_at || new Date().toISOString(),
         is_titipan: true,
-        titipan_name: p.titipan_name
+        titipan_name: p.titipan_name,
+        price: p.price || 0
       }));
       combined = [...combined, ...titipanStocks];
     }
@@ -170,13 +214,14 @@ export default function StockPage() {
       return;
     }
 
+    const { data: catData } = await supabase.from('categories').select('id').limit(1);
+    const categoryId = catData && catData.length > 0 ? catData[0].id : '1';
+
     if (newItem.is_titipan) {
        if (!newItem.titipan_name || !newItem.sell_price) {
            alert("Nama Penitip dan Harga Jual wajib diisi untuk barang titipan.");
            return;
        }
-       const { data: catData } = await supabase.from('categories').select('id').limit(1);
-       const categoryId = catData && catData.length > 0 ? catData[0].id : '1';
 
        const newProduct = {
            id: `p${Math.random().toString(36).substr(2, 9)}`,
@@ -208,7 +253,7 @@ export default function StockPage() {
            };
            setStocks([...stocks, newStockEntry].sort((a, b) => a.name.localeCompare(b.name)));
            setIsAddDialogOpen(false);
-           setNewItem({ name: '', unit_value: '', unit_type: 'pcs', cost_per_unit: '', min_stock_alert: '', quantity: '', is_titipan: false, titipan_name: '', sell_price: '' });
+           setNewItem({ ...newItem, name: '', cost_per_unit: '', min_stock_alert: '', quantity: '', sell_price: '' });
        } else {
            alert("Failed to add titipan item: " + error.message);
        }
@@ -217,18 +262,53 @@ export default function StockPage() {
             alert("Satuan wajib diisi untuk bahan baku cafe.");
             return;
         }
+        if (newItem.is_direct_sell && !newItem.sell_price) {
+            alert("Harga Jual wajib diisi jika ingin langsung membuat Menu.");
+            return;
+        }
+
+        const computedCostPerUnit = Math.round(parseInt(newItem.cost_per_unit) / parseFloat(newItem.unit_value)) || 0;
+        const computedQuantity = (parseInt(newItem.quantity) || 0) * (parseFloat(newItem.unit_value) || 1);
+
         const { data, error } = await supabase.from('stocks').insert([{
           name: newItem.name.trim(),
           unit: `${newItem.unit_value} ${newItem.unit_type}`.trim(),
-          cost_per_unit: parseInt(newItem.cost_per_unit),
+          cost_per_unit: computedCostPerUnit,
           min_stock_alert: parseInt(newItem.min_stock_alert) || 0,
-          quantity: parseInt(newItem.quantity) || 0
+          quantity: computedQuantity
         }]).select();
     
         if (data && !error) {
-          setStocks([...stocks, data[0]].sort((a, b) => a.name.localeCompare(b.name)));
+          const newStock = data[0];
+          
+          if (newItem.is_direct_sell) {
+             const newProduct = {
+                 id: `p${Math.random().toString(36).substr(2, 9)}`,
+                 name: newItem.name.trim(),
+                 price: parseInt(newItem.sell_price) || 0,
+                 category_id: categoryId,
+                 image_url: 'https://images.unsplash.com/photo-1510591509098-f4fdc6d0ff04?auto=format&fit=crop&q=80&w=400&h=300',
+                 is_available: true,
+                 is_titipan: false,
+                 supplier_price: computedCostPerUnit,
+                 stock: computedQuantity,
+                 is_quick: false,
+                 variants: []
+             };
+             
+             const { error: prodError } = await supabase.from('products').insert([newProduct]);
+             if (!prodError) {
+                 await supabase.from('product_ingredients').insert([{
+                     product_id: newProduct.id,
+                     stock_id: newStock.id,
+                     quantity_required: 1
+                 }]);
+             }
+          }
+
+          setStocks([...stocks, newStock].sort((a, b) => a.name.localeCompare(b.name)));
           setIsAddDialogOpen(false);
-          setNewItem({ name: '', unit_value: '', unit_type: 'pcs', cost_per_unit: '', min_stock_alert: '', quantity: '', is_titipan: false, titipan_name: '', sell_price: '' });
+          setNewItem({ ...newItem, name: '', cost_per_unit: '', min_stock_alert: '', quantity: '', sell_price: '' });
         } else {
           alert("Failed to add stock item.");
         }
@@ -236,14 +316,28 @@ export default function StockPage() {
   };
 
   const handleUpdateStock = async () => {
-    if (!selectedStock || !stockUpdateAmount) return;
-    
-    const amount = parseInt(stockUpdateAmount);
-    if (isNaN(amount)) return;
+    if (!selectedStock) return;
 
-    const newQuantity = stockUpdateType === 'add' 
-      ? Number(selectedStock.quantity) + amount 
-      : Math.max(0, Number(selectedStock.quantity) - amount);
+    let newQuantity = 0;
+    let newCostPerUnit = selectedStock.cost_per_unit;
+
+    if (stockUpdateType === 'add') {
+      const amountAdded = parseFloat(stockUpdateAmount) || 0;
+      if (amountAdded <= 0) return;
+      newQuantity = Number(selectedStock.quantity) + amountAdded;
+
+      const totalPrice = parseInt(restockTotalPrice.replace(/\D/g, '')) || 0;
+      if (totalPrice > 0) {
+         newCostPerUnit = Math.round(totalPrice / amountAdded);
+      }
+    } else if (stockUpdateType === 'subtract') {
+      const amount = parseInt(stockUpdateAmount) || 0;
+      if (amount <= 0) return;
+      newQuantity = Math.max(0, Number(selectedStock.quantity) - amount);
+    } else if (stockUpdateType === 'set') {
+      const amount = parseInt(stockUpdateAmount) || 0;
+      newQuantity = Math.max(0, amount);
+    }
 
     if (selectedStock.is_titipan) {
       const { error } = await supabase
@@ -260,13 +354,18 @@ export default function StockPage() {
         alert("Failed to update stock quantity.");
       }
     } else {
+      const updates: any = { quantity: newQuantity, last_updated: new Date().toISOString() };
+      if (stockUpdateType === 'add' && newCostPerUnit !== selectedStock.cost_per_unit) {
+         updates.cost_per_unit = newCostPerUnit;
+      }
+
       const { error } = await supabase
         .from('stocks')
-        .update({ quantity: newQuantity, last_updated: new Date().toISOString() })
+        .update(updates)
         .eq('id', selectedStock.id);
 
       if (!error) {
-        setStocks(stocks.map(s => s.id === selectedStock.id ? { ...s, quantity: newQuantity, last_updated: new Date().toISOString() } : s));
+        setStocks(stocks.map(s => s.id === selectedStock.id ? { ...s, quantity: newQuantity, last_updated: updates.last_updated, cost_per_unit: newCostPerUnit } : s));
         setIsUpdateStockDialogOpen(false);
         setSelectedStock(null);
         setStockUpdateAmount('');
@@ -274,6 +373,29 @@ export default function StockPage() {
         alert("Failed to update stock quantity.");
       }
     }
+  };
+
+  const handleInlineEditSave = async (item: any) => {
+    if (!inlineEditValue) {
+      setInlineEditId(null);
+      return;
+    }
+    const newQty = parseInt(inlineEditValue);
+    if (isNaN(newQty) || newQty === item.quantity) {
+       setInlineEditId(null);
+       return;
+    }
+    
+    const table = item.is_titipan ? 'products' : 'stocks';
+    const updates: any = item.is_titipan ? { stock: newQty } : { quantity: newQty, last_updated: new Date().toISOString() };
+    
+    const { error } = await supabase.from(table).update(updates).eq('id', item.id);
+    if (!error) {
+       setStocks(stocks.map(s => s.id === item.id ? { ...s, quantity: newQty, last_updated: updates.last_updated || s.last_updated } : s));
+    } else {
+       alert("Gagal update stok.");
+    }
+    setInlineEditId(null);
   };
 
   const handleEditSave = async () => {
@@ -292,7 +414,8 @@ export default function StockPage() {
         .update({ 
           name: selectedStock.name.trim(), 
           titipan_name: selectedStock.titipan_name?.trim(),
-          supplier_price: selectedStock.cost_per_unit
+          supplier_price: selectedStock.cost_per_unit,
+          price: (selectedStock as any).price || 0
         })
         .eq('id', selectedStock.id);
 
@@ -308,7 +431,7 @@ export default function StockPage() {
         .update({ 
           name: selectedStock.name.trim(), 
           unit: `${editUnitValue} ${editUnitType}`.trim(), 
-          cost_per_unit: selectedStock.cost_per_unit, 
+          cost_per_unit: editUnitValue && editPackPrice ? Math.round(parseInt(editPackPrice) / parseFloat(editUnitValue)) : selectedStock.cost_per_unit, 
           min_stock_alert: selectedStock.min_stock_alert 
         })
         .eq('id', selectedStock.id);
@@ -378,260 +501,248 @@ export default function StockPage() {
   const titipanNames = Array.from(new Set(stocks.filter(s => s.is_titipan && s.titipan_name).map(s => s.titipan_name as string))).sort();
 
   const totalModal = tabStocks.reduce((sum, s) => sum + (s.quantity * s.cost_per_unit), 0);
+  const totalProfit = tabStocks.reduce((sum, s) => sum + (s.quantity * (((s as any).price || s.cost_per_unit) - s.cost_per_unit)), 0);
   const lowStockCount = tabStocks.filter(s => s.quantity <= s.min_stock_alert).length;
 
   return (
     <MainLayout title="Stock">
-      <div className="flex-1 flex flex-col min-w-0 p-4 lg:p-8">
-        <Tabs defaultValue="cafe" value={activeTab} onValueChange={(val) => setActiveTab(val as 'cafe' | 'titipan')} className="flex-1 flex flex-col min-w-0">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-6">
+      <div className="flex-1 overflow-y-auto bg-[#0a0a0a] min-h-[calc(100vh-64px)] pb-20 relative">
+        <div className="max-w-6xl mx-auto p-6 lg:p-8">
+          
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
             <div>
-              <h1 className="text-3xl lg:text-4xl font-bold tracking-tight">Stok & Inventaris</h1>
-              <p className="text-muted-foreground text-sm lg:text-base mt-1">Kelola bahan baku dan barang titipan</p>
+              <h1 className="font-serif text-3xl font-semibold text-white mb-1 tracking-wide">Stok & Inventaris</h1>
+              <div className="text-zinc-500 text-sm">Kelola bahan baku dan barang titipan</div>
             </div>
-            
-            <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto">
-              <TabsList className="bg-muted/80 p-1 rounded-xl flex w-full sm:w-auto !h-12 shadow-sm border border-border/40">
-                <TabsTrigger value="cafe" className="!h-full px-6 rounded-lg transition-all font-semibold text-sm w-full sm:w-auto">
+            <div className="flex flex-col sm:flex-row items-center gap-4">
+              <div className="flex bg-zinc-900 rounded-xl p-1 border border-white/5">
+                <button 
+                  onClick={() => setActiveTab('cafe')}
+                  className={`px-6 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'cafe' ? 'bg-primary/20 text-primary font-semibold' : 'text-zinc-400 hover:text-white'}`}
+                >
                   Bahan Baku Cafe
-                </TabsTrigger>
-                <TabsTrigger value="titipan" className="!h-full px-6 rounded-lg transition-all font-semibold text-sm w-full sm:w-auto">
+                </button>
+                <button 
+                  onClick={() => setActiveTab('titipan')}
+                  className={`px-6 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'titipan' ? 'bg-primary/20 text-primary font-semibold' : 'text-zinc-400 hover:text-white'}`}
+                >
                   Barang Titipan
-                </TabsTrigger>
-              </TabsList>
-
-              {activeTab === 'cafe' ? (
-                <Button 
-                  onClick={() => { setNewItem({...newItem, is_titipan: false}); setIsAddDialogOpen(true); }} 
-                  className="w-full sm:w-auto flex items-center gap-2 px-6 !h-12 rounded-xl font-bold bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-lg transition-all"
-                >
-                  <Plus size={18} className="stroke-[2.5]" />
-                  <span className="hidden sm:inline">Tambah Bahan</span>
-                </Button>
-              ) : (
-                <Button 
-                  onClick={() => { setNewItem({...newItem, is_titipan: true}); setIsAddDialogOpen(true); }} 
-                  className="w-full sm:w-auto flex items-center gap-2 px-6 !h-12 rounded-xl font-bold bg-orange-500 text-white hover:bg-orange-600 hover:shadow-lg transition-all border-border"
-                >
-                  <Plus size={18} className="stroke-[2.5]" />
-                  <span className="hidden sm:inline">Tambah Titipan</span>
-                </Button>
-              )}
+                </button>
+              </div>
+              <button 
+                onClick={() => { setNewItem({...newItem, is_titipan: activeTab === 'titipan'}); setIsAddDialogOpen(true); }}
+                className="px-5 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors whitespace-nowrap"
+              >
+                + Tambah {activeTab === 'cafe' ? 'Bahan' : 'Titipan'}
+              </button>
             </div>
           </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <Card className="bg-card border-border">
-            <CardHeader className="pb-2">
-              <CardDescription className="text-muted-foreground">Total Nilai Stok</CardDescription>
-              <CardTitle className="text-2xl lg:text-3xl text-primary">Rp {totalModal.toLocaleString('id-ID')}</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card className="bg-card border-border">
-            <CardHeader className="pb-2">
-              <CardDescription className="text-muted-foreground">Peringatan Stok Tipis</CardDescription>
-              <CardTitle className="text-2xl lg:text-3xl flex items-center gap-2 text-destructive">
-                {lowStockCount} <span className="text-base font-normal text-muted-foreground">Barang</span>
-              </CardTitle>
-            </CardHeader>
-          </Card>
-        </div>
+          <div className="flex flex-wrap gap-4 mb-6">
+            <div className="flex-1 min-w-[180px] bg-zinc-900 border border-white/5 rounded-2xl p-5">
+              <div className="text-zinc-500 text-xs mb-2">{activeTab === 'titipan' ? 'Total Setoran (Modal)' : 'Total Nilai Stok'}</div>
+              <div className="font-serif text-2xl font-semibold text-zinc-100">Rp {totalModal.toLocaleString('id-ID')}</div>
+            </div>
+            {activeTab === 'titipan' && (
+              <div className="flex-1 min-w-[180px] bg-zinc-900 border border-white/5 rounded-2xl p-5">
+                <div className="text-zinc-500 text-xs mb-2">Estimasi Keuntungan Cafe</div>
+                <div className="font-serif text-2xl font-semibold text-primary">Rp {totalProfit.toLocaleString('id-ID')}</div>
+              </div>
+            )}
+            <div className="flex-1 min-w-[180px] bg-zinc-900 border border-white/5 rounded-2xl p-5">
+              <div className="text-zinc-500 text-xs mb-2">Peringatan Stok Tipis</div>
+              <div className="font-serif text-2xl font-semibold text-red-400">
+                {lowStockCount} <small className="font-sans text-sm font-normal text-zinc-500">barang</small>
+              </div>
+            </div>
+            <div className="flex-1 min-w-[180px] bg-zinc-900 border border-white/5 rounded-2xl p-5">
+              <div className="text-zinc-500 text-xs mb-2">Jumlah Item</div>
+              <div className="font-serif text-2xl font-semibold text-zinc-100">
+                {tabStocks.length} <small className="font-sans text-sm font-normal text-zinc-500">item</small>
+              </div>
+            </div>
+          </div>
 
-        <Card className="flex-1 flex flex-col bg-card border-border overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between border-b border-border pb-6 flex-wrap gap-4 shrink-0">
-            <div className="relative w-full max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-              <Input 
-                className="pl-9 bg-background border-border"
-                placeholder="Cari bahan baku..."
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
+              <input 
+                className="w-full pl-9 pr-4 py-2.5 bg-zinc-900 border border-white/10 rounded-xl text-sm text-zinc-100 focus:outline-none focus:border-primary"
+                placeholder={activeTab === 'cafe' ? "Cari bahan baku..." : "Cari barang titipan..."}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            
-            <div className="flex gap-3 w-full sm:w-auto">
+            {activeTab === 'titipan' && titipanNames.length > 0 && (
+              <select 
+                className="bg-zinc-900 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-zinc-200 focus:outline-none focus:border-primary"
+                value={penitipFilter}
+                onChange={e => setPenitipFilter(e.target.value)}
+              >
+                <option value="semua">Penitip: Semua</option>
+                {titipanNames.map((name, i) => (
+                  <option key={i} value={name}>{name}</option>
+                ))}
+              </select>
+            )}
+            <select 
+              className="bg-zinc-900 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-zinc-200 focus:outline-none focus:border-primary"
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value as any)}
+            >
+              <option value="semua">Status: Semua</option>
+              <option value="aman">Status: Aman</option>
+              <option value="tipis">Status: Menipis</option>
+              <option value="habis">Status: Habis</option>
+            </select>
+          </div>
 
-              {activeTab === 'titipan' && titipanNames.length > 0 && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger className={buttonVariants({ variant: 'outline', className: 'flex-1 sm:flex-none items-center gap-2 border-border bg-background shadow-sm h-10 max-w-[150px] sm:max-w-none' })}>
-                    <Filter size={16} className="text-muted-foreground shrink-0" />
-                    <span className="hidden sm:inline text-muted-foreground font-normal">Penitip:</span>
-                    <span className="font-semibold text-foreground truncate">{penitipFilter === 'semua' ? 'Semua' : penitipFilter}</span>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56 bg-card border-border max-h-[60vh] overflow-y-auto">
-                    <DropdownMenuRadioGroup value={penitipFilter} onValueChange={setPenitipFilter}>
-                      <DropdownMenuRadioItem value="semua">Semua Penitip</DropdownMenuRadioItem>
-                      {titipanNames.map((name, i) => (
-                        <DropdownMenuRadioItem key={i} value={name}>{name}</DropdownMenuRadioItem>
-                      ))}
-                    </DropdownMenuRadioGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-
-              <DropdownMenu>
-                <DropdownMenuTrigger className={buttonVariants({ variant: 'outline', className: 'flex-1 sm:flex-none items-center gap-2 border-border bg-background shadow-sm h-10' })}>
-                  <Filter size={16} className="text-muted-foreground" />
-                  <span className="hidden sm:inline text-muted-foreground font-normal">Status:</span>
-                  <span className="font-semibold text-foreground capitalize">{statusFilter === 'semua' ? 'Semua' : statusFilter}</span>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48 bg-card border-border">
-                  <DropdownMenuRadioGroup value={statusFilter} onValueChange={(val) => setStatusFilter(val as any)}>
-                    <DropdownMenuRadioItem value="semua">Semua Status</DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="aman" className="text-green-500 data-[state=checked]:text-green-600">Aman</DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="tipis" className="text-amber-500 data-[state=checked]:text-amber-600">Stok Tipis</DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="habis" className="text-destructive data-[state=checked]:text-destructive">Habis</DropdownMenuRadioItem>
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </CardHeader>
-          
-          <div className="flex-1 overflow-auto min-h-0">
-            {/* Mobile Card List View */}
-            <div className="md:hidden space-y-3 p-4">
-              {isLoadingData ? (
-                <div className="py-12 text-center text-muted-foreground space-y-3">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
-                  <p className="text-xs">Loading inventory...</p>
-                </div>
-              ) : filteredStocks.length === 0 ? (
-                <div className="p-8 text-center text-muted-foreground text-xs border border-dashed border-border rounded-xl">
-                  No stock items found.
-                </div>
-              ) : (
-                filteredStocks.map((item) => {
-                  const isLowStock = item.quantity <= item.min_stock_alert;
-                  return (
-                    <div 
-                      key={item.id} 
-                      className={`p-4 bg-card border border-border rounded-xl shadow-sm space-y-3 cursor-pointer hover:border-primary/50 transition-colors ${isLowStock ? 'bg-destructive/5 border-destructive/30' : ''}`}
-                      onClick={() => {
-                        setSelectedStock(item);
-                        setIsDetailDialogOpen(true);
-                      }}
-                    >
-                      <div className="flex items-center justify-between border-b border-border/60 pb-2">
-                        <div className="flex flex-col gap-0.5">
-                          <div className="flex items-center gap-2 font-bold text-foreground">
-                            <span>{item.name}</span>
-                            {isLowStock && <AlertTriangle size={14} className="text-destructive" />}
-                          </div>
-                          {activeTab === 'titipan' && (
-                            <div className="text-[10px] font-semibold text-orange-500 bg-orange-500/10 w-fit px-2 py-0.5 rounded-md mt-0.5 mb-0.5">Penitip: {item.titipan_name || '-'}</div>
-                          )}
-                          <div className="text-[10px] text-muted-foreground">Pembaruan: {formatDate(item.last_updated)}</div>
-                        </div>
-                        <div className="flex flex-col items-end gap-1">
-                          <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${item.quantity === 0 ? 'bg-destructive/10 text-destructive' : isLowStock ? 'bg-amber-500/10 text-amber-600' : 'bg-green-500/10 text-green-600'}`}>
-                            Stok: {item.quantity} <span className="font-normal text-[10px] ml-0.5">{/^\d/.test(item.unit) ? `(${item.unit})` : item.unit}</span>
-                          </span>
-                          <span className="text-[10px] text-muted-foreground font-medium">Batas minimum: {item.min_stock_alert} {/^\d/.test(item.unit) ? `(${item.unit})` : item.unit}</span>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div>
-                          <p className="text-[10px] text-muted-foreground/70 font-semibold uppercase">Harga Beli/Satuan</p>
-                          <p className="font-medium text-foreground mt-0.5">Rp {item.cost_per_unit.toLocaleString('id-ID')}</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-muted-foreground/70 font-semibold uppercase">Total Nilai Stok</p>
-                          <p className="font-bold text-primary mt-0.5">Rp {(item.quantity * item.cost_per_unit).toLocaleString('id-ID')}</p>
-                        </div>
-                      </div>
-
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            {/* Desktop Table View */}
-            <div className="hidden md:block p-0">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-muted/50 text-muted-foreground sticky top-0">
+          <div className="bg-zinc-900 border border-white/5 rounded-2xl overflow-hidden overflow-x-auto">
+            <table className="w-full text-sm text-left whitespace-nowrap min-w-[800px]">
+              <thead className="text-zinc-500 border-b border-white/5 bg-black/20">
+                {activeTab === 'cafe' ? (
                   <tr>
-                    <th className="font-medium p-4 pl-6">Nama Item</th>
-                    {activeTab === 'titipan' && <th className="font-medium p-4 text-left">Penitip</th>}
-                    <th className="font-medium p-4 text-center">Status Stok</th>
-                    <th className="font-medium p-4 text-center">Stok Tersedia</th>
-                    <th className="font-medium p-4 text-center hidden lg:table-cell">Batas Minimum</th>
-                    <th className="font-medium p-4 text-right hidden xl:table-cell">Harga Beli/Satuan</th>
-                    <th className="font-medium p-4 text-right">Total Nilai Stok</th>
-                    <th className="font-medium p-4 text-center">Pembaruan Terakhir</th>
+                    <th className="font-medium py-3 px-4">Nama Item</th>
+                    <th className="font-medium py-3 px-4">Status</th>
+                    <th className="font-medium py-3 px-4 w-40">Stok Tersedia</th>
+                    <th className="font-medium py-3 px-4">Total Beli Awal</th>
+                    <th className="font-medium py-3 px-4">Batas Minimum</th>
+                    <th className="font-medium py-3 px-4 text-right">Harga/Satuan</th>
+                    <th className="font-medium py-3 px-4 text-right">Total Modal Stok</th>
+                    <th className="font-medium py-3 px-4">Pembaruan</th>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {isLoadingData ? (
-                    <tr>
-                      <td colSpan={activeTab === 'titipan' ? 8 : 7} className="p-12 text-center text-muted-foreground">
-                        <div className="flex flex-col items-center justify-center gap-4">
-                          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                          <p>Loading inventory...</p>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    <>
-                      {filteredStocks.map((item) => {
-                        const isLowStock = item.quantity <= item.min_stock_alert;
-                        return (
-                          <tr 
-                            key={item.id} 
-                            className={`hover:bg-muted/50 transition-colors cursor-pointer ${isLowStock ? 'bg-destructive/5' : ''}`}
-                            onClick={() => {
-                              setSelectedStock(item);
-                              setIsDetailDialogOpen(true);
-                            }}
-                          >
-                            <td className="p-4 pl-6">
-                              <div className="flex items-center gap-2">
-                                <span className={`font-medium ${isLowStock ? 'text-destructive' : ''}`}>{item.name}</span>
-                                {isLowStock && <AlertTriangle size={14} className="text-destructive" />}
-                              </div>
+                ) : (
+                  <tr>
+                    <th className="font-medium py-3 px-4">Nama Produk</th>
+                    <th className="font-medium py-3 px-4">Penitip</th>
+                    <th className="font-medium py-3 px-4">Status</th>
+                    <th className="font-medium py-3 px-4 w-40">Stok Titip</th>
+                    <th className="font-medium py-3 px-4">Batas Minimum</th>
+                    <th className="font-medium py-3 px-4 text-right">Harga Titip</th>
+                    <th className="font-medium py-3 px-4 text-right">Harga Jual</th>
+                    <th className="font-medium py-3 px-4 text-right">Untung/pcs</th>
+                  </tr>
+                )}
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {isLoadingData ? (
+                  <tr>
+                    <td colSpan={8} className="py-12 text-center text-zinc-500">
+                      <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-3" />
+                      Memuat data...
+                    </td>
+                  </tr>
+                ) : filteredStocks.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-12 text-center text-zinc-500">
+                      Tidak ada barang yang cocok
+                    </td>
+                  </tr>
+                ) : (
+                  filteredStocks.map((item) => {
+                    const isLow = item.quantity > 0 && item.quantity <= item.min_stock_alert;
+                    const isEmpty = item.quantity === 0;
+                    
+                    let maxStock = item.min_stock_alert > 0 ? item.min_stock_alert * 2 : Math.max(item.quantity, 100);
+                    if (activeTab === 'cafe') {
+                      const unitMatch = item.unit.match(/^([\d.,]+)/);
+                      if (unitMatch) {
+                        const parsed = parseFloat(unitMatch[1].replace(/,/g, '.'));
+                        if (parsed > 0) maxStock = Math.max(parsed, item.quantity); // Ensures bar doesn't break if quantity > maxStock
+                      }
+                    }
+                    const ratio = Math.min((item.quantity / maxStock) * 100, 100);
+                    
+                    return (
+                      <tr 
+                        key={item.id} 
+                        className="hover:bg-white/[0.02] cursor-pointer transition-colors"
+                        onClick={() => {
+                          setSelectedStock(item);
+                          setIsDetailDialogOpen(true);
+                        }}
+                      >
+                        {activeTab === 'cafe' ? (
+                          <>
+                            <td className="py-3 px-4 font-serif font-medium text-zinc-100">{item.name}</td>
+                            <td className="py-3 px-4">
+                              <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${isEmpty ? 'bg-red-500/10 text-red-500' : isLow ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+                                <div className={`w-1.5 h-1.5 rounded-full ${isEmpty ? 'bg-red-500' : isLow ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                                {isEmpty ? 'Habis' : isLow ? 'Menipis' : 'Aman'}
+                              </span>
                             </td>
-                            {activeTab === 'titipan' && (
-                              <td className="p-4 text-left font-semibold text-orange-500 text-xs">
-                                {item.titipan_name || '-'}
-                              </td>
-                            )}
-                            <td className="p-4 text-center">
-                              {item.quantity === 0 ? (
-                                <span className="bg-destructive/10 text-destructive text-xs font-bold px-2 py-1 rounded-md inline-block whitespace-nowrap">Habis</span>
-                              ) : isLowStock ? (
-                                <span className="bg-amber-500/10 text-amber-600 text-xs font-bold px-2 py-1 rounded-md inline-block whitespace-nowrap">Tipis</span>
+                            <td className="py-3 px-4" onClick={(e) => { e.stopPropagation(); setInlineEditId(item.id); setInlineEditValue(item.quantity.toString()); }}>
+                              {inlineEditId === item.id ? (
+                                <div className="flex flex-col gap-1.5">
+                                  <input 
+                                    autoFocus
+                                    className="w-20 bg-background border border-primary/50 rounded px-2 py-1 text-sm font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                                    value={inlineEditValue}
+                                    onChange={e => setInlineEditValue(e.target.value.replace(/\D/g, ''))}
+                                    onBlur={() => handleInlineEditSave(item)}
+                                    onKeyDown={e => { if (e.key === 'Enter') handleInlineEditSave(item); else if (e.key === 'Escape') setInlineEditId(null); }}
+                                  />
+                                </div>
                               ) : (
-                                <span className="bg-green-500/10 text-green-600 text-xs font-bold px-2 py-1 rounded-md inline-block whitespace-nowrap">Aman</span>
+                                <div className="flex flex-col gap-1.5 group/edit relative" title="Klik untuk edit cepat">
+                                  <span className="font-semibold text-zinc-200 group-hover/edit:text-primary transition-colors cursor-text">{item.quantity} <span className="text-zinc-500 font-normal text-xs ml-0.5">{item.unit.replace(/[\d.,\s]/g, '') || 'pcs'}</span></span>
+                                  <div className="h-1 rounded-full bg-black/50 overflow-hidden">
+                                    <div className={`h-full rounded-full ${isEmpty ? 'bg-red-500' : isLow ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${ratio}%` }} />
+                                  </div>
+                                </div>
                               )}
                             </td>
-                            <td className="p-4 text-center font-bold">
-                              {item.quantity} <span className="font-normal text-xs text-muted-foreground ml-1">{/^\d/.test(item.unit) ? `(${item.unit})` : item.unit}</span>
+                            <td className="py-3 px-4 text-zinc-500 text-xs">{/^\d/.test(item.unit) ? item.unit : '-'}</td>
+                            <td className="py-3 px-4 text-zinc-500 text-xs">{item.min_stock_alert} {item.unit.replace(/[\d.,\s]/g, '') || 'pcs'}</td>
+                            <td className="py-3 px-4 text-right tabular-nums text-zinc-200">Rp {item.cost_per_unit.toLocaleString('id-ID')}</td>
+                            <td className="py-3 px-4 text-right tabular-nums font-semibold text-primary">Rp {(item.quantity * item.cost_per_unit).toLocaleString('id-ID')}</td>
+                            <td className="py-3 px-4 text-zinc-500 text-xs">{formatDate(item.last_updated)}</td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="py-3 px-4 font-serif font-medium text-zinc-100">{item.name}</td>
+                            <td className="py-3 px-4 text-zinc-500 text-xs">{item.titipan_name || '-'}</td>
+                            <td className="py-3 px-4">
+                              <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${isEmpty ? 'bg-red-500/10 text-red-500' : isLow ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+                                <div className={`w-1.5 h-1.5 rounded-full ${isEmpty ? 'bg-red-500' : isLow ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                                {isEmpty ? 'Habis' : isLow ? 'Menipis' : 'Aman'}
+                              </span>
                             </td>
-                            <td className="p-4 text-center text-muted-foreground hidden lg:table-cell">
-                              {item.min_stock_alert} <span className="text-xs ml-0.5">{/^\d/.test(item.unit) ? `(${item.unit})` : item.unit}</span>
+                            <td className="py-3 px-4" onClick={(e) => { e.stopPropagation(); setInlineEditId(item.id); setInlineEditValue(item.quantity.toString()); }}>
+                              {inlineEditId === item.id ? (
+                                <div className="flex flex-col gap-1.5">
+                                  <input 
+                                    autoFocus
+                                    className="w-20 bg-background border border-primary/50 rounded px-2 py-1 text-sm font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                                    value={inlineEditValue}
+                                    onChange={e => setInlineEditValue(e.target.value.replace(/\D/g, ''))}
+                                    onBlur={() => handleInlineEditSave(item)}
+                                    onKeyDown={e => { if (e.key === 'Enter') handleInlineEditSave(item); else if (e.key === 'Escape') setInlineEditId(null); }}
+                                  />
+                                </div>
+                              ) : (
+                                <div className="flex flex-col gap-1.5 group/edit relative" title="Klik untuk edit cepat">
+                                  <span className="font-semibold text-zinc-200 group-hover/edit:text-primary transition-colors cursor-text">{item.quantity} <span className="text-zinc-500 font-normal text-xs ml-0.5">pcs</span></span>
+                                  <div className="h-1 rounded-full bg-black/50 overflow-hidden">
+                                    <div className={`h-full rounded-full ${isEmpty ? 'bg-red-500' : isLow ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${ratio}%` }} />
+                                  </div>
+                                </div>
+                              )}
                             </td>
-                            <td className="p-4 text-right hidden xl:table-cell">Rp {item.cost_per_unit.toLocaleString('id-ID')}</td>
-                            <td className="p-4 text-right font-bold text-primary">Rp {(item.quantity * item.cost_per_unit).toLocaleString('id-ID')}</td>
-                            <td className="p-4 text-center text-xs text-muted-foreground">{formatDate(item.last_updated)}</td>
-                          </tr>
-                        );
-                      })}
-                      {filteredStocks.length === 0 && (
-                        <tr>
-                          <td colSpan={activeTab === 'titipan' ? 8 : 7} className="p-8 text-center text-muted-foreground">
-                            No items found.
-                          </td>
-                        </tr>
-                      )}
-                    </>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                            <td className="py-3 px-4 text-zinc-500 text-xs">{item.min_stock_alert} pcs</td>
+                            <td className="py-3 px-4 text-right tabular-nums text-zinc-500 text-xs">Rp {item.cost_per_unit.toLocaleString('id-ID')}</td>
+                            <td className="py-3 px-4 text-right tabular-nums text-zinc-200 font-semibold">Rp {((item as any).price || item.cost_per_unit).toLocaleString('id-ID')}</td>
+                            <td className="py-3 px-4 text-right tabular-nums font-semibold text-primary">Rp {(((item as any).price || item.cost_per_unit) - item.cost_per_unit).toLocaleString('id-ID')}</td>
+                          </>
+                        )}
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
-        </Card>
-        </Tabs>
+        </div>
       </div>
 
       {/* Add New Item Dialog */}
@@ -659,6 +770,23 @@ export default function StockPage() {
               </Button>
             </div>
 
+            {!newItem.is_titipan && (
+              <div className="grid grid-cols-4 items-center gap-4 mb-2">
+                <div className="col-start-2 col-span-3">
+                  <label className="flex items-center gap-2 cursor-pointer p-2 border border-primary/20 bg-primary/5 rounded-lg w-fit transition-colors hover:bg-primary/10">
+                    <input 
+                      type="checkbox" 
+                      className="w-4 h-4 rounded text-primary focus:ring-primary border-primary/50"
+                      checked={newItem.is_direct_sell}
+                      onChange={e => setNewItem({...newItem, is_direct_sell: e.target.checked})}
+                    />
+                    <span className="text-sm font-semibold text-primary">Jadikan Menu & Jual Langsung</span>
+                  </label>
+                  <p className="text-[10px] text-muted-foreground mt-1 ml-1">Stok otomatis dibuatkan menu dan siap dijual di Kasir</p>
+                </div>
+              </div>
+            )}
+
             {newItem.is_titipan && (
               <div className="grid grid-cols-4 items-center gap-4 overflow-visible">
                 <label className="text-right text-sm font-medium">Nama Penitip</label>
@@ -680,12 +808,12 @@ export default function StockPage() {
 
             {!newItem.is_titipan && (
               <div className="grid grid-cols-4 items-center gap-4">
-                <label className="text-right text-sm font-medium">Satuan</label>
+                <label className="text-right text-sm font-medium">1 Kemasan Beli Isinya Berapa?</label>
                 <div className="col-span-3 flex gap-2">
                   <Input 
                     type="text" 
                     className="bg-background border-border flex-1" 
-                    placeholder="Angka (cth: 20)" 
+                    placeholder="Angka (cth: 5)" 
                     value={newItem.unit_value} 
                     onChange={e => {
                       const val = e.target.value.replace(/[^0-9.,]/g, '');
@@ -711,7 +839,7 @@ export default function StockPage() {
             )}
 
             <div className="grid grid-cols-4 items-center gap-4">
-              <label className="text-right text-sm font-medium">{newItem.is_titipan ? 'Harga Setor (Modal)' : 'Harga Beli/Satuan'}</label>
+              <label className="text-right text-sm font-medium">{newItem.is_titipan ? 'Harga Setor (Modal)' : 'Total Harga Beli 1 Kemasan'}</label>
               <div className="relative col-span-3">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">Rp</span>
                 <Input 
@@ -727,7 +855,18 @@ export default function StockPage() {
               </div>
             </div>
 
-            {newItem.is_titipan && (
+            {!newItem.is_titipan && (
+              <div className="grid grid-cols-4 items-center gap-4">
+                <label className="text-right text-sm font-medium text-primary">Otomatis: Harga Modal 1 {newItem.unit_type || 'Satuan'}</label>
+                <div className="col-span-3">
+                  <div className="flex h-10 w-full rounded-md border border-input bg-primary/10 px-3 py-2 text-sm text-primary items-center font-bold">
+                    Rp {newItem.unit_value && newItem.cost_per_unit ? Number(parseInt(newItem.cost_per_unit) / parseFloat(newItem.unit_value)).toLocaleString('id-ID', { maximumFractionDigits: 2 }) : '0'}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {(newItem.is_titipan || newItem.is_direct_sell) && (
               <div className="grid grid-cols-4 items-center gap-4">
                 <label className="text-right text-sm font-medium">Harga Jual</label>
                 <div className="relative col-span-3">
@@ -747,18 +886,32 @@ export default function StockPage() {
             )}
 
             <div className="grid grid-cols-4 items-center gap-4">
-              <label className="text-right text-sm font-medium">Stok Awal</label>
-              <Input 
-                type="text" 
-                className="col-span-3 bg-background border-border" 
-                placeholder="Jumlah stok saat ini" 
-                value={newItem.quantity === '' ? '' : Number(newItem.quantity).toLocaleString('id-ID')} 
-                onChange={e => {
-                  const val = e.target.value.replace(/\D/g, '');
-                  setNewItem({...newItem, quantity: val === '' ? '' : parseInt(val, 10).toString()});
-                }} 
-              />
+              <label className="text-right text-sm font-medium">{newItem.is_titipan ? 'Stok Awal' : 'Beli Berapa Kemasan?'}</label>
+              <div className="col-span-3 relative">
+                <Input 
+                  type="text" 
+                  className={`bg-background border-border ${!newItem.is_titipan ? 'pr-20' : ''}`}
+                  placeholder={newItem.is_titipan ? "Jumlah stok saat ini" : "Angka (cth: 1)"} 
+                  value={newItem.quantity === '' ? '' : Number(newItem.quantity).toLocaleString('id-ID')} 
+                  onChange={e => {
+                    const val = e.target.value.replace(/\D/g, '');
+                    setNewItem({...newItem, quantity: val === '' ? '' : parseInt(val, 10).toString()});
+                  }} 
+                />
+                {!newItem.is_titipan && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-medium">Kemasan</span>}
+              </div>
             </div>
+
+            {!newItem.is_titipan && (
+              <div className="grid grid-cols-4 items-center gap-4">
+                <label className="text-right text-sm font-medium text-primary">Otomatis: Total Porsi {newItem.unit_type || 'Satuan'}</label>
+                <div className="col-span-3">
+                  <div className="flex h-10 w-full rounded-md border border-input bg-primary/10 px-3 py-2 text-sm text-primary items-center font-bold">
+                    {newItem.quantity && newItem.unit_value ? (parseInt(newItem.quantity) * parseFloat(newItem.unit_value)).toLocaleString('id-ID') : '0'} {newItem.unit_type || 'Satuan'}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {!newItem.is_titipan && (
               <div className="grid grid-cols-4 items-center gap-4">
@@ -789,47 +942,32 @@ export default function StockPage() {
           <DialogHeader>
             <DialogTitle>Update Stok: <span className="text-primary">{selectedStock?.name}</span></DialogTitle>
             <DialogDescription>
-              Sisa stok saat ini: <span className="font-bold text-foreground">{selectedStock?.quantity}</span> (Satuan: {selectedStock?.unit})
+              Stok tercatat di sistem: <span className="font-bold text-foreground">{selectedStock?.quantity}</span> (Satuan: {selectedStock?.unit})
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
-            <div className="flex rounded-md shadow-sm p-1 bg-muted/50" role="group">
-              <button 
-                type="button" 
-                className={`flex-1 px-4 py-2.5 text-sm font-bold rounded-md transition-all ${stockUpdateType === 'add' ? 'bg-background text-green-600 shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-                onClick={() => setStockUpdateType('add')}
-              >
-                + Tambah Stok
-              </button>
-              <button 
-                type="button" 
-                className={`flex-1 px-4 py-2.5 text-sm font-bold rounded-md transition-all ${stockUpdateType === 'subtract' ? 'bg-background text-destructive shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-                onClick={() => setStockUpdateType('subtract')}
-              >
-                - Kurangi Stok
-              </button>
-            </div>
-            <div className="space-y-2">
+            <div className="space-y-4">
               <div className="relative">
                 <Input 
                   type="number" 
-                  className="pr-16 text-lg h-12 bg-background border-border focus-visible:ring-primary" 
-                  placeholder="Masukkan jumlah..." 
+                  className="pr-16 text-sm h-12 bg-background border-border focus-visible:ring-primary" 
+                  placeholder="Masukkan sisa stok asli (Update Fisik)..."
                   value={stockUpdateAmount} 
-                  onChange={e => setStockUpdateAmount(e.target.value)} 
+                  onChange={e => {
+                     setStockUpdateType('set');
+                     setStockUpdateAmount(e.target.value);
+                  }} 
                 />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">
-                  {selectedStock?.unit}
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-sm">
+                  {selectedStock?.unit.replace(/[\d.,\s]/g, '') || 'pcs'}
                 </span>
               </div>
               
-              <div className="flex items-center justify-between p-3 bg-muted/30 border border-border rounded-lg">
-                <span className="text-sm font-medium text-muted-foreground">Estimasi Stok Akhir:</span>
+              <div className="flex flex-col gap-1 p-3 bg-muted/30 border border-border rounded-lg">
+                <span className="text-xs font-medium text-muted-foreground">Nanti stok di sistem akan menjadi:</span>
                 <span className="text-xl font-bold text-foreground">
-                  {stockUpdateType === 'add' 
-                    ? Number(selectedStock?.quantity || 0) + (parseInt(stockUpdateAmount) || 0) 
-                    : Math.max(0, Number(selectedStock?.quantity || 0) - (parseInt(stockUpdateAmount) || 0))
-                  } <span className="text-sm font-normal text-muted-foreground">{selectedStock?.unit}</span>
+                  {Math.max(0, parseInt(stockUpdateAmount) || 0)}
+                  <span className="text-sm font-normal text-muted-foreground ml-1">{selectedStock?.unit.replace(/[\d.,\s]/g, '') || 'pcs'}</span>
                 </span>
               </div>
             </div>
@@ -868,12 +1006,12 @@ export default function StockPage() {
               </div>
               {!selectedStock.is_titipan && (
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <label className="text-right text-sm font-medium">Satuan</label>
+                  <label className="text-right text-xs font-medium leading-tight">1 Kemasan Beli Isinya Berapa?</label>
                   <div className="col-span-3 flex gap-2">
                     <Input 
                       type="text" 
                       className="bg-background border-border flex-1" 
-                      placeholder="Angka (cth: 20, 1)" 
+                      placeholder="Angka (cth: 5)" 
                       value={editUnitValue} 
                       onChange={e => {
                         const val = e.target.value.replace(/[^0-9.,]/g, '');
@@ -898,33 +1036,71 @@ export default function StockPage() {
                 </div>
               )}
               <div className="grid grid-cols-4 items-center gap-4">
-                <label className="text-right text-sm font-medium">{selectedStock.is_titipan ? 'Harga Setor' : 'Harga Beli/Satuan'}</label>
+                <label className="text-right text-xs font-medium leading-tight">{selectedStock.is_titipan ? 'Harga Setor' : 'Total Harga Beli 1 Kemasan'}</label>
                 <div className="relative col-span-3">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">Rp</span>
                   <Input 
                     type="text" 
                     className="pl-9 bg-background border-border" 
-                    value={selectedStock.cost_per_unit === '' as any ? '' : Number(selectedStock.cost_per_unit).toLocaleString('id-ID')} 
+                    value={
+                      selectedStock.is_titipan 
+                        ? (selectedStock.cost_per_unit === '' as any ? '' : Number(selectedStock.cost_per_unit).toLocaleString('id-ID'))
+                        : (editPackPrice === '' ? '' : Number(editPackPrice).toLocaleString('id-ID'))
+                    }
                     onChange={e => {
                       const val = e.target.value.replace(/\D/g, '');
-                      setSelectedStock({...selectedStock, cost_per_unit: val === '' ? '' as any : parseInt(val, 10)});
+                      if (selectedStock.is_titipan) {
+                        setSelectedStock({...selectedStock, cost_per_unit: val === '' ? '' as any : parseInt(val, 10)});
+                      } else {
+                        setEditPackPrice(val);
+                      }
                     }} 
                   />
                 </div>
               </div>
-              {!selectedStock.is_titipan && (
+              {selectedStock.is_titipan && (
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <label className="text-right text-sm font-medium text-destructive">Batas Minimum</label>
-                  <Input 
-                    type="text" 
-                    className="col-span-3 bg-background border-border" 
-                    value={selectedStock.min_stock_alert === '' as any ? '' : Number(selectedStock.min_stock_alert).toLocaleString('id-ID')} 
-                    onChange={e => {
-                      const val = e.target.value.replace(/\D/g, '');
-                      setSelectedStock({...selectedStock, min_stock_alert: val === '' ? '' as any : parseInt(val, 10)});
-                    }} 
-                  />
+                  <label className="text-right text-xs font-medium leading-tight">Harga Jual</label>
+                  <div className="relative col-span-3">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">Rp</span>
+                    <Input 
+                      type="text" 
+                      className="pl-9 bg-background border-border" 
+                      value={(selectedStock as any).price === '' || (selectedStock as any).price === undefined ? '' : Number((selectedStock as any).price).toLocaleString('id-ID')} 
+                      onChange={e => {
+                        const val = e.target.value.replace(/\D/g, '');
+                        setSelectedStock({...selectedStock, price: val === '' ? '' : parseInt(val, 10)} as any);
+                      }} 
+                    />
+                  </div>
                 </div>
+              )}
+              {!selectedStock.is_titipan && (
+                <>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <label className="text-right text-xs font-medium leading-tight text-primary">Otomatis: Harga Modal 1 {editUnitType || 'Satuan'}</label>
+                    <div className="col-span-3">
+                      <div className="flex h-10 w-full rounded-md border border-input bg-primary/10 px-3 py-2 text-sm text-primary items-center font-bold">
+                        Rp {editUnitValue && editPackPrice ? Number(parseInt(editPackPrice) / parseFloat(editUnitValue)).toLocaleString('id-ID', { maximumFractionDigits: 2 }) : '0'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <label className="text-right text-xs font-medium leading-tight text-destructive">Peringatan Stok Tipis (Batas Min)</label>
+                    <div className="relative col-span-3">
+                      <Input 
+                        type="text" 
+                        className="bg-background border-border pr-12" 
+                        value={selectedStock.min_stock_alert === '' as any ? '' : Number(selectedStock.min_stock_alert).toLocaleString('id-ID')} 
+                        onChange={e => {
+                          const val = e.target.value.replace(/\D/g, '');
+                          setSelectedStock({...selectedStock, min_stock_alert: val === '' ? '' as any : parseInt(val, 10)});
+                        }} 
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-medium">{editUnitType}</span>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           )}
@@ -975,7 +1151,7 @@ export default function StockPage() {
                     <p className="text-2xl font-black text-foreground">{selectedStock.quantity} <span className="text-sm font-medium text-muted-foreground">{/^\d/.test(selectedStock.unit) ? `(${selectedStock.unit})` : selectedStock.unit}</span></p>
                   </div>
                   <div className="bg-primary/5 p-4 rounded-xl border border-primary/20 flex flex-col items-center justify-center text-center">
-                    <p className="text-[10px] text-primary/80 uppercase font-bold tracking-wider mb-1">Total Nilai</p>
+                    <p className="text-[10px] text-primary/80 uppercase font-bold tracking-wider mb-1">Total Modal Stok</p>
                     <p className="text-xl font-black text-primary">Rp {(selectedStock.quantity * selectedStock.cost_per_unit).toLocaleString('id-ID')}</p>
                   </div>
                 </div>
@@ -1010,10 +1186,43 @@ export default function StockPage() {
                       <span className="font-medium text-foreground">{selectedStock.min_stock_alert} {/^\d/.test(selectedStock.unit) ? `(${selectedStock.unit})` : selectedStock.unit}</span>
                     </div>
                   )}
-                  <div className="flex justify-between items-center border-b border-border/50 pb-2">
-                    <span className="text-muted-foreground font-medium">{selectedStock.is_titipan ? 'Harga Setor' : 'Harga Beli'}</span>
-                    <span className="font-medium text-foreground">Rp {Number(selectedStock.cost_per_unit).toLocaleString('id-ID')} /{/^\d/.test(selectedStock.unit) ? `(${selectedStock.unit})` : selectedStock.unit}</span>
-                  </div>
+                  {(() => {
+                    let packMultiplier = 1;
+                    let baseUnit = selectedStock.unit;
+                    if (!selectedStock.is_titipan) {
+                      const unitMatch = selectedStock.unit.match(/^([\d.,]+)\s*(.*)/);
+                      if (unitMatch) {
+                         packMultiplier = parseFloat(unitMatch[1].replace(/,/g, '.'));
+                         baseUnit = unitMatch[2] || 'pcs';
+                      }
+                    }
+                    return (
+                      <>
+                        <div className="flex justify-between items-center border-b border-border/50 pb-2">
+                          <span className="text-muted-foreground font-medium">{selectedStock.is_titipan ? 'Harga Setor' : `Harga Beli (per 1 ${baseUnit})`}</span>
+                          <span className="font-medium text-foreground">Rp {Number(selectedStock.cost_per_unit).toLocaleString('id-ID')} / 1 {baseUnit}</span>
+                        </div>
+                        {packMultiplier > 1 && (
+                          <div className="flex justify-between items-center border-b border-border/50 pb-2">
+                            <span className="text-muted-foreground font-medium">Harga Modal Kemasan ({packMultiplier} {baseUnit})</span>
+                            <span className="font-medium text-amber-500">Rp {Number(selectedStock.cost_per_unit * packMultiplier).toLocaleString('id-ID')}</span>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                  {linkedPrice !== null && (
+                    <>
+                      <div className="flex justify-between items-center border-b border-border/50 pb-2">
+                        <span className="text-muted-foreground font-medium">Harga Jual</span>
+                        <span className="font-medium text-foreground">Rp {Number(linkedPrice).toLocaleString('id-ID')} /{/^\d/.test(selectedStock.unit) ? `(${selectedStock.unit})` : selectedStock.unit}</span>
+                      </div>
+                      <div className="flex justify-between items-center border-b border-border/50 pb-2">
+                        <span className="text-muted-foreground font-medium">Estimasi Untung/pcs</span>
+                        <span className="font-medium text-green-500">Rp {Number(linkedPrice - selectedStock.cost_per_unit).toLocaleString('id-ID')}</span>
+                      </div>
+                    </>
+                  )}
                   <div className="flex justify-between items-center pt-1">
                     <span className="text-muted-foreground font-medium">Pembaruan</span>
                     <span className="font-medium text-muted-foreground text-xs">{formatDate(selectedStock.last_updated)}</span>
@@ -1041,8 +1250,10 @@ export default function StockPage() {
                       setTimeout(() => {
                         if (!selectedStock?.is_titipan) {
                           const unitParts = selectedStock?.unit.match(/^([\d.,]+)\s*(.*)$/);
+                          const packMultiplier = unitParts ? parseFloat(unitParts[1].replace(/,/g, '.')) : parseFloat(selectedStock!.unit.replace(/[^0-9.,]/g, '') || '1');
                           setEditUnitValue(unitParts ? unitParts[1] : selectedStock!.unit.replace(/[a-zA-Z\s]/g, ''));
                           setEditUnitType(unitParts && unitParts[2] ? unitParts[2] : (selectedStock!.unit.replace(/[\d.,\s]/g, '') || 'pcs'));
+                          setEditPackPrice(Math.round(selectedStock!.cost_per_unit * packMultiplier).toString());
                         }
                         setIsEditDialogOpen(true);
                       }, 150);

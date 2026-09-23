@@ -28,6 +28,7 @@ export default function DashboardPage() {
   const [yesterdaySamba, setYesterdaySamba] = useState(0);
   const [todayQris, setTodayQris] = useState(0);
   const [todayCash, setTodayCash] = useState(0);
+  const [todayKasMasuk, setTodayKasMasuk] = useState(0);
   
   const [totalOmzetValue, setTotalOmzetValue] = useState(0);
   const [omzetFilter, setOmzetFilter] = useState<DateFilterValue>({
@@ -53,14 +54,64 @@ export default function DashboardPage() {
   const [selectedTx, setSelectedTx] = useState<any>(null);
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
 
+  const [isKasModalOpen, setIsKasModalOpen] = useState(false);
+  const [kasAmount, setKasAmount] = useState('');
+  const [kasMethod, setKasMethod] = useState<'Cash'|'QRIS'>('Cash');
+  const [isSubmittingKas, setIsSubmittingKas] = useState(false);
+  const [kasMasukTxs, setKasMasukTxs] = useState<any[]>([]);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [confirmDeleteTx, setConfirmDeleteTx] = useState<any>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
+  const handleKasMasuk = async () => {
+    if (!kasAmount || parseInt(kasAmount) <= 0) return;
+    setIsSubmittingKas(true);
+    const amt = parseInt(kasAmount);
+    
+    const txId = `ADJ-${Math.random().toString(36).substr(2, 9)}`;
+    const tx = {
+      id: txId,
+      method: kasMethod,
+      total: amt,
+      cashier_name: role === 'manager' ? 'Manager' : 'Kasir',
+      status: 'completed',
+      customer_name: 'Penyesuaian Kas Masuk',
+      cash_received: kasMethod === 'Cash' ? amt : null
+    };
+
+    const { error } = await supabase.from('transactions').insert([tx]);
+    setIsSubmittingKas(false);
+    if (!error) {
+      setIsKasModalOpen(false);
+      setKasAmount('');
+      setRefreshKey(prev => prev + 1);
+    } else {
+      alert("Gagal menambah kas: " + error.message);
+    }
+  };
+
+  const executeDelete = async () => {
+    if (!confirmDeleteTx) return;
+    setIsDeleting(true);
+    const { error } = await supabase.from('transactions').delete().eq('id', confirmDeleteTx.id);
+    setIsDeleting(false);
+    if (!error) {
+      setConfirmDeleteTx(null);
+      if (selectedTx && selectedTx.id === confirmDeleteTx.id) {
+        setIsTxModalOpen(false);
+      }
+      setRefreshKey(prev => prev + 1);
+    } else {
+      alert("Gagal menghapus: " + error.message);
+    }
+  };
 
   useEffect(() => {
     const fetchTotalOmzet = async () => {
       if (!role) return;
       setIsFetchingTotalOmzet(true);
       
-      let queryTx = supabase.from('transactions').select('total').neq('status', 'cancelled');
+      let queryTx = supabase.from('transactions').select('total, customer_name').neq('status', 'cancelled');
       let querySummary = supabase.from('daily_summaries').select('total_omzet');
       
       let startDate: Date | null = null;
@@ -92,7 +143,7 @@ export default function DashboardPage() {
 
       const [resTx, resSummary] = await Promise.all([queryTx, querySummary]);
       let total = 0;
-      if (resTx.data) total += resTx.data.reduce((sum, tx) => sum + tx.total, 0);
+      if (resTx.data) total += resTx.data.filter(tx => tx.customer_name !== 'Penyesuaian Kas Masuk').reduce((sum, tx) => sum + tx.total, 0);
       if (resSummary.data) total += resSummary.data.reduce((sum, s) => sum + Number(s.total_omzet), 0);
       
       setTotalOmzetValue(total);
@@ -138,6 +189,7 @@ export default function DashboardPage() {
         let tProfit = 0, yProfit = 0;
         let tSamba = 0, ySamba = 0;
         let tQris = 0, tCash = 0;
+        let tKasMasuk = 0;
 
         let qCount = 0, cCount = 0;
         let qTotal = 0, cTotal = 0;
@@ -154,6 +206,7 @@ export default function DashboardPage() {
         }
 
         const recentTxs: any[] = [];
+        const kasTxsLocal: any[] = [];
 
         txs.forEach((tx) => {
           const txDate = new Date(tx.created_at);
@@ -196,21 +249,32 @@ export default function DashboardPage() {
                tCTotal += txTitipan;
              }
 
-             if (dailyOmzetMap[txDateKey] !== undefined) {
+             const isKasMasuk = tx.customer_name === 'Penyesuaian Kas Masuk';
+             
+             if (isKasMasuk) {
+               kasTxsLocal.push(tx);
+               if (isToday) tKasMasuk += tx.total;
+             }
+
+             if (!isKasMasuk && dailyOmzetMap[txDateKey] !== undefined) {
                 dailyOmzetMap[txDateKey] += tx.total;
              }
              
              if (isToday) {
-               tOmzet += tx.total;
-               tTx++;
+               if (!isKasMasuk) {
+                 tOmzet += tx.total;
+                 tTx++;
+               }
                tItems += txItemCount;
                tProfit += txProfit;
                tSamba += txSamba;
                if (tx.method === 'QRIS') tQris += tx.total;
                if (tx.method && tx.method.includes('Cash')) tCash += tx.total;
              } else if (isYesterday) {
-               yOmzet += tx.total;
-               yTx++;
+               if (!isKasMasuk) {
+                 yOmzet += tx.total;
+                 yTx++;
+               }
                yItems += txItemCount;
                yProfit += txProfit;
                ySamba += txSamba;
@@ -258,12 +322,14 @@ export default function DashboardPage() {
         setTodayProfit(tProfit); setYesterdayProfit(yProfit);
         setTodaySamba(tSamba); setYesterdaySamba(ySamba);
         setTodayQris(tQris); setTodayCash(tCash);
+        setTodayKasMasuk(tKasMasuk);
         
         setQrisCount(qCount); setCashCount(cCount);
         setQrisTotal(qTotal); setCashTotal(cTotal);
         setSambaQrisTotal(sQTotal); setSambaCashTotal(sCTotal);
         setTitipanQrisTotal(tQTotal); setTitipanCashTotal(tCTotal);
         setRecentTransactions(recentTxs);
+        setKasMasukTxs(kasTxsLocal);
 
         const sortedProducts = Object.entries(productsMap)
           .sort((a, b) => b[1].qty - a[1].qty)
@@ -293,7 +359,7 @@ export default function DashboardPage() {
     };
 
     fetchData();
-  }, [role]);
+  }, [role, refreshKey]);
 
   const formatCompact = (num: number) => {
     if (num === 0) return '0';
@@ -362,6 +428,10 @@ export default function DashboardPage() {
                     <span className="text-zinc-500 font-bold uppercase">Uang Titipan</span>
                     <span className="text-amber-500 font-semibold">Rp {(todayOmzet - todaySamba).toLocaleString('id-ID')}</span>
                   </div>
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-zinc-500 font-bold uppercase">Kas Masuk</span>
+                    <span className="text-blue-500 font-semibold">+ Rp {todayKasMasuk.toLocaleString('id-ID')}</span>
+                  </div>
                 </div>
               </div>
 
@@ -370,6 +440,7 @@ export default function DashboardPage() {
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <h2 className="text-[11px] font-bold text-zinc-400 tracking-widest uppercase">Penerimaan Tunai</h2>
+                    <button onClick={() => setIsKasModalOpen(true)} className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-full hover:bg-primary/30 transition-colors font-bold">+ Kas Masuk</button>
                   </div>
                   <div className="text-3xl font-extrabold text-white tracking-tight mt-1 mb-1.5">Rp {todayCash.toLocaleString('id-ID')}</div>
                 </div>
@@ -570,7 +641,7 @@ export default function DashboardPage() {
                         }}
                       >
                         <span className="text-xs font-mono font-bold text-zinc-500 shrink-0 group-hover:text-primary transition-colors">
-                          {tx.id.startsWith('order_') ? tx.id : `order_${tx.id}`}
+                          {tx.id.startsWith('order_') || tx.id.startsWith('ADJ-') ? tx.id : `order_${tx.id}`}
                         </span>
                         <span className="text-sm font-bold text-white truncate">
                           {tx.customer_name || 'Umum'}
@@ -634,8 +705,119 @@ export default function DashboardPage() {
                   <span>Total</span>
                   <span className="text-primary">Rp {selectedTx.total?.toLocaleString('id-ID')}</span>
                 </div>
+                {selectedTx.customer_name === 'Penyesuaian Kas Masuk' && (
+                  <div className="pt-4 border-t border-border flex justify-end">
+                    <button 
+                      onClick={() => setConfirmDeleteTx(selectedTx)} 
+                      className="px-4 py-2 bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors rounded-lg text-sm font-bold"
+                    >
+                      Hapus Catatan Ini
+                    </button>
+                  </div>
+                )}
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isKasModalOpen} onOpenChange={setIsKasModalOpen}>
+          <DialogContent className="bg-zinc-950 border-white/10 sm:max-w-md text-zinc-100">
+            <DialogHeader>
+              <DialogTitle>Penyesuaian Kas Masuk</DialogTitle>
+            </DialogHeader>
+            <div className="py-4 space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-zinc-400">Jumlah Uang</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">Rp</span>
+                  <input 
+                    type="text" 
+                    className="w-full pl-9 pr-4 py-3 bg-zinc-900 border border-white/10 rounded-xl text-zinc-100 focus:outline-none focus:border-primary"
+                    placeholder="0"
+                    value={kasAmount === '' ? '' : Number(kasAmount).toLocaleString('id-ID')}
+                    onChange={e => {
+                      const val = e.target.value.replace(/\D/g, '');
+                      setKasAmount(val);
+                    }}
+                  />
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-zinc-400">Dimasukkan ke</label>
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => setKasMethod('Cash')}
+                    className={`flex-1 py-3 rounded-xl border font-semibold text-sm transition-all ${kasMethod === 'Cash' ? 'bg-green-500/20 border-green-500 text-green-500' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:border-white/30'}`}
+                  >
+                    Laci Kasir (Cash)
+                  </button>
+                  <button 
+                    onClick={() => setKasMethod('QRIS')}
+                    className={`flex-1 py-3 rounded-xl border font-semibold text-sm transition-all ${kasMethod === 'QRIS' ? 'bg-blue-500/20 border-blue-500 text-blue-500' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:border-white/30'}`}
+                  >
+                    Saldo QRIS
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            {/* History Kas Masuk (7 hari terakhir) */}
+            {kasMasukTxs.length > 0 && (
+              <div className="pt-6 border-t border-white/10 mt-2 space-y-3">
+                <h3 className="text-sm font-semibold text-zinc-300">Riwayat Kas Masuk (7 Hari Terakhir)</h3>
+                <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                  {kasMasukTxs.map(tx => (
+                    <div key={tx.id} className="flex justify-between items-center bg-zinc-900 border border-white/5 p-3 rounded-xl">
+                      <div>
+                        <p className="text-sm font-bold text-white">Rp {tx.total.toLocaleString('id-ID')}</p>
+                        <p className="text-xs text-zinc-500">{new Date(tx.created_at).toLocaleString('id-ID')} - {tx.method}</p>
+                      </div>
+                      <button 
+                        onClick={() => setConfirmDeleteTx(tx)}
+                        className="text-xs text-destructive hover:text-red-400 font-bold px-2 py-1 rounded bg-destructive/10 hover:bg-destructive/20 transition-colors"
+                      >
+                        Hapus
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-white/10">
+              <button onClick={() => setIsKasModalOpen(false)} className="px-5 py-2.5 rounded-xl border border-white/10 hover:bg-white/5 text-sm font-semibold transition-colors">Tutup</button>
+              <button disabled={isSubmittingKas || !kasAmount} onClick={handleKasMasuk} className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-bold hover:bg-primary/90 transition-colors disabled:opacity-50 text-sm">
+                {isSubmittingKas ? 'Menyimpan...' : 'Simpan Kas Masuk'}
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Custom Confirmation Dialog */}
+        <Dialog open={!!confirmDeleteTx} onOpenChange={(open) => !open && setConfirmDeleteTx(null)}>
+          <DialogContent className="bg-zinc-950 border-white/10 sm:max-w-sm text-zinc-100">
+            <DialogHeader>
+              <DialogTitle className="text-destructive flex items-center gap-2">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                Hapus Kas Masuk?
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <p className="text-zinc-400 text-sm mb-4">Apakah Anda yakin ingin menghapus catatan penyesuaian kas masuk ini?</p>
+              {confirmDeleteTx && (
+                <div className="bg-zinc-900 border border-white/5 p-4 rounded-xl flex justify-between items-center">
+                  <span className="text-sm font-bold text-white">Rp {confirmDeleteTx.total.toLocaleString('id-ID')}</span>
+                  <span className="text-xs text-zinc-500 font-medium">{confirmDeleteTx.method}</span>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-3 mt-2">
+              <button disabled={isDeleting} onClick={() => setConfirmDeleteTx(null)} className="px-5 py-2.5 rounded-xl border border-white/10 hover:bg-white/5 text-sm font-semibold transition-colors disabled:opacity-50">Batal</button>
+              <button disabled={isDeleting} onClick={executeDelete} className="px-5 py-2.5 rounded-xl bg-destructive text-destructive-foreground font-bold hover:bg-destructive/90 transition-colors disabled:opacity-50 text-sm">
+                {isDeleting ? 'Menghapus...' : 'Ya, Hapus'}
+              </button>
+            </div>
           </DialogContent>
         </Dialog>
       </div>

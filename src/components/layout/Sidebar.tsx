@@ -272,7 +272,7 @@ export function Sidebar({ onLogoutClick, onLoginClick }: { onLogoutClick?: () =>
                     <Package size={20} className="shrink-0" />
                     <span className={cn("font-medium", isExpanded ? "block" : "hidden")}>Stock</span>
                   </Link>
-                  <Link href="/stock/recipes" className={cn("flex items-center gap-3 px-3 py-3 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-all", { "bg-primary/10 text-primary hover:bg-primary/10": pathname === '/stock/recipes' })}>
+                  <Link href="/recipes" className={cn("flex items-center gap-3 px-3 py-3 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-all", { "bg-primary/10 text-primary hover:bg-primary/10": pathname === '/recipes' })}>
                     <BookOpen size={20} className="shrink-0" />
                     <span className={cn("font-medium", isExpanded ? "block" : "hidden")}>Resep Menu</span>
                   </Link>
