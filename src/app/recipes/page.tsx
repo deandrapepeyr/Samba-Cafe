@@ -37,6 +37,9 @@ export default function RecipesPage() {
   const [newStockId, setNewStockId] = useState('');
   const [newQuantity, setNewQuantity] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [isAddIngredientModalOpen, setIsAddIngredientModalOpen] = useState(false);
+  const [stockSearch, setStockSearch] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -53,7 +56,16 @@ export default function RecipesPage() {
     
     if (catRes.data) setCategories(catRes.data);
     if (prodRes.data) setProducts(prodRes.data.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
-    if (stockRes.data) setStocks(stockRes.data.sort((a, b) => a.name.localeCompare(b.name)));
+    if (stockRes.data) {
+      const parsedStocks = stockRes.data.map((s: any) => {
+        const match = s.name.match(/^(.*?)\s*\|titipan:(.+?)\|$/);
+        if (match) {
+          return { ...s, name: match[1], is_titipan: true, titipan_name: match[2], original_name: s.name };
+        }
+        return { ...s, is_titipan: false, original_name: s.name };
+      });
+      setStocks(parsedStocks.sort((a, b) => a.name.localeCompare(b.name)));
+    }
     if (ingRes.data) setProductIngredients(ingRes.data);
     
     setIsLoadingData(false);
@@ -90,6 +102,8 @@ export default function RecipesPage() {
       }
       setNewStockId('');
       setNewQuantity('');
+      setIsAddIngredientModalOpen(false);
+      setStockSearch('');
     } catch (err: any) {
       console.error(err);
       alert("Gagal menambah bahan: " + err.message);
@@ -384,39 +398,148 @@ export default function RecipesPage() {
                 </div>
               </div>
 
-              <h4 className="text-sm font-semibold text-zinc-300 mb-3">Tambah Bahan Baru</h4>
-              <div className="flex gap-2">
-                <select 
-                  className="flex-1 bg-black/50 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-zinc-200 focus:outline-none focus:border-primary"
-                  value={newStockId}
-                  onChange={(e) => setNewStockId(e.target.value)}
-                >
-                  <option value="" disabled>Pilih stok...</option>
-                  {stocks.map(s => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} (Rp {s.cost_per_unit}/{s.unit?.replace(/[^a-zA-Z]/g, '') || ''})
-                    </option>
-                  ))}
-                </select>
-                <input 
-                  type="number" step="any"
-                  placeholder="Jml"
-                  className="w-24 bg-black/50 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-zinc-200 focus:outline-none focus:border-primary text-center"
-                  value={newQuantity}
-                  onChange={(e) => setNewQuantity(e.target.value)}
-                />
+              <div className="flex justify-end border-t border-white/5 pt-4 mt-2">
                 <button 
-                  onClick={() => handleAddIngredient(selectedProduct.id)}
-                  disabled={isAdding || !newStockId || !newQuantity}
-                  className="px-4 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center gap-2"
+                  onClick={() => setIsAddIngredientModalOpen(true)}
+                  className="px-4 py-2.5 bg-primary/20 text-primary hover:bg-primary hover:text-primary-foreground rounded-xl text-sm font-semibold transition-colors flex items-center gap-2"
                 >
-                  {isAdding ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-                  Bahan
+                  <Plus size={16} />
+                  Tambah Bahan Baru
                 </button>
               </div>
 
             </div>
           </div>
+
+          {/* Nested Modal for Adding Ingredient */}
+          {isAddIngredientModalOpen && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+              <div className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col">
+                <div className="flex items-center justify-between p-4 border-b border-white/5 bg-zinc-950/50 rounded-t-2xl">
+                  <h3 className="font-bold text-white">Pilih Bahan Baku</h3>
+                  <button 
+                    onClick={() => {
+                      setIsAddIngredientModalOpen(false);
+                      setNewStockId('');
+                      setNewQuantity('');
+                      setStockSearch('');
+                      setIsDropdownOpen(false);
+                    }}
+                    className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+                
+                <div className="p-5 space-y-5">
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Cari & Pilih Bahan</label>
+                    <div className="relative">
+                      <div 
+                        className="bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-zinc-200 cursor-pointer flex justify-between items-center"
+                        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                      >
+                        {newStockId ? stocks.find(s => s.id === newStockId)?.name : 'Pilih bahan baku...'}
+                        <svg className={`w-4 h-4 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                      </div>
+
+                      {isDropdownOpen && (
+                        <div className="absolute top-full left-0 right-0 mt-2 bg-zinc-800 border border-white/10 rounded-xl shadow-2xl z-10 max-h-60 overflow-y-auto overflow-x-hidden">
+                          <div className="p-2 sticky top-0 bg-zinc-800 border-b border-white/5">
+                            <div className="relative">
+                              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                              <input 
+                                type="text" 
+                                placeholder="Ketik untuk mencari..." 
+                                className="w-full bg-black/30 rounded-lg pl-8 pr-3 py-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-primary"
+                                value={stockSearch}
+                                onChange={e => setStockSearch(e.target.value)}
+                                onClick={e => e.stopPropagation()}
+                              />
+                            </div>
+                          </div>
+                          <div className="p-1">
+                            {(() => {
+                              const selectedProduct = products.find(p => p.id === selectedProductId);
+                              let baseFiltered = stocks;
+                              if (selectedProduct?.is_titipan) {
+                                baseFiltered = stocks.filter(s => s.is_titipan && s.titipan_name?.trim().toLowerCase() === selectedProduct.titipan_name?.trim().toLowerCase());
+                              } else {
+                                baseFiltered = stocks.filter(s => !s.is_titipan);
+                              }
+                              
+                              const finalStocks = baseFiltered.filter(s => 
+                                s.name.toLowerCase().includes(stockSearch.toLowerCase()) || 
+                                (s.titipan_name && s.titipan_name.toLowerCase().includes(stockSearch.toLowerCase()))
+                              );
+
+                              if (finalStocks.length === 0) {
+                                return <div className="px-3 py-4 text-xs text-zinc-500 text-center">Bahan tidak ditemukan</div>;
+                              }
+
+                              return finalStocks.map(s => (
+                                <div 
+                                  key={s.id}
+                                  className={`px-3 py-2.5 text-sm rounded-lg cursor-pointer hover:bg-white/10 transition-colors ${newStockId === s.id ? 'bg-primary/20 text-primary font-bold' : 'text-zinc-300'}`}
+                                  onClick={() => {
+                                    setNewStockId(s.id);
+                                    setIsDropdownOpen(false);
+                                  }}
+                                >
+                                  {s.name} 
+                                  {s.is_titipan && <span className="text-orange-400 text-[10px] uppercase ml-2 tracking-wider bg-orange-400/10 px-1.5 py-0.5 rounded border border-orange-400/20">{s.titipan_name}</span>}
+                                  <span className="text-zinc-500 text-xs ml-1">(Rp {s.cost_per_unit}/{s.unit?.replace(/[^a-zA-Z]/g, '') || ''})</span>
+                                </div>
+                              ));
+                            })()}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Takaran / Jumlah</label>
+                    <div className="relative">
+                      <input 
+                        type="number" step="any"
+                        placeholder="Contoh: 1.5"
+                        className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-zinc-200 focus:outline-none focus:border-primary pr-16"
+                        value={newQuantity}
+                        onChange={(e) => setNewQuantity(e.target.value)}
+                      />
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-zinc-500 font-bold uppercase">
+                        {newStockId ? stocks.find(s => s.id === newStockId)?.unit?.replace(/[^a-zA-Z]/g, '') : ''}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 border-t border-white/5 bg-zinc-950/50 flex justify-end gap-3 rounded-b-2xl">
+                  <button 
+                    onClick={() => {
+                      setIsAddIngredientModalOpen(false);
+                      setNewStockId('');
+                      setNewQuantity('');
+                      setStockSearch('');
+                      setIsDropdownOpen(false);
+                    }}
+                    className="px-5 py-2.5 rounded-xl border border-white/10 hover:bg-white/5 text-sm font-semibold transition-colors"
+                  >
+                    Batal
+                  </button>
+                  <button 
+                    onClick={() => handleAddIngredient(selectedProduct.id)}
+                    disabled={isAdding || !newStockId || !newQuantity}
+                    className="px-5 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-bold hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center gap-2"
+                  >
+                    {isAdding ? <Loader2 size={16} className="animate-spin" /> : null}
+                    Simpan Bahan
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </MainLayout>

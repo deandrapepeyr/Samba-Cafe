@@ -174,7 +174,13 @@ export default function StockPage() {
     
     let combined: StockItem[] = [];
     if (stocksRes.data) {
-      combined = [...stocksRes.data.map((s: any) => ({ ...s, is_titipan: false }))];
+      combined = [...stocksRes.data.map((s: any) => {
+        const match = s.name.match(/^(.*?)\s*\|titipan:(.+?)\|$/);
+        if (match) {
+          return { ...s, name: match[1], is_titipan: true, titipan_name: match[2], original_name: s.name };
+        }
+        return { ...s, is_titipan: false, original_name: s.name };
+      })];
     }
     if (productsRes.data) {
       const titipanStocks = productsRes.data.map((p: any) => ({
@@ -240,9 +246,27 @@ export default function StockPage() {
 
        const { error } = await supabase.from('products').insert([newProduct]);
        if (!error) {
+           const packedName = newProduct.titipan_name ? `${newProduct.name} |titipan:${newProduct.titipan_name}|` : newProduct.name;
+           const { data: stockData } = await supabase.from('stocks').insert([{
+               name: packedName,
+               quantity: newProduct.stock,
+               unit: 'pcs',
+               cost_per_unit: newProduct.supplier_price,
+               min_stock_alert: 0
+           }]).select();
+
+           if (stockData && stockData[0]) {
+               await supabase.from('product_ingredients').insert([{
+                   product_id: newProduct.id,
+                   stock_id: stockData[0].id,
+                   quantity_required: 1
+               }]);
+           }
+
            const newStockEntry = {
               id: newProduct.id,
-              name: newProduct.name + ` (${newProduct.titipan_name})`,
+              name: newProduct.name,
+              original_name: packedName,
               quantity: newProduct.stock,
               unit: 'pcs',
               cost_per_unit: newProduct.supplier_price,
@@ -269,9 +293,12 @@ export default function StockPage() {
 
         const computedCostPerUnit = Math.round(parseInt(newItem.cost_per_unit) / parseFloat(newItem.unit_value)) || 0;
         const computedQuantity = (parseInt(newItem.quantity) || 0) * (parseFloat(newItem.unit_value) || 1);
+        
+        // Use name hack to store titipan info for cafe stocks
+        const packedName = newItem.titipan_name ? `${newItem.name.trim()} |titipan:${newItem.titipan_name.trim()}|` : newItem.name.trim();
 
         const { data, error } = await supabase.from('stocks').insert([{
-          name: newItem.name.trim(),
+          name: packedName,
           unit: `${newItem.unit_value} ${newItem.unit_type}`.trim(),
           cost_per_unit: computedCostPerUnit,
           min_stock_alert: parseInt(newItem.min_stock_alert) || 0,
@@ -306,7 +333,16 @@ export default function StockPage() {
              }
           }
 
-          setStocks([...stocks, newStock].sort((a, b) => a.name.localeCompare(b.name)));
+          // Also store parsed info back into state
+          const parsedStock = {
+            ...newStock,
+            name: newItem.name.trim(),
+            original_name: packedName,
+            is_titipan: !!newItem.titipan_name,
+            titipan_name: newItem.titipan_name || undefined
+          };
+
+          setStocks([...stocks, parsedStock].sort((a, b) => a.name.localeCompare(b.name)));
           setIsAddDialogOpen(false);
           setNewItem({ ...newItem, name: '', cost_per_unit: '', min_stock_alert: '', quantity: '', sell_price: '' });
         } else {
@@ -344,6 +380,11 @@ export default function StockPage() {
         .from('products')
         .update({ stock: newQuantity })
         .eq('id', selectedStock.id);
+        
+      const { data: pi } = await supabase.from('product_ingredients').select('stock_id').eq('product_id', selectedStock.id).maybeSingle();
+      if (pi && pi.stock_id) {
+        await supabase.from('stocks').update({ quantity: newQuantity }).eq('id', pi.stock_id);
+      }
 
       if (!error) {
         setStocks(stocks.map(s => s.id === selectedStock.id ? { ...s, quantity: newQuantity } : s));
@@ -391,6 +432,12 @@ export default function StockPage() {
     
     const { error } = await supabase.from(table).update(updates).eq('id', item.id);
     if (!error) {
+       if (item.is_titipan) {
+          const { data: pi } = await supabase.from('product_ingredients').select('stock_id').eq('product_id', item.id).maybeSingle();
+          if (pi && pi.stock_id) {
+             await supabase.from('stocks').update({ quantity: newQty }).eq('id', pi.stock_id);
+          }
+       }
        setStocks(stocks.map(s => s.id === item.id ? { ...s, quantity: newQty, last_updated: updates.last_updated || s.last_updated } : s));
     } else {
        alert("Gagal update stok.");
@@ -420,16 +467,26 @@ export default function StockPage() {
         .eq('id', selectedStock.id);
 
       if (!error) {
-        setStocks(stocks.map(s => s.id === selectedStock.id ? { ...selectedStock } : s));
+        const packedName = selectedStock.titipan_name ? `${selectedStock.name.trim()} |titipan:${selectedStock.titipan_name.trim()}|` : selectedStock.name.trim();
+        const { data: pi } = await supabase.from('product_ingredients').select('stock_id').eq('product_id', selectedStock.id).maybeSingle();
+        if (pi && pi.stock_id) {
+           await supabase.from('stocks').update({ 
+             name: packedName,
+             cost_per_unit: selectedStock.cost_per_unit
+           }).eq('id', pi.stock_id);
+        }
+
+        setStocks(stocks.map(s => s.id === selectedStock.id ? { ...selectedStock, original_name: packedName } : s));
         setIsEditDialogOpen(false);
       } else {
         alert("Failed to edit titipan.");
       }
     } else {
+      const packedName = selectedStock.titipan_name ? `${selectedStock.name.trim()} |titipan:${selectedStock.titipan_name.trim()}|` : selectedStock.name.trim();
       const { error } = await supabase
         .from('stocks')
         .update({ 
-          name: selectedStock.name.trim(), 
+          name: packedName, 
           unit: `${editUnitValue} ${editUnitType}`.trim(), 
           cost_per_unit: editUnitValue && editPackPrice ? Math.round(parseInt(editPackPrice) / parseFloat(editUnitValue)) : selectedStock.cost_per_unit, 
           min_stock_alert: selectedStock.min_stock_alert 
@@ -437,7 +494,7 @@ export default function StockPage() {
         .eq('id', selectedStock.id);
 
       if (!error) {
-        setStocks(stocks.map(s => s.id === selectedStock.id ? { ...selectedStock, unit: `${editUnitValue} ${editUnitType}`.trim() } : s));
+        setStocks(stocks.map(s => s.id === selectedStock.id ? { ...selectedStock, name: selectedStock.name.trim(), original_name: packedName, is_titipan: !!selectedStock.titipan_name, unit: `${editUnitValue} ${editUnitType}`.trim() } : s));
         setIsEditDialogOpen(false);
       } else {
         alert("Failed to edit stock.");
@@ -449,6 +506,11 @@ export default function StockPage() {
     if (!selectedStock) return;
 
     if (selectedStock.is_titipan) {
+      const { data: pi } = await supabase.from('product_ingredients').select('stock_id').eq('product_id', selectedStock.id).maybeSingle();
+      if (pi && pi.stock_id) {
+         await supabase.from('stocks').delete().eq('id', pi.stock_id);
+      }
+      
       const { error } = await supabase
         .from('products')
         .delete()
@@ -757,16 +819,16 @@ export default function StockPage() {
               <Button 
                 variant={!newItem.is_titipan ? 'default' : 'ghost'} 
                 onClick={() => setNewItem({...newItem, is_titipan: false})} 
-                className={`flex-1 h-9 ${!newItem.is_titipan ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground'}`}
+                className={`flex-1 h-9 text-xs sm:text-sm ${!newItem.is_titipan ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground'}`}
               >
-                Bahan Cafe
+                Bahan / Stok (Bisa utk Penitip)
               </Button>
               <Button 
                 variant={newItem.is_titipan ? 'default' : 'ghost'} 
                 onClick={() => setNewItem({...newItem, is_titipan: true})} 
-                className={`flex-1 h-9 ${newItem.is_titipan ? 'bg-orange-500 text-white shadow-sm hover:bg-orange-600' : 'text-muted-foreground'}`}
+                className={`flex-1 h-9 text-xs sm:text-sm ${newItem.is_titipan ? 'bg-orange-500 text-white shadow-sm hover:bg-orange-600' : 'text-muted-foreground'}`}
               >
-                Barang Titipan
+                Menu Titipan (Siap Jual)
               </Button>
             </div>
 
@@ -783,6 +845,21 @@ export default function StockPage() {
                     <span className="text-sm font-semibold text-primary">Jadikan Menu & Jual Langsung</span>
                   </label>
                   <p className="text-[10px] text-muted-foreground mt-1 ml-1">Stok otomatis dibuatkan menu dan siap dijual di Kasir</p>
+                </div>
+              </div>
+            )}
+
+            {!newItem.is_titipan && (
+              <div className="grid grid-cols-4 items-center gap-4 overflow-visible">
+                <label className="text-right text-sm font-medium">Bahan Titipan?</label>
+                <div className="col-span-3 overflow-visible relative">
+                  <TitipanAutocomplete 
+                    placeholder="Kosongkan jika milik Cafe, isi nama penitip jika titipan" 
+                    value={newItem.titipan_name || ''} 
+                    onChange={val => setNewItem({...newItem, titipan_name: val})} 
+                    options={Array.from(new Set(stocks.filter(s => s.is_titipan && s.titipan_name).map(s => s.titipan_name as string)))}
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1 ml-1">Isi nama penitip jika bahan baku ini disuplai oleh penitip.</p>
                 </div>
               </div>
             )}

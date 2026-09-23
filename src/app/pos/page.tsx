@@ -652,13 +652,10 @@ export default function POSPage() {
             }
           }
 
-          // Stock adjustment (Delta) for Regular items via recipes
+          // Stock adjustment (Delta) for ALL items via recipes (Titipan menus might use Cafe ingredients)
           const allProductIds = Array.from(new Set([
-            ...cart.filter(i => !i.product.is_titipan).map(i => i.product.id),
-            ...oldCartItems.filter(i => {
-                const p = products.find(prod => prod.name === i.product_name);
-                return p && !p.is_titipan;
-            }).map(i => products.find(p => p.name === i.product_name)?.id).filter(Boolean)
+            ...cart.map(i => i.product.id),
+            ...oldCartItems.map(i => products.find(p => p.name === i.product_name)?.id).filter(Boolean)
           ]));
           
           const { data: recipes } = await supabase.from('product_ingredients').select('*').in('product_id', allProductIds as string[]);
@@ -731,8 +728,8 @@ export default function POSPage() {
              await supabase.from('products').update({ stock: newStock }).eq('id', cartItem.product.id);
           }
 
-          // Deduct stock based on recipe for regular items
-          const productIds = cart.filter(item => !item.product.is_titipan).map(item => item.product.id);
+          // Deduct stock based on recipe for ALL items (Titipan menus might use Cafe ingredients)
+          const productIds = cart.map(item => item.product.id);
           const { data: recipes } = await supabase.from('product_ingredients').select('*').in('product_id', productIds);
           
           if (recipes && recipes.length > 0) {
