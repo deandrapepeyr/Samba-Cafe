@@ -109,7 +109,16 @@ export default function SettingsPage() {
     if (productsRes.data) {
       setProducts(productsRes.data.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
     }
-    if (stocksRes.data) setStocks(stocksRes.data);
+    if (stocksRes.data) {
+      const parsedStocks = stocksRes.data.map((s: any) => {
+        const match = s.name.match(/^(.*?)\s*\|titipan:(.+?)\|$/);
+        if (match) {
+          return { ...s, name: match[1], is_titipan: true, titipan_name: match[2], original_name: s.name };
+        }
+        return { ...s, is_titipan: false, original_name: s.name };
+      });
+      setStocks(parsedStocks.sort((a, b) => a.name.localeCompare(b.name)));
+    }
     if (usersRes.data) setUsers(usersRes.data);
     if (settingsRes.data) {
       const msg = settingsRes.data.find(s => s.key === 'broadcast_message');
@@ -1275,7 +1284,15 @@ export default function SettingsPage() {
                       }}
                     >
                       <option value="" disabled className="bg-zinc-900">Pilih bahan...</option>
-                      {stocks.map(s => <option key={s.id} value={s.id} className="bg-zinc-900">{s.name} ({s.unit})</option>)}
+                      {(() => {
+                        let baseFiltered = stocks;
+                        if (newItem.is_titipan) {
+                          baseFiltered = stocks.filter(s => s.is_titipan && s.titipan_name?.trim().toLowerCase() === newItem.titipan_name?.trim().toLowerCase());
+                        } else {
+                          baseFiltered = stocks.filter(s => !s.is_titipan);
+                        }
+                        return baseFiltered.map(s => <option key={s.id} value={s.id} className="bg-zinc-900">{s.name} {s.is_titipan ? `[${s.titipan_name}]` : ''} ({s.unit})</option>);
+                      })()}
                     </select>
                     <Input 
                       className="w-24 shrink-0 h-10 bg-zinc-900/50 border-white/10 text-zinc-100 rounded-xl text-center" 
@@ -1459,7 +1476,15 @@ export default function SettingsPage() {
                         }}
                       >
                         <option value="" disabled className="bg-zinc-900">Pilih bahan...</option>
-                        {stocks.map(s => <option key={s.id} value={s.id} className="bg-zinc-900">{s.name} ({s.unit})</option>)}
+                        {(() => {
+                          let baseFiltered = stocks;
+                          if (editingItem.is_titipan) {
+                            baseFiltered = stocks.filter(s => s.is_titipan && s.titipan_name?.trim().toLowerCase() === editingItem.titipan_name?.trim().toLowerCase());
+                          } else {
+                            baseFiltered = stocks.filter(s => !s.is_titipan);
+                          }
+                          return baseFiltered.map(s => <option key={s.id} value={s.id} className="bg-zinc-900">{s.name} {s.is_titipan ? `[${s.titipan_name}]` : ''} ({s.unit})</option>);
+                        })()}
                       </select>
                       <Input 
                         className="w-24 shrink-0 h-10 bg-zinc-900/50 border-white/10 text-zinc-100 rounded-xl text-center" 
