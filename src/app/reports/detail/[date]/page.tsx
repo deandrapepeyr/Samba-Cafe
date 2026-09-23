@@ -4,11 +4,14 @@ import { useState, useEffect, use } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, ArrowLeft, Receipt, CheckCircle2 } from 'lucide-react';
+import { Loader2, ArrowLeft, Receipt, CheckCircle2, Copy, Check } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Separator } from '@/components/ui/separator';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 type Transaction = {
   id: string;
@@ -61,6 +64,49 @@ export default function DailyReportDetailPage({ params }: { params: Promise<{ da
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [titipanProductNames, setTitipanProductNames] = useState<Map<string, string | null>>(new Map());
   const [productStocks, setProductStocks] = useState<Map<string, number | string>>(new Map());
+
+  // Report Modal State
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [reportModalContent, setReportModalContent] = useState('');
+  const [reportModalTitle, setReportModalTitle] = useState('');
+  const [isCopied, setIsCopied] = useState(false);
+
+  const handleOpenReport = (vendor: VendorSummary) => {
+    setReportModalTitle(`Report ${vendor.vendor_name}`);
+    
+    let text = `${vendor.vendor_name}\n\n`;
+    text += `Produk terjual dari tanggal \n`;
+    text += `${report?.date || dateParam}:\n\n`;
+
+    let totalProduk = 0;
+    const sortedProducts = Object.values(vendor.products).sort((a,b) => b.revenue - a.revenue);
+    
+    sortedProducts.forEach(p => {
+      text += `• ${p.product_name.toLowerCase()} ${p.quantity}\n`;
+      totalProduk += p.quantity;
+    });
+
+    text += `\ntotal ${totalProduk} produk\n\n`;
+    text += `SISA STOK:\n`;
+    
+    sortedProducts.forEach(p => {
+      const stock = productStocks.get(p.product_name) ?? 0;
+      text += `• ${p.product_name.toLowerCase()} sisa ${stock}\n`;
+    });
+
+    text += `\nTOTAL SETORAN PER TANGGAL ${report?.date || dateParam}\n`;
+    text += `Rp ${vendor.total_revenue.toLocaleString('id-ID')}\n`;
+
+    setReportModalContent(text);
+    setReportModalOpen(true);
+    setIsCopied(false);
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(reportModalContent);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
 
   useEffect(() => {
     if (!isLoading && role !== 'manager') {
@@ -344,7 +390,18 @@ export default function DailyReportDetailPage({ params }: { params: Promise<{ da
                         </h3>
                         <p className={`text-[10px] uppercase font-bold mt-0.5 ${vendor.vendor_name === 'Samba Cafe' ? 'text-emerald-500/70' : 'text-orange-500/70'}`}>Total Pendapatan</p>
                       </div>
-                      <p className="font-black text-2xl text-foreground">Rp {vendor.total_revenue.toLocaleString('id-ID')}</p>
+                      <div className="flex items-center gap-3">
+                        <p className="font-black text-2xl text-foreground">Rp {vendor.total_revenue.toLocaleString('id-ID')}</p>
+                        <Button 
+                          variant="outline" 
+                          size="icon" 
+                          className="h-8 w-8 shrink-0 rounded-full bg-background/50 hover:bg-background border-border/50"
+                          onClick={() => handleOpenReport(vendor)}
+                          title="Copy Text Report"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                     <CardContent className="p-0 flex-1 bg-background/50 overflow-y-auto scrollbar-thin scrollbar-thumb-border">
                       <div className="p-4 space-y-3">
@@ -380,6 +437,30 @@ export default function DailyReportDetailPage({ params }: { params: Promise<{ da
           </div>
         )}
       </div>
+
+      <Dialog open={reportModalOpen} onOpenChange={setReportModalOpen}>
+        <DialogContent className="sm:max-w-2xl bg-card border-border flex flex-col max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>{reportModalTitle}</DialogTitle>
+          </DialogHeader>
+          <div className="py-2 flex-1 min-h-0">
+            <Textarea 
+              value={reportModalContent}
+              onChange={(e) => setReportModalContent(e.target.value)}
+              className="h-[50vh] min-h-[300px] resize-none font-mono text-xs bg-background/50 focus-visible:ring-primary/20 ![field-sizing:fixed] overflow-y-auto"
+            />
+          </div>
+          <DialogFooter className="mt-2">
+            <Button variant="outline" onClick={() => setReportModalOpen(false)}>
+              Tutup
+            </Button>
+            <Button onClick={handleCopy} className="gap-2">
+              {isCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              {isCopied ? 'Tersalin!' : 'Salin Text'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }
