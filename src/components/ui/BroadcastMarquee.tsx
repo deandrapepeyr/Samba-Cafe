@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Megaphone } from 'lucide-react';
+import { Heart } from 'lucide-react';
 
 export function BroadcastMarquee() {
-  const [message, setMessage] = useState<string>('');
+  const [messages, setMessages] = useState<string[]>([]);
   const [isVisible, setIsVisible] = useState(false);
   const [isEnabled, setIsEnabled] = useState(true);
 
@@ -22,8 +22,19 @@ export function BroadcastMarquee() {
         const enabledData = data.find(s => s.key === 'broadcast_enabled');
         
         if (msgData && msgData.value) {
-          setMessage(msgData.value);
-          setIsVisible(true);
+          try {
+            const parsed = JSON.parse(msgData.value);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setMessages(parsed);
+              setIsVisible(true);
+            } else {
+              setMessages([msgData.value]);
+              setIsVisible(true);
+            }
+          } catch {
+            setMessages([msgData.value]);
+            setIsVisible(true);
+          }
         } else {
           setIsVisible(false);
         }
@@ -36,7 +47,7 @@ export function BroadcastMarquee() {
     
     fetchMessage();
 
-    // Subscribe to realtime changes (no key filter so we catch both)
+    // Subscribe to realtime changes
     const channel = supabase.channel('settings_changes')
       .on(
         'postgres_changes',
@@ -49,8 +60,24 @@ export function BroadcastMarquee() {
           if (payload.new && 'key' in payload.new && 'value' in payload.new) {
             if (payload.new.key === 'broadcast_message') {
               const newMsg = payload.new.value;
-              setMessage(newMsg);
-              setIsVisible(!!newMsg);
+              if (newMsg) {
+                try {
+                  const parsed = JSON.parse(newMsg);
+                  if (Array.isArray(parsed) && parsed.length > 0) {
+                    setMessages(parsed);
+                    setIsVisible(true);
+                  } else {
+                    setMessages([newMsg]);
+                    setIsVisible(true);
+                  }
+                } catch {
+                  setMessages([newMsg]);
+                  setIsVisible(true);
+                }
+              } else {
+                setMessages([]);
+                setIsVisible(false);
+              }
             } else if (payload.new.key === 'broadcast_enabled') {
               setIsEnabled(payload.new.value !== 'false');
             }
@@ -64,18 +91,20 @@ export function BroadcastMarquee() {
     };
   }, []);
 
-  if (!isVisible || !message || !isEnabled) return null;
+  if (!isVisible || messages.length === 0 || !isEnabled) return null;
+
+  const joinedMessage = messages.join(' ✦ ');
 
   return (
-    <div className="w-full bg-primary/20 border-b border-primary/30 text-primary py-2 px-4 flex items-center overflow-hidden shrink-0">
-      <Megaphone size={16} className="shrink-0 mr-3 animate-pulse" />
+    <div className="w-full bg-gradient-to-r from-rose-500/15 via-pink-500/15 to-rose-500/15 border-b border-rose-500/20 text-rose-400 py-3.5 px-6 flex items-center overflow-hidden shrink-0 shadow-sm shadow-rose-500/5">
+      <Heart size={24} className="shrink-0 mr-4 animate-pulse text-rose-500 fill-rose-500/40" />
       <div className="w-full overflow-hidden whitespace-nowrap">
-        <div className="inline-block animate-[marquee_20s_linear_infinite] font-semibold text-sm">
-          {message}
-          <span className="mx-8 text-primary/50">•</span>
-          {message}
-          <span className="mx-8 text-primary/50">•</span>
-          {message}
+        <div className="inline-block animate-[marquee_20s_linear_infinite] font-semibold text-[17px] tracking-wide drop-shadow-sm">
+          {joinedMessage}
+          <span className="mx-10 text-rose-500/60 text-lg">❤️</span>
+          {joinedMessage}
+          <span className="mx-10 text-rose-500/60 text-lg">❤️</span>
+          {joinedMessage}
         </div>
       </div>
     </div>

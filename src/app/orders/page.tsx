@@ -268,9 +268,66 @@ export default function OrdersPage() {
     setIsDeleteDialogOpen(true);
   };
 
+  const restoreOrderStock = async (order: Order) => {
+    const itemNames = order.items.map(i => i.name);
+    const { data: products } = await supabase.from('products').select('*').in('name', itemNames);
+    if (!products) return;
+
+    for (const item of order.items) {
+      const p = products.find(prod => prod.name === item.name);
+      if (p && p.is_titipan) {
+        const newStock = (p.stock || 0) + item.qty;
+        await supabase.from('products').update({ stock: newStock }).eq('id', p.id);
+      }
+    }
+
+    const productIds = products.map(p => p.id);
+    const { data: recipes } = await supabase.from('product_ingredients').select('*').in('product_id', productIds);
+    
+    if (recipes && recipes.length > 0) {
+      const stockToRestore: Record<string, number> = {};
+      
+      for (const item of order.items) {
+        const p = products.find(prod => prod.name === item.name);
+        if (!p) continue;
+        const itemRecipes = recipes.filter(r => r.product_id === p.id);
+        
+        for (const recipe of itemRecipes) {
+          const isBaseRecipe = !recipe.variant_name;
+          let noteMatches = false;
+          if (!isBaseRecipe && item.notes && recipe.choice_name) {
+             noteMatches = item.notes.includes(recipe.choice_name);
+          }
+          if (isBaseRecipe || noteMatches) {
+            if (!stockToRestore[recipe.stock_id]) stockToRestore[recipe.stock_id] = 0;
+            stockToRestore[recipe.stock_id] += (recipe.quantity_required * item.qty);
+          }
+        }
+      }
+
+      const stockIds = Object.keys(stockToRestore);
+      if (stockIds.length > 0) {
+        const { data: currentStocks } = await supabase.from('stocks').select('id, quantity').in('id', stockIds);
+        if (currentStocks) {
+          for (const stock of currentStocks) {
+            const amountToRestore = stockToRestore[stock.id];
+            if (amountToRestore) {
+              const newQuantity = stock.quantity + amountToRestore;
+              await supabase.from('stocks').update({ 
+                quantity: newQuantity, 
+                last_updated: new Date().toISOString() 
+              }).eq('id', stock.id);
+            }
+          }
+        }
+      }
+    }
+  };
+
   const confirmDeleteOrder = async () => {
     if (!selectedOrder) return;
     setUpdatingId(selectedOrder.id);
+    await restoreOrderStock(selectedOrder);
     await supabase.from('transactions').delete().eq('id', selectedOrder.id);
     fetchOrders(false);
     setSelectedOrder(null);
@@ -365,7 +422,7 @@ export default function OrdersPage() {
     return matchesSearch && matchesStatus;
   });
 
-  const renderOrderCard = (order: Order) => {
+  const renderOrderCard = (order: Order, index?: number) => {
 
     return (
       <div 
@@ -387,6 +444,11 @@ export default function OrdersPage() {
           <div className="flex items-start justify-between gap-2 mb-1">
             <div className="flex flex-col gap-0.5 min-w-0">
               <div className="flex flex-wrap items-center gap-1.5">
+                {index !== undefined && (
+                  <span className="flex items-center justify-center w-5 h-5 rounded-md bg-white/10 text-white font-bold text-xs shrink-0 mr-1">
+                    {index + 1}
+                  </span>
+                )}
                 <span className="font-mono font-bold text-sm text-zinc-100">{order.id.startsWith('order_') ? order.id : `order_${order.id}`}</span>
                 <span className={`shrink-0 whitespace-nowrap text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${
                   order.method === 'QRIS' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 
@@ -907,7 +969,7 @@ export default function OrdersPage() {
             <DialogDescription className="text-zinc-400 mt-2">
               Apakah Anda yakin ingin menghapus pesanan <span className="text-zinc-100 font-bold">{selectedOrder?.id?.startsWith('order_') ? selectedOrder.id : `order_${selectedOrder?.id}`}</span> secara permanen?
               <br/><br/>
-              <span className="text-amber-500 font-medium">Perhatian:</span> Stok bahan yang sudah terpotong tidak akan dikembalikan otomatis.
+              <span className="text-emerald-500 font-medium">Perhatian:</span> Stok bahan yang sudah terpotong akan dikembalikan secara otomatis.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="pt-4 mt-2 border-t border-white/5 gap-2 sm:gap-0">

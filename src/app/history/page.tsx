@@ -159,10 +159,17 @@ export default function HistoryPage() {
 
   if (!role) return null;
 
-  const filters = ['All', 'QRIS', 'Cash'];
+  const filters = ['All', 'QRIS', 'Cash', 'Kas Masuk'];
 
   const filteredTransactions = transactions.filter(trx => {
-    const matchesFilter = activeFilter === 'All' || trx.method === activeFilter;
+    let matchesFilter = false;
+    if (activeFilter === 'All') {
+      matchesFilter = true;
+    } else if (activeFilter === 'Kas Masuk') {
+      matchesFilter = trx.id.includes('ADJ-') || (trx.cashier_name && trx.cashier_name.includes('Kas Masuk')) || false;
+    } else {
+      matchesFilter = trx.method === activeFilter;
+    }
     const matchesSearch = trx.id.includes(searchQuery);
     
     let matchesDate = true;

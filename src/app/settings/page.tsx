@@ -84,7 +84,7 @@ export default function SettingsPage() {
   const [categories, setCategories] = useState<any[]>([]);
   const [stocks, setStocks] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
-  const [broadcastMessage, setBroadcastMessage] = useState('');
+  const [broadcastMessages, setBroadcastMessages] = useState<string[]>(['']);
   const [isBroadcastEnabled, setIsBroadcastEnabled] = useState(true);
   const [isUpdatingBroadcast, setIsUpdatingBroadcast] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
@@ -123,7 +123,18 @@ export default function SettingsPage() {
     if (settingsRes.data) {
       const msg = settingsRes.data.find(s => s.key === 'broadcast_message');
       const enabled = settingsRes.data.find(s => s.key === 'broadcast_enabled');
-      if (msg) setBroadcastMessage(msg.value);
+      if (msg) {
+        try {
+          const parsed = JSON.parse(msg.value);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setBroadcastMessages(parsed);
+          } else {
+            setBroadcastMessages([msg.value]);
+          }
+        } catch {
+          setBroadcastMessages([msg.value]);
+        }
+      }
       if (enabled) setIsBroadcastEnabled(enabled.value !== 'false');
     }
     setIsLoadingData(false);
@@ -1036,54 +1047,91 @@ export default function SettingsPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex flex-col gap-3">
-                    <label className="text-sm font-medium text-zinc-300">Pesan Pengumuman</label>
-                    <div className="flex flex-col sm:flex-row gap-3">
-                      <Input
-                        placeholder="Contoh: Promo diskon 20% khusus hari ini!"
-                        value={broadcastMessage}
-                        onChange={(e) => setBroadcastMessage(e.target.value)}
-                        className="bg-zinc-900/50 border-white/10 text-zinc-100 flex-1 h-11"
-                      />
-                      <div className="flex gap-2">
-                        <Button
-                          variant={isBroadcastEnabled ? "default" : "outline"}
-                          disabled={isUpdatingBroadcast}
-                          onClick={async () => {
-                            const newState = !isBroadcastEnabled;
-                            setIsUpdatingBroadcast(true);
-                            const { error } = await supabase
-                              .from('settings')
-                              .upsert({ key: 'broadcast_enabled', value: newState.toString() });
-                            if (error) {
-                              alert("Gagal ubah status: " + error.message);
-                            } else {
-                              setIsBroadcastEnabled(newState);
-                            }
-                            setIsUpdatingBroadcast(false);
-                          }}
-                          className={`h-11 px-4 ${isBroadcastEnabled ? 'bg-emerald-500 hover:bg-emerald-600 text-white' : 'border-white/10 text-zinc-400 hover:text-white'}`}
-                        >
-                          {isBroadcastEnabled ? 'Status: ON' : 'Status: OFF'}
-                        </Button>
-                        <Button 
-                          disabled={isUpdatingBroadcast}
-                          onClick={async () => {
-                            setIsUpdatingBroadcast(true);
-                            const { error } = await supabase
-                              .from('settings')
-                              .upsert({ key: 'broadcast_message', value: broadcastMessage });
-                            if (error) alert("Gagal update pesan: " + error.message);
-                            else alert("Pesan berhasil diupdate!");
-                            setIsUpdatingBroadcast(false);
-                          }}
-                          className="bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-6"
-                        >
-                          {isUpdatingBroadcast ? 'Loading...' : 'Simpan'}
-                        </Button>
-                      </div>
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium text-zinc-300">Daftar Pesan Pengumuman</label>
+                      <Button
+                        variant={isBroadcastEnabled ? "default" : "outline"}
+                        disabled={isUpdatingBroadcast}
+                        onClick={async () => {
+                          const newState = !isBroadcastEnabled;
+                          setIsUpdatingBroadcast(true);
+                          const { error } = await supabase
+                            .from('settings')
+                            .upsert({ key: 'broadcast_enabled', value: newState.toString() });
+                          if (error) {
+                            alert("Gagal ubah status: " + error.message);
+                          } else {
+                            setIsBroadcastEnabled(newState);
+                          }
+                          setIsUpdatingBroadcast(false);
+                        }}
+                        className={`h-9 px-4 text-xs rounded-xl ${isBroadcastEnabled ? 'bg-emerald-500 hover:bg-emerald-600 text-white' : 'border-white/10 text-zinc-400 hover:text-white'}`}
+                      >
+                        {isBroadcastEnabled ? 'Status: ON' : 'Status: OFF'}
+                      </Button>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">Kosongkan dan klik "Siarkan" jika ingin menghilangkan pengumuman.</p>
+
+                    <div className="flex flex-col gap-3">
+                      {broadcastMessages.map((msg, index) => (
+                        <div key={index} className="flex gap-2">
+                          <Input
+                            placeholder="Contoh: Promo romantis hari ini! ❤️"
+                            value={msg}
+                            onChange={(e) => {
+                              const newMsgs = [...broadcastMessages];
+                              newMsgs[index] = e.target.value;
+                              setBroadcastMessages(newMsgs);
+                            }}
+                            className="bg-zinc-900/50 border-white/10 text-zinc-100 flex-1 h-11 rounded-xl focus-visible:ring-rose-500"
+                          />
+                          <Button 
+                            variant="outline" 
+                            className="h-11 w-11 p-0 shrink-0 border-white/10 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl"
+                            onClick={() => {
+                              const newMsgs = broadcastMessages.filter((_, i) => i !== index);
+                              setBroadcastMessages(newMsgs.length > 0 ? newMsgs : ['']);
+                            }}
+                          >
+                            <Trash2 size={16} />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-3 pt-2 items-start sm:items-center justify-between border-t border-white/5 mt-1">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 h-10 px-4 rounded-xl"
+                        onClick={() => setBroadcastMessages([...broadcastMessages, ''])}
+                      >
+                        <Plus size={16} className="mr-2" /> Tambah Pesan Broadcast
+                      </Button>
+                      
+                      <Button 
+                        disabled={isUpdatingBroadcast}
+                        onClick={async () => {
+                          setIsUpdatingBroadcast(true);
+                          const validMessages = broadcastMessages.filter(m => m.trim() !== '');
+                          const valueToSave = validMessages.length > 0 ? JSON.stringify(validMessages) : '';
+                          const { error } = await supabase
+                            .from('settings')
+                            .upsert({ key: 'broadcast_message', value: valueToSave });
+                          
+                          if (error) alert("Gagal update pesan: " + error.message);
+                          else {
+                            setBroadcastMessages(validMessages.length > 0 ? validMessages : ['']);
+                            alert("Pesan berhasil diupdate!");
+                          }
+                          setIsUpdatingBroadcast(false);
+                        }}
+                        className="bg-rose-500 text-white hover:bg-rose-600 h-11 px-8 rounded-xl shadow-lg shadow-rose-500/20 w-full sm:w-auto font-medium"
+                      >
+                        {isUpdatingBroadcast ? 'Loading...' : 'Simpan Semua Pesan'}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">Kosongkan semua pesan dan simpan untuk menghilangkan pengumuman.</p>
                   </div>
                 </CardContent>
               </Card>
