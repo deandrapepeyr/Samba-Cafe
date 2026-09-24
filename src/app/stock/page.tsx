@@ -173,43 +173,45 @@ export default function StockPage() {
     ]);
     
     let combined: StockItem[] = [];
+    let titipanStocks: StockItem[] = [];
+    const normalize = (name: string) => name.toLowerCase().replace(/\s+/g, ' ').trim();
+
+    if (productsRes.data) {
+      titipanStocks = productsRes.data.map((p: any) => ({
+        id: p.id,
+        name: p.name.trim() + (p.titipan_name ? ` (${p.titipan_name.trim()})` : ''),
+        quantity: p.stock || 0,
+        unit: 'pcs',
+        cost_per_unit: p.supplier_price || 0,
+        min_stock_alert: 0,
+        last_updated: p.created_at || new Date().toISOString(),
+        is_titipan: true,
+        titipan_name: p.titipan_name,
+        price: p.price || 0
+      }));
+    }
+
     if (stocksRes.data) {
-      combined = [...stocksRes.data.map((s: any) => {
+      const titipanProductNames = new Set(titipanStocks.map(p => normalize(p.name)));
+      
+      const processedStocks = stocksRes.data.reduce((acc: any[], s: any) => {
         const match = s.name.match(/^(.*?)\s*\|titipan:(.+?)\|$/);
         if (match) {
-          return { ...s, name: match[1], is_titipan: true, titipan_name: match[2], original_name: s.name };
+          const baseName = normalize(match[1]);
+          const withPenitip = normalize(`${match[1]} (${match[2]})`);
+          // Skip if we already loaded this from products table
+          if (titipanProductNames.has(baseName) || titipanProductNames.has(withPenitip)) {
+            return acc;
+          }
+          // Orphan titipan stock (missing from products)
+          acc.push({ ...s, name: match[1], is_titipan: true, titipan_name: match[2], original_name: s.name });
+        } else {
+          acc.push({ ...s, is_titipan: false, original_name: s.name });
         }
-        return { ...s, is_titipan: false, original_name: s.name };
-      })];
-    }
-    if (productsRes.data) {
-      // Build a set of titipan product names already present from the stocks table
-      const existingTitipanNames = new Set(
-        combined.filter(s => s.is_titipan).map(s => s.name.toLowerCase().trim())
-      );
-
-      const titipanStocks = productsRes.data
-        .filter((p: any) => {
-          // Skip if a matching entry already exists from the stocks table
-          const baseName = p.name.toLowerCase().trim();
-          const withPenitip = p.titipan_name 
-            ? `${p.name} (${p.titipan_name})`.toLowerCase().trim() 
-            : baseName;
-          return !existingTitipanNames.has(baseName) && !existingTitipanNames.has(withPenitip);
-        })
-        .map((p: any) => ({
-          id: p.id,
-          name: p.name + (p.titipan_name ? ` (${p.titipan_name})` : ''),
-          quantity: p.stock || 0,
-          unit: 'pcs',
-          cost_per_unit: p.supplier_price || 0,
-          min_stock_alert: 0,
-          last_updated: p.created_at || new Date().toISOString(),
-          is_titipan: true,
-          titipan_name: p.titipan_name,
-          price: p.price || 0
-        }));
-      combined = [...combined, ...titipanStocks];
+        return acc;
+      }, []);
+      
+      combined = [...processedStocks, ...titipanStocks];
     }
     
     combined.sort((a, b) => a.name.localeCompare(b.name));
