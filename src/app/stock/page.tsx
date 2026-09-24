@@ -183,18 +183,32 @@ export default function StockPage() {
       })];
     }
     if (productsRes.data) {
-      const titipanStocks = productsRes.data.map((p: any) => ({
-        id: p.id,
-        name: p.name + (p.titipan_name ? ` (${p.titipan_name})` : ''),
-        quantity: p.stock || 0,
-        unit: 'pcs',
-        cost_per_unit: p.supplier_price || 0,
-        min_stock_alert: 0,
-        last_updated: p.created_at || new Date().toISOString(),
-        is_titipan: true,
-        titipan_name: p.titipan_name,
-        price: p.price || 0
-      }));
+      // Build a set of titipan product names already present from the stocks table
+      const existingTitipanNames = new Set(
+        combined.filter(s => s.is_titipan).map(s => s.name.toLowerCase().trim())
+      );
+
+      const titipanStocks = productsRes.data
+        .filter((p: any) => {
+          // Skip if a matching entry already exists from the stocks table
+          const baseName = p.name.toLowerCase().trim();
+          const withPenitip = p.titipan_name 
+            ? `${p.name} (${p.titipan_name})`.toLowerCase().trim() 
+            : baseName;
+          return !existingTitipanNames.has(baseName) && !existingTitipanNames.has(withPenitip);
+        })
+        .map((p: any) => ({
+          id: p.id,
+          name: p.name + (p.titipan_name ? ` (${p.titipan_name})` : ''),
+          quantity: p.stock || 0,
+          unit: 'pcs',
+          cost_per_unit: p.supplier_price || 0,
+          min_stock_alert: 0,
+          last_updated: p.created_at || new Date().toISOString(),
+          is_titipan: true,
+          titipan_name: p.titipan_name,
+          price: p.price || 0
+        }));
       combined = [...combined, ...titipanStocks];
     }
     
