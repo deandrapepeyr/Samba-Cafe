@@ -4,7 +4,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { useAuth } from '@/lib/AuthContext';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Loader2 } from 'lucide-react';
+import { Loader2, BarChart3 } from 'lucide-react';
 import { DateFilter, DateFilterValue } from '@/components/ui/DateFilter';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
@@ -39,6 +39,7 @@ export default function DashboardPage() {
   const [isFetchingTotalOmzet, setIsFetchingTotalOmzet] = useState(false);
   
   const [chartData, setChartData] = useState<any[]>([]);
+  const [activeTooltipIndex, setActiveTooltipIndex] = useState<number | null>(null);
   const [qrisCount, setQrisCount] = useState(0);
   const [cashCount, setCashCount] = useState(0);
   const [qrisTotal, setQrisTotal] = useState(0);
@@ -111,8 +112,8 @@ export default function DashboardPage() {
       if (!role) return;
       setIsFetchingTotalOmzet(true);
       
-      let queryTx = supabase.from('transactions').select('total, customer_name').neq('status', 'cancelled');
-      let querySummary = supabase.from('daily_summaries').select('total_omzet');
+      let queryTx = supabase.from('transactions').select('total, customer_name, created_at').neq('status', 'cancelled');
+      let querySummary = supabase.from('daily_summaries').select('total_omzet, date');
       
       let startDate: Date | null = null;
       let endDate: Date | null = null;
@@ -143,8 +144,21 @@ export default function DashboardPage() {
 
       const [resTx, resSummary] = await Promise.all([queryTx, querySummary]);
       let total = 0;
-      if (resTx.data) total += resTx.data.filter(tx => tx.customer_name !== 'Penyesuaian Kas Masuk').reduce((sum, tx) => sum + tx.total, 0);
-      if (resSummary.data) total += resSummary.data.reduce((sum, s) => sum + Number(s.total_omzet), 0);
+      
+      const summaryDates = new Set(resSummary.data?.map(s => s.date) || []);
+      
+      if (resSummary.data) {
+        total += resSummary.data.reduce((sum, s) => sum + Number(s.total_omzet), 0);
+      }
+      
+      if (resTx.data) {
+        total += resTx.data.filter(tx => {
+          if (tx.customer_name === 'Penyesuaian Kas Masuk') return false;
+          // Cek apakah tanggal transaksi ini sudah direkap di daily_summaries
+          const txDate = new Date(tx.created_at).toLocaleDateString('en-CA');
+          return !summaryDates.has(txDate);
+        }).reduce((sum, tx) => sum + tx.total, 0);
+      }
       
       setTotalOmzetValue(total);
       setIsFetchingTotalOmzet(false);
@@ -163,20 +177,20 @@ export default function DashboardPage() {
       const yesterdayStart = new Date(todayStart);
       yesterdayStart.setDate(yesterdayStart.getDate() - 1);
       
-      const sevenDaysAgo = new Date(todayStart);
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+      const thirtyDaysAgo = new Date(todayStart);
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
 
       const { data: txs } = await supabase
         .from('transactions')
         .select('*, transaction_items(*)')
-        .gte('created_at', sevenDaysAgo.toISOString())
+        .gte('created_at', thirtyDaysAgo.toISOString())
         .order('created_at', { ascending: false });
         
-      const sevenDaysAgoStr = sevenDaysAgo.toLocaleDateString('en-CA');
+      const thirtyDaysAgoStr = thirtyDaysAgo.toLocaleDateString('en-CA');
       const { data: summaries } = await supabase
         .from('daily_summaries')
         .select('*')
-        .gte('date', sevenDaysAgoStr)
+        .gte('date', thirtyDaysAgoStr)
         .order('date', { ascending: false });
 
       const { data: products } = await supabase.from('products').select('name, is_titipan');
@@ -196,13 +210,13 @@ export default function DashboardPage() {
         let sQTotal = 0, sCTotal = 0;
         let tQTotal = 0, tCTotal = 0;
         const productsMap: Record<string, { qty: number, rev: number }> = {};
-        const dailyOmzetMap: Record<string, number> = {};
+        const dailyStatsMap: Record<string, { total: number, cash: number, qris: number, kasMasuk: number }> = {};
 
-        for (let i = 6; i >= 0; i--) {
+        for (let i = 29; i >= 0; i--) {
           const d = new Date(todayStart);
           d.setDate(d.getDate() - i);
           const key = d.toLocaleDateString('en-CA');
-          dailyOmzetMap[key] = 0;
+          dailyStatsMap[key] = { total: 0, cash: 0, qris: 0, kasMasuk: 0 };
         }
 
         const recentTxs: any[] = [];
@@ -254,10 +268,16 @@ export default function DashboardPage() {
              if (isKasMasuk) {
                kasTxsLocal.push(tx);
                if (isToday) tKasMasuk += tx.total;
+               
+               if (dailyStatsMap[txDateKey]) {
+                 dailyStatsMap[txDateKey].kasMasuk += tx.total;
+               }
              }
 
-             if (!isKasMasuk && dailyOmzetMap[txDateKey] !== undefined) {
-                dailyOmzetMap[txDateKey] += tx.total;
+             if (!isKasMasuk && dailyStatsMap[txDateKey]) {
+                dailyStatsMap[txDateKey].total += tx.total;
+                if (tx.method === 'QRIS') dailyStatsMap[txDateKey].qris += tx.total;
+                if (tx.method && tx.method.includes('Cash')) dailyStatsMap[txDateKey].cash += tx.total;
              }
              
              if (isToday) {
@@ -280,7 +300,7 @@ export default function DashboardPage() {
                ySamba += txSamba;
              }
 
-             if (recentTxs.length < 5 && tx.cashier_name !== 'System Recovery') {
+             if (recentTxs.length < 20 && tx.cashier_name !== 'System Recovery') {
                recentTxs.push(tx);
              }
           }
@@ -293,25 +313,21 @@ export default function DashboardPage() {
           summaries.forEach((s: any) => {
              const sDateKey = s.date;
              
-             if (dailyOmzetMap[sDateKey] !== undefined) {
-               dailyOmzetMap[sDateKey] += Number(s.total_omzet || 0);
+             // Mencegah double-count: hanya ambil summary jika belum ada data real dari transactions
+             if (dailyStatsMap[sDateKey] && dailyStatsMap[sDateKey].total === 0) {
+               dailyStatsMap[sDateKey].total = Number(s.total_omzet || 0);
+               dailyStatsMap[sDateKey].cash = Number(s.total_cash || 0);
+               dailyStatsMap[sDateKey].qris = Number(s.total_qris || 0);
              }
              
-             qCount += Number(s.qris_count || 0);
-             cCount += Number(s.cash_count || 0);
-             qTotal += Number(s.total_qris || 0);
-             cTotal += Number(s.total_cash || 0);
-             sQTotal += Number(s.samba_qris || 0);
-             sCTotal += Number(s.samba_cash || 0);
-             tQTotal += Number(s.titipan_qris || 0);
-             tCTotal += Number(s.titipan_cash || 0);
-             
-             if (sDateKey === yesterdayStr) {
-               yOmzet += Number(s.total_omzet || 0);
-               yTx += Number(s.total_transactions || 0);
-               yItems += Number(s.total_items || 0);
-               yProfit += Number(s.total_profit || 0);
-               ySamba += Number(s.samba_qris || 0) + Number(s.samba_cash || 0);
+             // Pastikan kita tidak menambah qCount, cCount dll ganda jika kita sudah memprosesnya dari transactions
+             // (Catatan: ini sederhana saja karena kita berasumsi daily_summaries mengisi data lama yang sudah dihapus dari transactions)
+             if (sDateKey === yesterdayStr && yOmzet === 0) {
+               yOmzet = Number(s.total_omzet || 0);
+               yTx = Number(s.total_transactions || 0);
+               yItems = Number(s.total_items || 0);
+               yProfit = Number(s.total_profit || 0);
+               ySamba = Number(s.samba_qris || 0) + Number(s.samba_cash || 0);
              }
           });
         }
@@ -337,16 +353,21 @@ export default function DashboardPage() {
           .map(([name, data]) => ({ name, ...data }));
         setTopProducts(sortedProducts);
 
-        const days = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
-        const chartArr = Object.entries(dailyOmzetMap).map(([dateStr, value]) => {
-           const d = new Date(dateStr);
-           const isToday = d.getTime() === todayStart.getTime();
-           return {
-             label: isToday ? 'Hari ini' : days[d.getDay()],
-             value,
-             isToday
-           };
-        });
+        const chartArr = Object.entries(dailyStatsMap)
+          .map(([dateStr, stats]) => {
+             const d = new Date(dateStr);
+             const isToday = d.getTime() === todayStart.getTime();
+             return {
+               label: isToday ? 'Hari ini' : `${d.getDate()} ${d.toLocaleDateString('id-ID', { month: 'short' })}`,
+               value: stats.total,
+               cash: stats.cash,
+               qris: stats.qris,
+               kasMasuk: stats.kasMasuk,
+               isToday
+             };
+          })
+          .filter(d => d.value > 0 || d.kasMasuk > 0);
+          
         setChartData(chartArr);
       }
 
@@ -393,18 +414,47 @@ export default function DashboardPage() {
 
   return (
     <MainLayout title="Dashboard">
-      <div className="bg-transparent min-h-screen text-zinc-100 font-sans overflow-x-hidden selection:bg-amber-500/30">
+      <div className="bg-transparent min-h-screen text-zinc-100 font-sans overflow-x-hidden selection:bg-amber-500/30 relative">
+        
+        {/* Top 1/3 Hero Background Image */}
+        <div className="absolute top-0 left-0 right-0 h-[400px] md:h-[500px] z-0 pointer-events-none overflow-hidden">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img 
+            src="https://images.unsplash.com/photo-1497935586351-b67a49e012bf?auto=format&fit=crop&q=80&w=2000" 
+            alt="Hero Background" 
+            className="w-full h-full object-cover opacity-[0.25] blur-[4px] scale-105"
+          />
+          {/* Fading gradient so it blends smoothly with the rest of the dark dashboard */}
+          <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/10 via-zinc-950/60 to-zinc-950"></div>
+          <div className="absolute inset-0 bg-gradient-to-r from-zinc-950/80 to-transparent"></div>
+        </div>
+
         {isFetching ? (
-          <div className="h-full flex items-center justify-center pt-32">
+          <div className="h-full flex items-center justify-center pt-32 relative z-10">
             <Loader2 className="animate-spin text-zinc-400" size={32} />
           </div>
         ) : (
-          <div className="p-8 max-w-7xl mx-auto space-y-12">
+          <div className="relative z-10 p-8 max-w-7xl mx-auto space-y-12 pt-10 md:pt-16">
             
-            {/* Header */}
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-white">Dashboard</h1>
-              <p className="text-[#666] text-sm mt-1">{dateStr}</p>
+            {/* Elegant Floating Hero Section */}
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-12">
+              <div className="max-w-xl">
+                <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-white mb-2 drop-shadow-lg">
+                  Dashboard
+                </h1>
+                <p className="text-zinc-300 text-sm md:text-base font-medium drop-shadow-md">
+                  {dateStr}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 w-full md:w-auto">
+                <button onClick={() => window.location.href='/history'} className="flex-1 md:flex-none px-6 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-bold transition-all border border-white/10 backdrop-blur-md">
+                  Lihat Riwayat
+                </button>
+                <button onClick={() => window.location.href='/pos'} className="flex-1 md:flex-none px-6 py-3 bg-amber-500 hover:bg-amber-400 text-zinc-950 rounded-xl text-sm font-bold transition-all shadow-[0_0_20px_rgba(245,158,11,0.3)] hover:-translate-y-0.5">
+                  + Transaksi Baru
+                </button>
+              </div>
             </div>
 
             {/* Top Metrics - 4 Columns */}
@@ -500,19 +550,57 @@ export default function DashboardPage() {
               
               {/* Chart */}
               <div className="lg:col-span-2 bg-zinc-900/40 border border-white/5 rounded-2xl p-6 shadow-sm">
-                <h3 className="text-[15px] font-bold text-white mb-8 border-b border-white/5 pb-4">Omzet 7 Hari Terakhir</h3>
-                <div className="h-[200px] flex items-end justify-between px-2 gap-4">
+                <div className="flex items-center justify-between mb-8 border-b border-white/5 pb-4">
+                  <h3 className="text-[15px] font-bold text-white">Omzet 30 Hari Terakhir</h3>
+                  <button onClick={() => window.location.href='/reports'} className="px-3 py-1.5 bg-primary/10 text-primary hover:bg-primary/20 rounded-lg text-[11px] font-bold transition-colors flex items-center gap-1.5 border border-primary/20 shadow-sm shadow-primary/5">
+                    <BarChart3 size={14} /> Laporan Detail
+                  </button>
+                </div>
+                <div className="overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900">
+                  <div className="h-[340px] pt-32 flex items-end justify-start px-4 gap-12 min-w-max w-full">
                   {chartData.map((d, i) => {
                     const heightPercent = Math.max((d.value / maxChartValue) * 100, 2);
                     const isZero = d.value === 0;
                     return (
-                      <div key={i} className="flex flex-col items-center flex-1 group h-full">
+                      <div 
+                        key={i} 
+                        className="flex flex-col items-center w-14 group h-full relative cursor-pointer"
+                        onClick={() => setActiveTooltipIndex(activeTooltipIndex === i ? null : i)}
+                      >
+                        
                         {/* Chart Area */}
                         <div className="flex-1 w-full flex items-end justify-center pt-6">
                           <div 
-                            className={`w-full max-w-[48px] rounded-t-lg relative transition-all duration-1000 ease-out ${d.isToday ? 'bg-[#38a169]' : 'bg-[#9ae6b4]'}`}
+                            className={`w-full max-w-[36px] rounded-t-lg relative transition-all duration-1000 ease-out hover:brightness-110 ${d.isToday ? 'bg-[#4ade80]' : 'bg-gradient-to-t from-[#B98A2E] to-[#E3B24C]'}`}
                             style={{ height: `${heightPercent}%`, minHeight: isZero ? '4px' : undefined }}
                           >
+                            {/* Custom Tooltip */}
+                            <div className={`transition-opacity absolute bottom-[calc(100%+12px)] left-1/2 -translate-x-1/2 mb-2 bg-zinc-800 text-white text-[10px] p-2.5 rounded-lg shadow-xl z-50 whitespace-nowrap border border-white/10 ${activeTooltipIndex === i ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+                              <div className="font-bold border-b border-white/10 pb-1.5 mb-1.5 text-zinc-300">{d.label}</div>
+                              <div className="space-y-1">
+                                <div className="flex justify-between gap-4">
+                                  <span className="text-zinc-400">Total Omzet</span>
+                                  <span className="font-bold">Rp {d.value.toLocaleString('id-ID')}</span>
+                                </div>
+                                <div className="flex justify-between gap-4">
+                                  <span className="text-zinc-400">Tunai (Cash)</span>
+                                  <span className="font-bold text-[#38a169]">Rp {d.cash.toLocaleString('id-ID')}</span>
+                                </div>
+                                <div className="flex justify-between gap-4">
+                                  <span className="text-zinc-400">QRIS</span>
+                                  <span className="font-bold text-[#e53e3e]">Rp {d.qris.toLocaleString('id-ID')}</span>
+                                </div>
+                                {d.kasMasuk > 0 && (
+                                  <div className="flex justify-between gap-4 border-t border-white/5 pt-1 mt-1">
+                                    <span className="text-zinc-400">Kas Masuk</span>
+                                    <span className="font-bold text-blue-400">+ Rp {d.kasMasuk.toLocaleString('id-ID')}</span>
+                                  </div>
+                                )}
+                              </div>
+                              {/* Triangle Pointer */}
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-[1px] border-[6px] border-transparent border-t-zinc-800"></div>
+                            </div>
+
                             {!isZero && (
                               <span className={`absolute -top-6 left-1/2 -translate-x-1/2 text-[11px] font-bold transition-colors ${d.isToday ? 'text-[#38a169]' : 'text-zinc-400 group-hover:text-white'}`}>
                                 {formatCompact(d.value)}
@@ -521,18 +609,19 @@ export default function DashboardPage() {
                           </div>
                         </div>
                         {/* Bottom Label */}
-                        <span className={`text-[11px] font-semibold mt-3 ${d.isToday ? 'text-[#38a169]' : 'text-zinc-400'}`}>
+                        <span className={`text-[10px] font-semibold mt-3 whitespace-nowrap ${d.isToday ? 'text-[#38a169]' : 'text-zinc-400'}`}>
                           {d.label}
                         </span>
                       </div>
                     )
                   })}
+                  </div>
                 </div>
               </div>
 
               {/* Payment Methods */}
               <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-6 shadow-sm">
-                <h3 className="text-[15px] font-bold text-white mb-6 border-b border-white/5 pb-4">Metode Pembayaran - 7 hari</h3>
+                <h3 className="text-[15px] font-bold text-white mb-6 border-b border-white/5 pb-4">Metode Pembayaran - 30 hari</h3>
                 
                 <div className="space-y-6">
                   <div>
@@ -578,7 +667,7 @@ export default function DashboardPage() {
               
               {/* Produk Terlaris */}
               <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-6 shadow-sm">
-                <h3 className="text-[15px] font-bold text-white mb-6 border-b border-white/5 pb-4">Produk Terlaris · 7 hari</h3>
+                <h3 className="text-[15px] font-bold text-white mb-6 border-b border-white/5 pb-4">Produk Terlaris · 30 hari</h3>
                 <div className="space-y-4">
                   {topProducts.length === 0 ? (
                     <p className="text-sm text-[#888]">Belum ada data penjualan.</p>
@@ -627,24 +716,30 @@ export default function DashboardPage() {
               {/* Transaksi Terbaru */}
               <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-6 shadow-sm">
                 <h3 className="text-[15px] font-bold text-white mb-6 border-b border-white/5 pb-4">Transaksi Terbaru</h3>
-                <div className="space-y-4">
+                <div className="space-y-1 overflow-y-auto max-h-[250px] scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900 pr-2">
                   {recentTransactions.length === 0 ? (
                     <p className="text-sm text-zinc-400">Belum ada transaksi.</p>
                   ) : (
                     recentTransactions.map((tx, i) => (
                       <div 
                         key={i} 
-                        className="flex items-center gap-3 py-1.5 cursor-pointer hover:bg-white/5 p-2 -mx-2 rounded-lg transition-colors group"
+                        className="flex items-center gap-3 py-2 cursor-pointer hover:bg-white/5 px-2 rounded-lg transition-colors group"
                         onClick={() => {
                           setSelectedTx(tx);
                           setIsTxModalOpen(true);
                         }}
                       >
-                        <span className="text-xs font-mono font-bold text-zinc-500 shrink-0 group-hover:text-primary transition-colors">
+                        <div className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold bg-zinc-800 text-zinc-400 shrink-0 group-hover:bg-amber-500 group-hover:text-black transition-colors">
+                          {recentTransactions.length - i}
+                        </div>
+                        <span className="text-[11px] font-mono font-bold text-zinc-500 shrink-0 group-hover:text-amber-500 transition-colors w-[140px] truncate">
                           {tx.id.startsWith('order_') || tx.id.startsWith('ADJ-') ? tx.id : `order_${tx.id}`}
                         </span>
-                        <span className="text-sm font-bold text-white truncate">
+                        <span className="text-[13px] font-bold text-white truncate flex-1">
                           {tx.customer_name || 'Umum'}
+                        </span>
+                        <span className="text-[12px] font-bold text-emerald-400 shrink-0">
+                          Rp {tx.total.toLocaleString('id-ID')}
                         </span>
                       </div>
                     ))

@@ -153,6 +153,8 @@ export default function POSPage() {
   }, []);
 
   useEffect(() => {
+    if (isLoading) return; // Tunggu AuthContext selesai memuat dan sinkronisasi nama
+
     async function initPageData() {
       setIsCheckingShift(true);
 
@@ -252,7 +254,7 @@ export default function POSPage() {
     
     window.addEventListener('refresh-products', handleRefreshProducts);
     return () => window.removeEventListener('refresh-products', handleRefreshProducts);
-  }, [userName]);
+  }, [userName, isLoading]);
 
   useEffect(() => {
     if (cartEndRef.current) {
@@ -1056,9 +1058,10 @@ export default function POSPage() {
 
         {/* Product Grid */}
         <div className="flex-1 p-4 md:p-6 overflow-y-auto">
-          {isLoadingData ? (
-            <div className="h-64 flex items-center justify-center text-muted-foreground">
-              Loading menu items...
+          {isPageLoading || isLoadingData ? (
+            <div className="h-64 flex flex-col items-center justify-center text-muted-foreground gap-4">
+              <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-sm font-medium animate-pulse">Menyiapkan menu & memeriksa kasir...</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 pb-20 md:pb-0">

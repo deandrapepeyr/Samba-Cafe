@@ -24,40 +24,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    const savedRole = localStorage.getItem('samba_role') as Role;
-    const savedName = localStorage.getItem('samba_name');
-    if (savedRole && savedName) {
-      setRole(savedRole);
-      setUserName(savedName);
+    const initAuth = async () => {
+      const savedRole = localStorage.getItem('samba_role') as Role;
+      const savedName = localStorage.getItem('samba_name');
+      
+      if (savedRole && savedName) {
+        let finalName = savedName;
 
-      // Auto-sync user name with database
-      if (savedRole === 'manager') {
-        supabase
-          .from('users')
-          .select('name')
-          .eq('role', 'manager')
-          .maybeSingle()
-          .then(({ data }) => {
+        // Auto-sync user name with database to avoid race conditions
+        try {
+          if (savedRole === 'manager') {
+            const { data } = await supabase
+              .from('users')
+              .select('name')
+              .eq('role', 'manager')
+              .maybeSingle();
             if (data && data.name) {
-              setUserName(data.name);
+              finalName = data.name;
               localStorage.setItem('samba_name', data.name);
             }
-          });
-      } else {
-        supabase
-          .from('users')
-          .select('name')
-          .eq('name', savedName)
-          .maybeSingle()
-          .then(({ data }) => {
+          } else {
+            const { data } = await supabase
+              .from('users')
+              .select('name')
+              .ilike('name', savedName)
+              .maybeSingle();
             if (data && data.name) {
-              setUserName(data.name);
+              finalName = data.name;
               localStorage.setItem('samba_name', data.name);
             }
-          });
+          }
+        } catch (e) {
+          console.error('Failed to sync auth name', e);
+        }
+
+        setRole(savedRole);
+        setUserName(finalName);
       }
-    }
-    setIsLoading(false);
+      setIsLoading(false);
+    };
+
+    initAuth();
   }, []);
 
   const login = (newRole: Role, newName: string) => {

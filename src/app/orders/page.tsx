@@ -503,12 +503,12 @@ export default function OrdersPage() {
                 <button
                   disabled={updatingId === order.id}
                   onClick={() => updateOrderStatus(order.id, 'ready')}
-                  className="h-7 px-2.5 text-[10px] font-bold text-black bg-amber-500 hover:bg-amber-400 disabled:opacity-50 rounded-lg transition-all flex items-center gap-1 shrink-0 whitespace-nowrap"
+                  className="h-7 px-2.5 text-[10px] font-extrabold text-black bg-gradient-to-r from-[#E3B24C] to-[#B98A2E] shadow-md hover:brightness-110 disabled:opacity-50 rounded-lg transition-all flex items-center gap-1 shrink-0 whitespace-nowrap border-none"
                 >
                   {updatingId === order.id ? <RefreshCw size={12} className="animate-spin" /> : (
                     <>
-                      <ChefHat size={12} />
-                      Selesai Masak
+                      <CheckCircle2 size={12} strokeWidth={2.5} />
+                      Done
                     </>
                   )}
                 </button>
@@ -935,9 +935,9 @@ export default function OrdersPage() {
                         {selectedOrder.status === 'preparing' && (
                           <button
                             onClick={() => updateOrderStatus(selectedOrder.id, 'ready')}
-                            className="w-full h-12 text-[13px] font-bold text-white bg-primary hover:bg-primary/90 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/20"
+                            className="w-full h-12 text-[13px] font-extrabold text-black bg-gradient-to-r from-[#E3B24C] to-[#B98A2E] hover:brightness-110 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#B98A2E]/20 border-none"
                           >
-                            <ChefHat size={16} /> Selesai Masak
+                            <CheckCircle2 size={16} strokeWidth={2.5} /> Done
                           </button>
                         )}
 

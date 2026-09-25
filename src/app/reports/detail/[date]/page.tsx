@@ -192,8 +192,15 @@ export default function DailyReportDetailPage({ params }: { params: Promise<{ da
       .order('created_at', { ascending: false });
 
     if (txData) {
-      // Filter transactions for this date
-      const dateTx = txData.filter(tx => new Date(tx.created_at).toISOString().split('T')[0] === dateParam);
+      // Filter transactions for this date, month, year, or range
+      const dateTx = txData.filter(tx => {
+        const txDate = new Date(tx.created_at).toISOString().split('T')[0];
+        if (dateParam.includes('~')) {
+          const [start, end] = dateParam.split('~');
+          return txDate >= start && txDate <= end;
+        }
+        return txDate.startsWith(dateParam);
+      });
       setTransactions(dateTx);
       
       let qris = 0, cash = 0, titipan = 0, regular = 0, total = 0;

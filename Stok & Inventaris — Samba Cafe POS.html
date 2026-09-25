@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Stok & Inventaris — Samba Cafe POS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#15120d; --sidebar:#100d09; --card:#201a13; --line:#332a1e;
+  --text:#f4ede0; --muted:#9c8f79; --accent:#d3a45c; --accent-soft:#3a2e1a;
+  --good:#7ea788; --good-bg:#1c2a1f; --bad:#c1604a; --bad-bg:#2b1c17;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',ui-sans-serif,system-ui,sans-serif;display:flex}
+.serif{font-family:'Fraunces',Georgia,serif}
+::-webkit-scrollbar{width:8px}::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+
+aside{width:216px;flex-shrink:0;background:var(--sidebar);border-right:1px solid var(--line);padding:20px 14px;min-height:100vh}
+.brand{font-family:'Fraunces';font-weight:700;color:var(--accent);font-size:17px;margin-bottom:26px;padding-left:6px}
+aside nav a{display:block;padding:9px 12px;border-radius:8px;color:var(--muted);font-size:13.5px;text-decoration:none;margin-bottom:2px}
+aside nav a.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+
+main{flex:1;padding:28px 34px 60px;max-width:1180px}
+.topline{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:22px}
+h1{font-family:'Fraunces';font-size:26px;font-weight:600;margin:0 0 4px}
+.sub{color:var(--muted);font-size:13px}
+.topactions{display:flex;gap:10px;align-items:center}
+.seg{display:flex;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:3px}
+.seg button{background:none;border:none;color:var(--muted);font-size:12.5px;padding:7px 13px;border-radius:7px;cursor:pointer}
+.seg button.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.btn{background:var(--accent);color:#1a1508;border:none;padding:9px 15px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+
+.stats{display:flex;gap:14px;margin-bottom:20px;flex-wrap:wrap}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 20px;flex:1;min-width:200px}
+.stat .lbl{color:var(--muted);font-size:12px;margin-bottom:8px}
+.stat .val{font-family:'Fraunces';font-size:24px;font-weight:600;color:var(--accent)}
+.stat.warn .val{color:var(--bad)}
+.stat .val small{font-family:'Inter';font-size:13px;color:var(--muted);font-weight:400}
+
+.toolbar{display:flex;gap:10px;margin-bottom:14px;align-items:center;flex-wrap:wrap}
+.search{flex:1;min-width:200px;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:9px 12px;color:var(--text);font-size:13px}
+.search:focus{outline:none;border-color:var(--accent)}
+select.filter{background:var(--card);border:1px solid var(--line);color:var(--text);border-radius:9px;padding:9px 12px;font-size:12.5px}
+
+table{width:100%;border-collapse:collapse;font-size:13px;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+thead th{text-align:left;color:var(--muted);font-weight:500;font-size:11.5px;padding:12px 16px;border-bottom:1px solid var(--line)}
+tbody td{padding:13px 16px;border-bottom:1px solid var(--line);vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:#ffffff05}
+.name{font-family:'Fraunces';font-weight:600;font-size:14px}
+.status{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:999px}
+.status.ok{background:var(--good-bg);color:var(--good)}
+.status.low{background:var(--bad-bg);color:var(--bad)}
+.status i{width:6px;height:6px;border-radius:50%;background:currentColor;display:block}
+.stockcell{display:flex;flex-direction:column;gap:5px;min-width:110px}
+.stockcell b{font-size:13.5px}
+.bar{height:4px;border-radius:3px;background:#0000004d;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:3px}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.muted{color:var(--muted);font-size:12px}
+.right{text-align:right}
+.pill-titipan{font-size:11px;color:var(--accent);background:var(--accent-soft);padding:2px 8px;border-radius:999px;margin-left:8px}
+.empty{padding:40px;text-align:center;color:var(--muted)}
+
+.modal-bg{display:none;position:fixed;inset:0;background:#000000aa;align-items:center;justify-content:center;z-index:20}
+.modal-bg.on{display:flex}
+.modal{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:20px;width:340px}
+.modal h3{font-family:'Fraunces';margin:0 0 14px;font-size:16px}
+.modal input{width:100%;background:#181310;border:1px solid var(--line);color:var(--text);padding:9px 10px;border-radius:8px;font-size:13px;margin-bottom:9px}
+.modal .row2{display:flex;gap:9px;justify-content:flex-end;margin-top:6px}
+.modal .row2 button{padding:8px 14px;border-radius:8px;font-size:13px;cursor:pointer}
+.modal .cancel{background:none;border:1px solid var(--line);color:var(--muted)}
+</style>
+</head>
+<body>
+
+<aside>
+  <div class="brand">☕ Samba Cafe</div>
+  <nav>
+    <a href="#">Kasir</a>
+    <a href="#">Pesanan</a>
+    <a href="#">Dashboard</a>
+    <a href="#">History</a>
+    <a href="#">Reports</a>
+    <a href="#" class="on">Stok</a>
+    <a href="#">Resep Menu</a>
+    <a href="#">Settings</a>
+  </nav>
+</aside>
+
+<main>
+  <div class="topline">
+    <div>
+      <h1>Stok &amp; Inventaris</h1>
+      <div class="sub">Kelola bahan baku dan barang titipan</div>
+    </div>
+    <div class="topactions">
+      <div class="seg">
+        <button class="on" id="tabBahan" onclick="setTab('bahan')">Bahan Baku Cafe</button>
+        <button id="tabTitipan" onclick="setTab('titipan')">Barang Titipan</button>
+      </div>
+      <button class="btn" onclick="openModal()">+ Tambah Bahan</button>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="lbl">Total Nilai Stok</div><div class="val" id="totalVal">Rp 0</div></div>
+    <div class="stat warn"><div class="lbl">Peringatan Stok Tipis</div><div class="val" id="lowVal">0 <small>barang</small></div></div>
+    <div class="stat"><div class="lbl">Jumlah Item</div><div class="val" id="countVal">0 <small>item</small></div></div>
+  </div>
+
+  <div class="toolbar" id="toolbar">
+    <input class="search" id="search" placeholder="Cari bahan baku…">
+    <select class="filter" id="penitipFilter" onchange="render()" style="display:none">
+      <option value="Semua">Penitip: Semua</option>
+    </select>
+    <select class="filter" id="statusFilter" onchange="render()">
+      <option value="Semua">Status: Semua</option>
+      <option value="Aman">Status: Aman</option>
+      <option value="Menipis">Status: Menipis</option>
+    </select>
+  </div>
+
+  <table id="tblBahan">
+    <thead><tr><th>Nama Item</th><th>Status</th><th>Stok Tersedia</th><th>Batas Minimum</th><th class="right">Harga/Satuan</th><th class="right">Total Nilai</th><th>Pembaruan</th></tr></thead>
+    <tbody id="bodyBahan"></tbody>
+  </table>
+
+  <table id="tblTitipan" style="display:none">
+    <thead><tr><th>Nama Produk</th><th>Penitip</th><th>Status</th><th>Stok Titip</th><th>Batas Minimum</th><th class="right">Harga Titip</th><th class="right">Harga Jual</th><th class="right">Untung/pcs</th></tr></thead>
+    <tbody id="bodyTitipan"></tbody>
+  </table>
+</main>
+
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h3 id="modalTitle">Tambah bahan baku</h3>
+    <div id="formBahan">
+      <input id="nNama" placeholder="Nama bahan">
+      <input id="nStok" type="number" placeholder="Stok tersedia">
+      <input id="nSatuan" placeholder="Satuan (pcs/gr/ml)">
+      <input id="nMin" type="number" placeholder="Batas minimum">
+      <input id="nHarga" type="number" placeholder="Harga beli / satuan (Rp)">
+    </div>
+    <div id="formTitipan2" style="display:none">
+      <input id="tNama" placeholder="Nama produk">
+      <input id="tPenitip" placeholder="Nama penitip">
+      <input id="tStok" type="number" placeholder="Stok titip (pcs)">
+      <input id="tMin" type="number" placeholder="Batas minimum">
+      <input id="tHargaTitip" type="number" placeholder="Harga dari penitip / pcs (Rp)">
+      <input id="tHargaJual" type="number" placeholder="Harga jual cafe / pcs (Rp)">
+    </div>
+    <div class="row2"><button class="cancel" onclick="closeModal()">Batal</button><button class="btn" id="modalSave" onclick="addBahan()">Simpan</button></div>
+  </div>
+</div>
+
+<script>
+let bahan = [
+  {id:1,nama:'Alas kertas 15x15',stok:142,satuan:'pcs',min:20,harga:0,updated:'22 Sep 2026, 23:51'},
+  {id:2,nama:'Alas kertas 18x18',stok:147,satuan:'pcs',min:20,harga:0,updated:'22 Sep 2026, 23:58'},
+  {id:3,nama:'Atom',stok:2,satuan:'pcs',min:0,harga:1000,updated:'22 Sep 2026, 23:58'},
+  {id:4,nama:'Beef patties class 240gram',stok:15,satuan:'pcs',min:3,harga:3167,updated:'22 Sep 2026, 14:19'},
+  {id:5,nama:'Cendol',stok:5,satuan:'pcs',min:0,harga:5000,updated:'22 Sep 2026, 14:24'},
+  {id:6,nama:'Chicken Katsu',stok:13,satuan:'pcs',min:5,harga:7000,updated:'21 Sep 2026, 19:49'},
+  {id:7,nama:'Ciki balls',stok:53,satuan:'pcs',min:0,harga:3500,updated:'22 Sep 2026, 23:42'},
+  {id:8,nama:'Ciki chitato',stok:46,satuan:'pcs',min:0,harga:3500,updated:'22 Sep 2026, 16:01'},
+  {id:9,nama:'Es Batu',stok:5,satuan:'kg',min:10,harga:2000,updated:'23 Sep 2026, 08:12'},
+  {id:10,nama:'Saus Sambal',stok:1,satuan:'botol',min:3,harga:15000,updated:'22 Sep 2026, 20:03'},
+];
+let titipan = [
+  {id:1,nama:'Roti Bakar Coklat',penitip:'Bu Sri',stok:15,min:5,hargaTitip:10000,hargaJual:15000},
+  {id:2,nama:'Keripik Tempe',penitip:'Pak Joko',stok:2,min:5,hargaTitip:7000,hargaJual:10000},
+];
+let nextId = 11, tab='bahan', q='';
+
+const rupiah = n => 'Rp '+Math.round(n).toLocaleString('id-ID');
+const isLow = b => b.min>0 && b.stok<=b.min;
+
+function setTab(t){
+  tab=t;
+  document.getElementById('tabBahan').classList.toggle('on',t==='bahan');
+  document.getElementById('tabTitipan').classList.toggle('on',t==='titipan');
+  document.getElementById('tblBahan').style.display = t==='bahan'?'table':'none';
+  document.getElementById('tblTitipan').style.display = t==='titipan'?'table':'none';
+  document.getElementById('search').placeholder = t==='bahan' ? 'Cari bahan baku…' : 'Cari barang titipan…';
+  document.getElementById('penitipFilter').style.display = t==='titipan' ? 'inline-block' : 'none';
+  document.querySelector('.btn[onclick="openModal()"]').textContent = t==='bahan' ? '+ Tambah Bahan' : '+ Tambah Titipan';
+  render();
+}
+
+function render(){
+  const statusFilter = document.getElementById('statusFilter').value;
+
+  if(tab==='bahan'){
+    const totalVal = bahan.reduce((s,b)=>s+b.stok*b.harga,0);
+    const lowCount = bahan.filter(isLow).length;
+    document.getElementById('totalVal').textContent = rupiah(totalVal);
+    document.getElementById('lowVal').innerHTML = lowCount+' <small>barang</small>';
+    document.getElementById('countVal').innerHTML = bahan.length+' <small>item</small>';
+  } else {
+    const totalVal = titipan.reduce((s,t)=>s+t.stok*t.hargaTitip,0);
+    const lowCount = titipan.filter(isLow).length;
+    document.getElementById('totalVal').textContent = rupiah(totalVal);
+    document.getElementById('lowVal').innerHTML = lowCount+' <small>barang</small>';
+    document.getElementById('countVal').innerHTML = titipan.length+' <small>item</small>';
+  }
+
+  const filtered = bahan.filter(b=>{
+    const st = isLow(b) ? 'Menipis' : 'Aman';
+    return b.nama.toLowerCase().includes(q.toLowerCase()) && (statusFilter==='Semua'||statusFilter===st);
+  });
+
+  document.getElementById('bodyBahan').innerHTML = filtered.map(b=>{
+    const low = isLow(b);
+    const ratio = b.min>0 ? Math.min(b.stok/(b.min*2)*100,100) : 100;
+    return `<tr>
+      <td class="name">${b.nama}</td>
+      <td><span class="status ${low?'low':'ok'}"><i></i>${low?'Menipis':'Aman'}</span></td>
+      <td><div class="stockcell"><b>${b.stok} ${b.satuan}</b><div class="bar"><i style="width:${ratio}%;background:${low?'var(--bad)':'var(--good)'}"></i></div></div></td>
+      <td class="muted">${b.min} ${b.satuan}</td>
+      <td class="num">${rupiah(b.harga)}</td>
+      <td class="num" style="color:var(--accent);font-weight:600">${rupiah(b.stok*b.harga)}</td>
+      <td class="muted">${b.updated}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="7" class="empty">Tidak ada bahan yang cocok</td></tr>`;
+
+  const filteredT_pre = titipan.filter(t=>{
+    const st = isLow(t) ? 'Menipis' : 'Aman';
+    return t.nama.toLowerCase().includes(q.toLowerCase()) && (statusFilter==='Semua'||statusFilter===st);
+  });
+
+  const penitipFilter = document.getElementById('penitipFilter');
+  const currentPenitip = penitipFilter.value;
+  const penitipList = [...new Set(titipan.map(t=>t.penitip))];
+  penitipFilter.innerHTML = '<option value="Semua">Penitip: Semua</option>' +
+    penitipList.map(p=>`<option value="${p}">${p}</option>`).join('');
+  penitipFilter.value = penitipList.includes(currentPenitip) ? currentPenitip : 'Semua';
+
+  const filteredT = filteredT_pre.filter(t=> penitipFilter.value==='Semua' || t.penitip===penitipFilter.value);
+
+  document.getElementById('bodyTitipan').innerHTML = filteredT.map(t=>{
+    const low = isLow(t);
+    const ratio = t.min>0 ? Math.min(t.stok/(t.min*2)*100,100) : 100;
+    const untung = t.hargaJual - t.hargaTitip;
+    return `<tr>
+      <td class="name">${t.nama}</td>
+      <td class="muted">${t.penitip}</td>
+      <td><span class="status ${low?'low':'ok'}"><i></i>${low?'Menipis':'Aman'}</span></td>
+      <td><div class="stockcell"><b>${t.stok} pcs</b><div class="bar"><i style="width:${ratio}%;background:${low?'var(--bad)':'var(--good)'}"></i></div></div></td>
+      <td class="muted">${t.min} pcs</td>
+      <td class="num muted">${rupiah(t.hargaTitip)}</td>
+      <td class="num">${rupiah(t.hargaJual)}</td>
+      <td class="num" style="color:var(--accent);font-weight:600">${rupiah(untung)}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="8" class="empty">Belum ada barang titipan</td></tr>`;
+}
+
+document.getElementById('search').oninput = e=>{ q=e.target.value; render(); };
+
+function openModal(){
+  document.getElementById('modalTitle').textContent = tab==='bahan' ? 'Tambah bahan baku' : 'Tambah barang titipan';
+  document.getElementById('formBahan').style.display = tab==='bahan' ? 'block' : 'none';
+  document.getElementById('formTitipan2').style.display = tab==='titipan' ? 'block' : 'none';
+  document.getElementById('modalSave').onclick = tab==='bahan' ? addBahan : addTitipan;
+  document.getElementById('modalBg').classList.add('on');
+}
+function closeModal(){
+  document.getElementById('modalBg').classList.remove('on');
+  ['nNama','nStok','nSatuan','nMin','nHarga','tNama','tPenitip','tStok','tMin','tHargaTitip','tHargaJual'].forEach(id=>document.getElementById(id).value='');
+}
+function addBahan(){
+  const nama = document.getElementById('nNama').value.trim();
+  const stok = +document.getElementById('nStok').value;
+  const satuan = document.getElementById('nSatuan').value.trim() || 'pcs';
+  const min = +document.getElementById('nMin').value || 0;
+  const harga = +document.getElementById('nHarga').value || 0;
+  if(!nama) return;
+  bahan.push({id:nextId++, nama, stok, satuan, min, harga, updated:'Baru saja'});
+  closeModal(); render();
+}
+function addTitipan(){
+  const nama = document.getElementById('tNama').value.trim();
+  const penitip = document.getElementById('tPenitip').value.trim();
+  const stok = +document.getElementById('tStok').value;
+  const min = +document.getElementById('tMin').value || 0;
+  const hargaTitip = +document.getElementById('tHargaTitip').value || 0;
+  const hargaJual = +document.getElementById('tHargaJual').value || 0;
+  if(!nama) return;
+  titipan.push({id:nextId++, nama, penitip, stok, min, hargaTitip, hargaJual});
+  closeModal(); render();
+}
+
+render();
+</script>
+</body>
+</html>

@@ -217,7 +217,17 @@ export function MainLayout({ children, onLogoutClick, onLoginClick, title, heade
   };
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden text-foreground relative">
+    <div className="flex h-screen bg-zinc-950 overflow-hidden text-foreground relative">
+      {/* Global Aesthetic Background */}
+      <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+        {/* Glow Effects */}
+        <div className="absolute -top-[20%] -left-[10%] w-[50%] h-[50%] bg-amber-500/5 rounded-full blur-[120px]"></div>
+        <div className="absolute bottom-[10%] -right-[10%] w-[40%] h-[40%] bg-[#38a169]/5 rounded-full blur-[120px]"></div>
+        
+        {/* Subtle Grid Texture */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:32px_32px] [mask-image:radial-gradient(ellipse_80%_80%_at_50%_20%,#000_40%,transparent_100%)]"></div>
+      </div>
+
       {/* Global Connection Status */}
       {!isOnline && mounted && (
         <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[100] bg-amber-500 text-amber-950 px-4 py-1.5 rounded-full text-xs font-bold shadow-lg shadow-amber-500/20 flex items-center gap-2 animate-bounce">
@@ -226,7 +236,7 @@ export function MainLayout({ children, onLogoutClick, onLoginClick, title, heade
       )}
 
       {/* Desktop Sidebar */}
-      <div className="hidden md:block">
+      <div className="hidden md:block relative z-10 border-r border-white/5 bg-zinc-950/60 backdrop-blur-xl">
         <Sidebar onLogoutClick={onLogoutClick} onLoginClick={onLoginClick} />
       </div>
 

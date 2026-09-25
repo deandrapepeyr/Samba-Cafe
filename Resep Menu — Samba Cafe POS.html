@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Resep Menu — Samba Cafe POS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#15120d; --sidebar:#100d09; --card:#201a13; --card-hi:#26201700;
+  --line:#332a1e; --text:#f4ede0; --muted:#9c8f79; --accent:#d3a45c; --accent-soft:#3a2e1a;
+  --good:#7ea788; --warn:#c9955a; --bad:#c1604a;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',ui-sans-serif,system-ui,sans-serif;min-height:100%;display:flex}
+.serif{font-family:'Fraunces',Georgia,serif}
+::-webkit-scrollbar{width:8px}::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+
+/* sidebar (context only) */
+aside{width:216px;flex-shrink:0;background:var(--sidebar);border-right:1px solid var(--line);padding:20px 14px;display:flex;flex-direction:column;min-height:100vh}
+.brand{font-family:'Fraunces';font-weight:700;color:var(--accent);font-size:17px;margin-bottom:26px;padding-left:6px}
+aside nav{display:flex;flex-direction:column;gap:2px}
+aside nav a{display:block;padding:9px 12px;border-radius:8px;color:var(--muted);font-size:13.5px;text-decoration:none}
+aside nav a.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+
+main{flex:1;padding:28px 34px 60px;max-width:920px}
+header{margin-bottom:22px}
+h1{font-family:'Fraunces';font-size:26px;font-weight:600;margin:0 0 4px;letter-spacing:.2px}
+.sub{color:var(--muted);font-size:13px}
+
+.toolbar{display:flex;gap:10px;margin:18px 0 16px;align-items:center;flex-wrap:wrap}
+.search{flex:1;min-width:180px;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:9px 12px;color:var(--text);font-size:13px}
+.search:focus{outline:none;border-color:var(--accent)}
+.btn{background:var(--accent);color:#1a1508;border:none;padding:9px 15px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer}
+.chips{display:flex;gap:7px;overflow-x:auto;margin-bottom:20px}
+.chip{border:1px solid var(--line);background:transparent;color:var(--muted);padding:6px 13px;border-radius:999px;font-size:12.5px;cursor:pointer;white-space:nowrap}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#1a1508;font-weight:600}
+
+.group{margin-bottom:22px}
+.group-label{font-family:'Fraunces';font-size:14.5px;color:var(--text);margin:0 0 9px;display:flex;align-items:baseline;gap:7px}
+.group-label span{color:var(--muted);font-size:12px;font-family:'Inter'}
+
+.row{background:var(--card);border:1px solid var(--line);border-radius:11px;margin-bottom:8px;overflow:hidden;opacity:0;animation:up .35s ease forwards}
+.row .head{display:flex;align-items:center;gap:16px;padding:13px 16px;cursor:pointer}
+.row .name{font-family:'Fraunces';font-weight:600;font-size:15px;flex:1;min-width:0}
+.row .name small{display:block;font-family:'Inter';font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px}
+.hpp{display:flex;align-items:center;gap:7px;width:118px}
+.hpp .bar{flex:1;height:5px;border-radius:3px;background:#0000004d;overflow:hidden}
+.hpp .bar i{display:block;height:100%;border-radius:3px}
+.hpp .pct{font-size:11px;color:var(--muted);width:32px;text-align:right}
+.price{font-weight:600;font-size:14px;width:76px;text-align:right}
+.chev{color:var(--muted);font-size:11px;transition:transform .15s;width:14px;text-align:center}
+.row.open .chev{transform:rotate(180deg)}
+.body{display:none;padding:2px 16px 16px}
+.row.open .body{display:block}
+.ing{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--line);font-size:13px}
+.ing:first-child{border-top:1px solid var(--line)}
+.ing .n{flex:1;color:var(--text)}
+.ing .c{color:var(--muted);font-size:12px;width:80px;text-align:right}
+.ing button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:0 2px}
+.summary{display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);padding:9px 0 4px;border-top:1px solid var(--line);margin-top:2px}
+.summary b{color:var(--text)}
+.addrow{display:flex;gap:7px;margin-top:10px}
+.addrow select,.addrow input{background:#181310;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:7px 9px;font-size:12.5px}
+.addrow select{flex:1}
+.addrow input{width:70px}
+.addrow button{background:transparent;border:1px solid var(--accent);color:var(--accent);border-radius:7px;padding:7px 11px;font-size:12.5px;cursor:pointer}
+.rowfoot{display:flex;justify-content:flex-end;margin-top:8px}
+.rowfoot button{background:none;border:none;color:var(--bad);font-size:12px;cursor:pointer}
+
+.empty{color:var(--muted);font-size:13px;padding:30px 0;text-align:center}
+@keyframes up{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+
+.modal-bg{display:none;position:fixed;inset:0;background:#000000aa;align-items:center;justify-content:center;z-index:20}
+.modal-bg.on{display:flex}
+.modal{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:20px;width:320px}
+.modal h3{font-family:'Fraunces';margin:0 0 14px;font-size:16px}
+.modal input,.modal select{width:100%;background:#181310;border:1px solid var(--line);color:var(--text);padding:9px 10px;border-radius:8px;font-size:13px;margin-bottom:9px}
+.modal .row2{display:flex;gap:9px;justify-content:flex-end;margin-top:6px}
+.modal .row2 button{padding:8px 14px;border-radius:8px;font-size:13px;cursor:pointer}
+.modal .cancel{background:none;border:1px solid var(--line);color:var(--muted)}
+</style>
+</head>
+<body>
+
+<aside>
+  <div class="brand">☕ Samba Cafe</div>
+  <nav>
+    <a href="#">Kasir</a>
+    <a href="#">Pesanan</a>
+    <a href="#">Dashboard</a>
+    <a href="#">History</a>
+    <a href="#">Reports</a>
+    <a href="#">Stok</a>
+    <a href="#" class="on">Resep Menu</a>
+    <a href="#">Settings</a>
+  </nav>
+</aside>
+
+<main>
+  <header>
+    <h1>Resep Menu</h1>
+    <div class="sub" id="metaLine">— menu · rata-rata HPP —%</div>
+  </header>
+
+  <div class="toolbar">
+    <input class="search" id="search" placeholder="Cari menu…">
+    <button class="btn" onclick="openModal()">+ Menu baru</button>
+  </div>
+  <div class="chips" id="chips"></div>
+  <div id="groups"></div>
+</main>
+
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h3>Menu baru</h3>
+    <input id="mNama" placeholder="Nama menu">
+    <input id="mHarga" type="number" placeholder="Harga jual (Rp)">
+    <select id="mKategori"><option>Kopi</option><option>Makanan</option><option>Snack</option></select>
+    <div class="row2"><button class="cancel" onclick="closeModal()">Batal</button><button class="btn" onclick="addMenu()">Simpan</button></div>
+  </div>
+</div>
+
+<script>
+const bahan = [
+  {id:1,nama:'Kopi Arabica',satuan:'gr',harga:250},
+  {id:2,nama:'Susu UHT',satuan:'ml',harga:15},
+  {id:3,nama:'Gula Aren',satuan:'ml',harga:60},
+  {id:4,nama:'Cup 250ml',satuan:'pcs',harga:500},
+  {id:5,nama:'Kentang',satuan:'gr',harga:20},
+  {id:6,nama:'Minyak Goreng',satuan:'ml',harga:18},
+  {id:7,nama:'Garam',satuan:'gr',harga:8},
+  {id:8,nama:'Pisang',satuan:'pcs',harga:1500},
+  {id:9,nama:'Tepung',satuan:'gr',harga:12},
+];
+let menu = [
+  {id:1,nama:'Kopi Susu Gula Aren',harga:18000,kategori:'Kopi',resep:[{b:1,q:18},{b:2,q:120},{b:3,q:20},{b:4,q:1}]},
+  {id:2,nama:'Indo Kopi Mix',harga:6000,kategori:'Kopi',resep:[{b:1,q:8},{b:2,q:60},{b:4,q:1}]},
+  {id:3,nama:'French Fries',harga:15000,kategori:'Makanan',resep:[{b:5,q:220},{b:6,q:40},{b:7,q:3}]},
+  {id:4,nama:'Kripik Pisang',harga:25000,kategori:'Snack',resep:[{b:8,q:8},{b:6,q:60}]},
+  {id:5,nama:'Piscok',harga:15000,kategori:'Snack',resep:[{b:8,q:2},{b:9,q:80},{b:6,q:30}]},
+];
+let nextId=6, openId=null, activeCat='Semua', q='';
+
+const findB = id => bahan.find(b=>b.id===id);
+const hpp = m => m.resep.reduce((s,r)=>s+findB(r.b).harga*r.q,0);
+const pct = m => Math.round(hpp(m)/m.harga*100);
+const pctColor = p => p<=30?'var(--good)':p<=45?'var(--warn)':'var(--bad)';
+const rupiah = n => 'Rp '+Math.round(n).toLocaleString('id-ID');
+
+function render(){
+  const cats = ['Semua',...new Set(menu.map(m=>m.kategori))];
+  document.getElementById('chips').innerHTML = cats.map(c=>
+    `<button class="chip ${c===activeCat?'on':''}" onclick="setCat('${c}')">${c}</button>`).join('');
+
+  const filtered = menu.filter(m=>
+    (activeCat==='Semua'||m.kategori===activeCat) &&
+    m.nama.toLowerCase().includes(q.toLowerCase()));
+
+  const avgPct = menu.length ? Math.round(menu.reduce((s,m)=>s+pct(m),0)/menu.length) : 0;
+  document.getElementById('metaLine').textContent = `${menu.length} menu · rata-rata HPP ${avgPct}%`;
+
+  const groupsEl = document.getElementById('groups');
+  if(!filtered.length){ groupsEl.innerHTML = '<div class="empty">Tidak ada menu yang cocok</div>'; return; }
+
+  const byCat = {};
+  filtered.forEach(m=>{ (byCat[m.kategori] ||= []).push(m); });
+
+  groupsEl.innerHTML = Object.entries(byCat).map(([cat,items])=>`
+    <div class="group">
+      <p class="group-label">${cat} <span>${items.length}</span></p>
+      ${items.map((m,i)=>rowHtml(m,i)).join('')}
+    </div>`).join('');
+}
+
+function rowHtml(m,i){
+  const p = pct(m), open = m.id===openId, h = hpp(m);
+  const ingredients = m.resep.map(r=>{
+    const b = findB(r.b);
+    return `<div class="ing"><span class="n">${b.nama} — ${r.q}${b.satuan}</span><span class="c">${rupiah(b.harga*r.q)}</span><button onclick="delIng(${m.id},${r.b},event)">✕</button></div>`;
+  }).join('') || '<p class="empty" style="padding:14px 0">Belum ada bahan</p>';
+
+  return `<div class="row ${open?'open':''}" style="animation-delay:${i*35}ms">
+    <div class="head" onclick="toggle(${m.id})">
+      <span class="name">${m.nama}<small>${m.resep.length} bahan</small></span>
+      <span class="hpp"><span class="bar"><i style="width:${Math.min(p,100)}%;background:${pctColor(p)}"></i></span><span class="pct">${p}%</span></span>
+      <span class="price">${rupiah(m.harga)}</span>
+      <span class="chev">▾</span>
+    </div>
+    <div class="body">
+      ${ingredients}
+      <div class="summary">Total HPP: <b>${rupiah(h)}</b> &nbsp;·&nbsp; Margin: <b>${rupiah(m.harga-h)}</b></div>
+      <div class="addrow">
+        <select id="sel-${m.id}">${bahan.map(b=>`<option value="${b.id}">${b.nama}</option>`).join('')}</select>
+        <input id="qty-${m.id}" type="number" placeholder="Jml" step="0.01">
+        <button onclick="addIng(${m.id})">+ Bahan</button>
+      </div>
+      <div class="rowfoot"><button onclick="delMenu(${m.id},event)">Hapus menu</button></div>
+    </div>
+  </div>`;
+}
+
+function toggle(id){ openId = openId===id?null:id; render(); }
+function setCat(c){ activeCat=c; render(); }
+document.getElementById('search').oninput = e=>{ q=e.target.value; render(); };
+
+function addIng(mId){
+  const sel = document.getElementById('sel-'+mId), qty = document.getElementById('qty-'+mId);
+  const bId = +sel.value, v = +qty.value;
+  if(!v) return;
+  const m = menu.find(x=>x.id===mId);
+  const ex = m.resep.find(r=>r.b===bId);
+  if(ex) ex.q = v; else m.resep.push({b:bId,q:v});
+  render();
+}
+function delIng(mId,bId,e){ e.stopPropagation(); const m=menu.find(x=>x.id===mId); m.resep=m.resep.filter(r=>r.b!==bId); render(); }
+function delMenu(id,e){ e.stopPropagation(); menu=menu.filter(m=>m.id!==id); render(); }
+
+function openModal(){ document.getElementById('modalBg').classList.add('on'); }
+function closeModal(){ document.getElementById('modalBg').classList.remove('on'); document.getElementById('mNama').value=''; document.getElementById('mHarga').value=''; }
+function addMenu(){
+  const nama = document.getElementById('mNama').value.trim();
+  const harga = +document.getElementById('mHarga').value;
+  const kategori = document.getElementById('mKategori').value;
+  if(!nama||!harga) return;
+  const id = nextId++;
+  menu.push({id,nama,harga,kategori,resep:[]});
+  closeModal(); openId=id; render();
+}
+
+render();
+</script>
+</body>
+</html>
