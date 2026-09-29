@@ -210,13 +210,13 @@ export default function DashboardPage() {
         let sQTotal = 0, sCTotal = 0;
         let tQTotal = 0, tCTotal = 0;
         const productsMap: Record<string, { qty: number, rev: number }> = {};
-        const dailyStatsMap: Record<string, { total: number, cash: number, qris: number, kasMasuk: number }> = {};
+        const dailyStatsMap: Record<string, { total: number, cash: number, qris: number, kasMasuk: number, samba: number }> = {};
 
         for (let i = 29; i >= 0; i--) {
           const d = new Date(todayStart);
           d.setDate(d.getDate() - i);
           const key = d.toLocaleDateString('en-CA');
-          dailyStatsMap[key] = { total: 0, cash: 0, qris: 0, kasMasuk: 0 };
+          dailyStatsMap[key] = { total: 0, cash: 0, qris: 0, kasMasuk: 0, samba: 0 };
         }
 
         const recentTxs: any[] = [];
@@ -276,6 +276,7 @@ export default function DashboardPage() {
 
              if (!isKasMasuk && dailyStatsMap[txDateKey]) {
                 dailyStatsMap[txDateKey].total += tx.total;
+                dailyStatsMap[txDateKey].samba += txSamba;
                 if (tx.method === 'QRIS') dailyStatsMap[txDateKey].qris += tx.total;
                 if (tx.method && tx.method.includes('Cash')) dailyStatsMap[txDateKey].cash += tx.total;
              }
@@ -318,6 +319,7 @@ export default function DashboardPage() {
                dailyStatsMap[sDateKey].total = Number(s.total_omzet || 0);
                dailyStatsMap[sDateKey].cash = Number(s.total_cash || 0);
                dailyStatsMap[sDateKey].qris = Number(s.total_qris || 0);
+               dailyStatsMap[sDateKey].samba = Number(s.samba_qris || 0) + Number(s.samba_cash || 0);
              }
              
              // Pastikan kita tidak menambah qCount, cCount dll ganda jika kita sudah memprosesnya dari transactions
@@ -363,6 +365,7 @@ export default function DashboardPage() {
                cash: stats.cash,
                qris: stats.qris,
                kasMasuk: stats.kasMasuk,
+               samba: stats.samba,
                isToday
              };
           })
@@ -581,6 +584,10 @@ export default function DashboardPage() {
                                 <div className="flex justify-between gap-4">
                                   <span className="text-zinc-400">Total Omzet</span>
                                   <span className="font-bold">Rp {d.value.toLocaleString('id-ID')}</span>
+                                </div>
+                                <div className="flex justify-between gap-4">
+                                  <span className="text-zinc-400">Bersih Cafe</span>
+                                  <span className="font-bold text-amber-500">Rp {d.samba.toLocaleString('id-ID')}</span>
                                 </div>
                                 <div className="flex justify-between gap-4">
                                   <span className="text-zinc-400">Tunai (Cash)</span>
