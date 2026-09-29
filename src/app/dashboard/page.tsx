@@ -458,10 +458,10 @@ export default function DashboardPage() {
             </div>
 
             {/* Top Metrics - 4 Columns */}
-            <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+            <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
               
               {/* Pendapatan Cafe */}
-              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-5 hover:bg-zinc-900/60 transition-colors shadow-sm flex flex-col justify-between">
+              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-4 hover:bg-zinc-900/60 transition-colors shadow-sm flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <h2 className="text-[11px] font-bold text-zinc-400 tracking-widest uppercase">Pendapatan Cafe</h2>
@@ -469,41 +469,41 @@ export default function DashboardPage() {
                   </div>
                   <div className="text-3xl font-extrabold text-[#38a169] tracking-tight mt-1 mb-1.5">Rp {todaySamba.toLocaleString('id-ID')}</div>
                 </div>
-                <div className="mt-3 pt-3 border-t border-white/5 flex flex-col gap-1">
-                  <div className="flex justify-between items-center text-[10px]">
-                    <span className="text-zinc-500 font-bold uppercase">Omzet Kotor</span>
-                    <span className="text-white font-semibold">Rp {todayOmzet.toLocaleString('id-ID')}</span>
+                <div className="mt-3 pt-3 border-t border-white/5 flex flex-col gap-1.5">
+                  <div className="flex justify-between items-center text-[11px]">
+                    <span className="text-zinc-400 font-bold uppercase tracking-wider">Omzet Kotor</span>
+                    <span className="text-white font-bold">Rp {todayOmzet.toLocaleString('id-ID')}</span>
                   </div>
-                  <div className="flex justify-between items-center text-[10px]">
-                    <span className="text-zinc-500 font-bold uppercase">Uang Titipan</span>
-                    <span className="text-amber-500 font-semibold">Rp {(todayOmzet - todaySamba).toLocaleString('id-ID')}</span>
+                  <div className="flex justify-between items-center text-[11px]">
+                    <span className="text-zinc-400 font-bold uppercase tracking-wider">Uang Titipan</span>
+                    <span className="text-amber-500 font-bold">Rp {(todayOmzet - todaySamba).toLocaleString('id-ID')}</span>
                   </div>
-                  <div className="flex justify-between items-center text-[10px]">
-                    <span className="text-zinc-500 font-bold uppercase">Kas Masuk</span>
-                    <span className="text-blue-500 font-semibold">+ Rp {todayKasMasuk.toLocaleString('id-ID')}</span>
+                  <div className="flex justify-between items-center text-[11px]">
+                    <span className="text-zinc-400 font-bold uppercase tracking-wider">Kas Masuk</span>
+                    <span className="text-blue-400 font-bold">+ Rp {todayKasMasuk.toLocaleString('id-ID')}</span>
                   </div>
                 </div>
               </div>
 
               {/* Kas & Bank */}
-              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-5 hover:bg-zinc-900/60 transition-colors shadow-sm flex flex-col justify-between">
+              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-4 hover:bg-zinc-900/60 transition-colors shadow-sm flex flex-col justify-between">
                 <div>
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center justify-between mb-1">
                     <h2 className="text-[11px] font-bold text-zinc-400 tracking-widest uppercase">Penerimaan Tunai</h2>
                     <button onClick={() => setIsKasModalOpen(true)} className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-full hover:bg-primary/30 transition-colors font-bold">+ Kas Masuk</button>
                   </div>
-                  <div className="text-3xl font-extrabold text-white tracking-tight mt-1 mb-1.5">Rp {todayCash.toLocaleString('id-ID')}</div>
+                  <div className="text-2xl lg:text-3xl font-extrabold text-[#38a169] tracking-tight mt-1">Rp {todayCash.toLocaleString('id-ID')}</div>
                 </div>
-                <div className="mt-3 pt-3 border-t border-white/5">
-                  <div className="flex justify-between items-center text-[10px]">
-                    <span className="text-zinc-500 font-bold uppercase">Masuk via QRIS</span>
-                    <span className="text-[#e53e3e] font-bold">Rp {todayQris.toLocaleString('id-ID')}</span>
+                <div className="mt-2 pt-2 border-t border-white/5">
+                  <div className="flex items-center justify-between mb-1">
+                    <h2 className="text-[11px] font-bold text-zinc-400 tracking-widest uppercase">Masuk via QRIS</h2>
                   </div>
+                  <div className="text-2xl lg:text-3xl font-extrabold text-blue-500 tracking-tight">Rp {todayQris.toLocaleString('id-ID')}</div>
                 </div>
               </div>
 
               {/* Statistik Penjualan */}
-              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-5 hover:bg-zinc-900/60 transition-colors shadow-sm flex flex-col justify-between">
+              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-4 hover:bg-zinc-900/60 transition-colors shadow-sm flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <h2 className="text-[11px] font-bold text-zinc-400 tracking-widest uppercase">Total Transaksi</h2>
@@ -511,21 +511,21 @@ export default function DashboardPage() {
                   </div>
                   <div className="text-3xl font-extrabold text-white tracking-tight mt-1 mb-1.5">{todayTx}</div>
                 </div>
-                <div className="mt-3 pt-3 border-t border-white/5 flex flex-col gap-1">
-                  <div className="flex justify-between items-center text-[10px]">
-                    <span className="text-zinc-500 font-bold uppercase">Item Terjual</span>
-                    <span className="text-white font-semibold">{todayItems} pcs</span>
+                <div className="mt-3 pt-3 border-t border-white/5 flex flex-col gap-1.5">
+                  <div className="flex justify-between items-center text-[11px]">
+                    <span className="text-zinc-400 font-bold uppercase tracking-wider">Item Terjual</span>
+                    <span className="text-white font-bold">{todayItems} pcs</span>
                   </div>
-                  <div className="flex justify-between items-center text-[10px]">
-                    <span className="text-zinc-500 font-bold uppercase">Rata-rata/Trx</span>
-                    <span className="text-white font-semibold">Rp {(todayTx > 0 ? todayOmzet / todayTx : 0).toLocaleString('id-ID', { maximumFractionDigits: 0 })}</span>
+                  <div className="flex justify-between items-center text-[11px]">
+                    <span className="text-zinc-400 font-bold uppercase tracking-wider">Rata-rata/Trx</span>
+                    <span className="text-white font-bold">Rp {(todayTx > 0 ? todayOmzet / todayTx : 0).toLocaleString('id-ID', { maximumFractionDigits: 0 })}</span>
                   </div>
                 </div>
               </div>
 
 
               {/* Total Omzet Keseluruhan */}
-              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-5 hover:bg-zinc-900/60 transition-colors shadow-sm relative flex flex-col justify-between">
+              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-4 hover:bg-zinc-900/60 transition-colors shadow-sm relative flex flex-col justify-between">
                 <div className="flex items-center justify-between mb-2">
                   <h2 className="text-[11px] font-bold text-zinc-400 tracking-widest uppercase">Total Omzet</h2>
                 </div>
@@ -546,10 +546,10 @@ export default function DashboardPage() {
             </div>
 
             {/* Middle Section: Chart & Payment Methods */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pt-2">
               
               {/* Chart */}
-              <div className="lg:col-span-2 bg-zinc-900/40 border border-white/5 rounded-2xl p-6 shadow-sm">
+              <div className="lg:col-span-2 bg-zinc-900/40 border border-white/5 rounded-2xl p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-8 border-b border-white/5 pb-4">
                   <h3 className="text-[15px] font-bold text-white">Omzet 30 Hari Terakhir</h3>
                   <button onClick={() => window.location.href='/reports'} className="px-3 py-1.5 bg-primary/10 text-primary hover:bg-primary/20 rounded-lg text-[11px] font-bold transition-colors flex items-center gap-1.5 border border-primary/20 shadow-sm shadow-primary/5">
@@ -557,7 +557,7 @@ export default function DashboardPage() {
                   </button>
                 </div>
                 <div className="overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900">
-                  <div className="h-[340px] pt-32 flex items-end justify-start px-4 gap-12 min-w-max w-full">
+                  <div className="h-[260px] pt-20 flex items-end justify-start px-4 gap-12 min-w-max w-full">
                   {chartData.map((d, i) => {
                     const heightPercent = Math.max((d.value / maxChartValue) * 100, 2);
                     const isZero = d.value === 0;
@@ -588,7 +588,7 @@ export default function DashboardPage() {
                                 </div>
                                 <div className="flex justify-between gap-4">
                                   <span className="text-zinc-400">QRIS</span>
-                                  <span className="font-bold text-[#e53e3e]">Rp {d.qris.toLocaleString('id-ID')}</span>
+                                  <span className="font-bold text-blue-500">Rp {d.qris.toLocaleString('id-ID')}</span>
                                 </div>
                                 {d.kasMasuk > 0 && (
                                   <div className="flex justify-between gap-4 border-t border-white/5 pt-1 mt-1">
@@ -620,7 +620,7 @@ export default function DashboardPage() {
               </div>
 
               {/* Payment Methods */}
-              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-6 shadow-sm">
+              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-5 shadow-sm">
                 <h3 className="text-[15px] font-bold text-white mb-6 border-b border-white/5 pb-4">Metode Pembayaran - 30 hari</h3>
                 
                 <div className="space-y-6">
@@ -642,7 +642,7 @@ export default function DashboardPage() {
                     </div>
 
                     <div className="h-2.5 w-full bg-zinc-800 rounded-full overflow-hidden">
-                      <div className="h-full bg-[#e53e3e] rounded-full transition-all duration-1000" style={{ width: `${qrisPercent}%` }} />
+                      <div className="h-full bg-blue-500 rounded-full transition-all duration-1000" style={{ width: `${qrisPercent}%` }} />
                     </div>
                   </div>
                   <div className="pt-4 border-t border-white/5 space-y-2">
@@ -663,10 +663,10 @@ export default function DashboardPage() {
             </div>
 
             {/* Bottom Section: Top Products, Low Stock, Recent Tx */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-2 pb-20">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2 pb-20">
               
               {/* Produk Terlaris */}
-              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-6 shadow-sm">
+              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-5 shadow-sm">
                 <h3 className="text-[15px] font-bold text-white mb-6 border-b border-white/5 pb-4">Produk Terlaris · 30 hari</h3>
                 <div className="space-y-4">
                   {topProducts.length === 0 ? (
@@ -691,7 +691,7 @@ export default function DashboardPage() {
               </div>
 
               {/* Stok Menipis */}
-              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-6 shadow-sm relative">
+              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-5 shadow-sm relative">
                 <div className="flex items-center justify-between mb-6 border-b border-white/5 pb-4">
                   <h3 className="text-[15px] font-bold text-white">Stok Menipis</h3>
                   <span className="text-[11px] font-bold text-[#e53e3e] bg-[#e53e3e]/10 px-2 py-0.5 rounded-full">{lowStocks.length} SKU</span>
@@ -714,7 +714,7 @@ export default function DashboardPage() {
               </div>
 
               {/* Transaksi Terbaru */}
-              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-6 shadow-sm">
+              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-5 shadow-sm">
                 <h3 className="text-[15px] font-bold text-white mb-6 border-b border-white/5 pb-4">Transaksi Terbaru</h3>
                 <div className="space-y-1 overflow-y-auto max-h-[250px] scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900 pr-2">
                   {recentTransactions.length === 0 ? (

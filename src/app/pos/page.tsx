@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { supabase } from '@/lib/supabase';
-import { Search, Plus, Minus, FileEdit, Menu, X, QrCode, Banknote, CheckCircle2, ShoppingCart, LockKeyhole, UserCircle, LogIn, Lock, LogOut, Eye, EyeOff, KeyRound, ShieldCheck, Utensils, Clock, ListPlus } from 'lucide-react';
+import { Search, Plus, Minus, FileEdit, Menu, X, QrCode, Banknote, CheckCircle2, ShoppingCart, LockKeyhole, UserCircle, LogIn, Lock, LogOut, Eye, EyeOff, KeyRound, ShieldCheck, Utensils, Clock, ListPlus, Zap, Heart } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1000,43 +1000,42 @@ export default function POSPage() {
             </div>
           )}
 
-          <header className="px-4 md:px-6 py-4 md:py-6 flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between sticky top-0 z-10 bg-background/80 backdrop-blur-xl border-b border-white/5">
-          <div className="flex items-center gap-4 flex-1">
-            <div className="relative flex-1 max-w-2xl group">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-primary transition-colors" size={20} />
-              <Input 
-                className="pl-12 h-14 bg-zinc-900/50 border-white/10 text-base md:text-lg focus-visible:ring-1 focus-visible:ring-primary rounded-2xl transition-all shadow-inner hover:bg-zinc-900/80"
-                placeholder="Search menu items..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            {activeShift && (
-              <Button 
-                variant="outline" 
-                className="h-14 border-rose-500/20 text-rose-500 hover:bg-rose-500 hover:text-white transition-all duration-300 gap-2 rounded-2xl text-sm font-semibold bg-rose-500/5 hover:border-rose-500"
-                onClick={handleCalculateEndShift}
-                title="Tutup Shift & Rekapitulasi Kasir"
-              >
-                <LogOut size={18} />
-                <span className="hidden sm:inline">Tutup Shift</span>
-              </Button>
-            )}
+          <header className="px-4 md:px-6 py-4 md:py-6 sticky top-0 z-10 bg-background/80 backdrop-blur-xl border-b border-white/5">
+            <div className="flex items-center gap-2 sm:gap-3 w-full max-w-[1400px] mx-auto">
+              <div className="relative flex-1 group">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-primary transition-colors" size={20} />
+                <Input 
+                  className="pl-11 sm:pl-12 h-14 bg-zinc-900/50 border-white/10 text-base md:text-lg focus-visible:ring-1 focus-visible:ring-primary rounded-2xl transition-all shadow-inner hover:bg-zinc-900/80"
+                  placeholder="Search menu items..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                <Button
+                  variant="outline"
+                  className="h-14 w-14 sm:w-auto px-0 sm:px-6 border-rose-500/20 text-rose-500 hover:bg-rose-500 hover:text-zinc-950 transition-all duration-300 gap-2 rounded-2xl text-sm font-bold bg-rose-500/10 hover:border-rose-500 shadow-lg shadow-rose-500/5 flex items-center justify-center"
+                  onClick={() => router.push('/pos/quick')}
+                  title="MAMA MODE — One Click POS"
+                >
+                  <Heart size={20} className={activeShift ? "animate-pulse fill-rose-500 text-rose-500" : ""} />
+                  <span className="hidden sm:inline">MAMA MODE</span>
+                </Button>
 
-            {/* Desktop Cart Toggle */}
-            <Button variant="outline" className="hidden md:flex items-center gap-2 h-14 rounded-2xl border-white/10 bg-zinc-900/50 hover:bg-zinc-800 hover:border-primary/50 transition-all duration-300" onClick={() => setIsCartOpen(!isCartOpen)}>
-              <ShoppingCart size={20} className={cartItemCount > 0 ? 'text-primary' : ''} />
-              <span className="hidden lg:inline">{isCartOpen ? 'Hide Cart' : 'Show Cart'}</span>
-              {cartItemCount > 0 && (
-                <div className="bg-primary text-primary-foreground text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center shadow-lg shadow-primary/20">
-                  {cartItemCount}
-                </div>
-              )}
-            </Button>
-          </div>
-        </header>
+                {/* Desktop Cart Toggle */}
+                <Button variant="outline" className="hidden md:flex items-center gap-2 h-14 rounded-2xl border-white/10 bg-zinc-900/50 hover:bg-zinc-800 hover:border-primary/50 transition-all duration-300" onClick={() => setIsCartOpen(!isCartOpen)}>
+                  <ShoppingCart size={20} className={cartItemCount > 0 ? 'text-primary' : ''} />
+                  <span className="hidden lg:inline">{isCartOpen ? 'Hide Cart' : 'Show Cart'}</span>
+                  {cartItemCount > 0 && (
+                    <div className="bg-primary text-primary-foreground text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center shadow-lg shadow-primary/20">
+                      {cartItemCount}
+                    </div>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </header>
 
         <div className="px-4 md:px-6 pt-6 pb-2 w-full max-w-[100vw] overflow-hidden">
           <div className="flex w-full overflow-x-auto snap-x snap-mandatory scrollbar-hide bg-zinc-900/40 p-1.5 rounded-2xl border border-white/5 shadow-inner gap-1">

@@ -41,20 +41,11 @@ export function Sidebar({ onLogoutClick, onLoginClick }: { onLogoutClick?: () =>
     const saved = localStorage.getItem('sidebar_expanded');
     if (saved !== null) {
       setIsExpanded(saved === 'true');
-    } else if (window.innerWidth < 1024) {
-      setIsExpanded(false);
+    } else {
+      // Default to true (expanded) for all screen sizes unless explicitly collapsed by user
+      setIsExpanded(true);
     }
     
-    const handleResize = () => {
-      if (localStorage.getItem('sidebar_expanded') === null) {
-        if (window.innerWidth < 1024) {
-          setIsExpanded(false);
-        } else {
-          setIsExpanded(true);
-        }
-      }
-    };
-    window.addEventListener('resize', handleResize);
     const decoy = localStorage.getItem('samba_manager_decoy_name');
     if (decoy) {
       setManagerDecoyName(decoy);
@@ -63,10 +54,7 @@ export function Sidebar({ onLogoutClick, onLoginClick }: { onLogoutClick?: () =>
     const timer = setTimeout(() => {
       setMounted(true);
     }, 50);
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener('resize', handleResize);
-    };
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -212,7 +200,7 @@ export function Sidebar({ onLogoutClick, onLoginClick }: { onLogoutClick?: () =>
       <div className={cn(
         "h-screen bg-background border-r border-border flex flex-col justify-between py-6 relative",
         mounted ? "transition-all duration-300" : "",
-        isExpanded ? "w-56" : "w-20"
+        isExpanded ? "w-48 md:w-56" : "w-20"
       )}>
       <button 
         onClick={() => {
@@ -320,7 +308,7 @@ export function Sidebar({ onLogoutClick, onLoginClick }: { onLogoutClick?: () =>
             </Link>
             <button onClick={onLogoutClick || logout} className="flex items-center gap-3 px-3 py-3 rounded-lg text-destructive hover:bg-destructive/10 transition-all">
               <LogOut size={20} className="shrink-0" />
-              <span className={cn("font-medium", isExpanded ? "block" : "hidden")}>Log Out</span>
+              <span className={cn("font-medium", isExpanded ? "block" : "hidden")}>Tutup Shift</span>
             </button>
           </>
         ) : null}

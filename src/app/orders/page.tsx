@@ -119,7 +119,7 @@ export default function OrdersPage() {
     const { data: txData } = await supabase
       .from('transactions')
       .select('*')
-      .gte('created_at', startOfDay.toISOString())
+      .or(`created_at.gte.${startOfDay.toISOString()},status.eq.preparing,status.eq.ready,status.eq.Paid,status.eq.paid,status.is.null`)
       .order('created_at', { ascending: true });
 
     if (txData && txData.length > 0) {
@@ -422,7 +422,7 @@ export default function OrdersPage() {
     return matchesSearch && matchesStatus;
   });
 
-  const renderOrderCard = (order: Order, index?: number) => {
+  const renderOrderCard = (order: Order, customNumber?: number) => {
 
     return (
       <div 
@@ -444,9 +444,9 @@ export default function OrdersPage() {
           <div className="flex items-start justify-between gap-2 mb-1">
             <div className="flex flex-col gap-0.5 min-w-0">
               <div className="flex flex-wrap items-center gap-1.5">
-                {index !== undefined && (
+                {customNumber !== undefined && (
                   <span className="flex items-center justify-center w-5 h-5 rounded-md bg-white/10 text-white font-bold text-xs shrink-0 mr-1">
-                    {index + 1}
+                    {customNumber}
                   </span>
                 )}
                 <span className="font-mono font-bold text-sm text-zinc-100">{order.id.startsWith('order_') ? order.id : `order_${order.id}`}</span>
@@ -720,8 +720,8 @@ export default function OrdersPage() {
                   </div>
                 ) : (
                   <>
-                    {preparingOrders.map(renderOrderCard)}
-                    {readyOrders.map(renderOrderCard)}
+                    {preparingOrders.map((order, idx) => renderOrderCard(order, idx + 1))}
+                    {readyOrders.map((order, idx) => renderOrderCard(order, preparingOrders.length + idx + 1))}
                   </>
                 )}
               </div>
@@ -743,7 +743,7 @@ export default function OrdersPage() {
                     Belum ada pesanan selesai
                   </div>
                 ) : (
-                  completedOrders.slice(0, 15).map(renderOrderCard)
+                  completedOrders.slice(0, 15).map((order, idx) => renderOrderCard(order, completedOrders.length - idx))
                 )}
               </div>
             </div>
@@ -757,7 +757,7 @@ export default function OrdersPage() {
                 Tidak ada pesanan yang sesuai filter
               </div>
             ) : (
-              filteredAllOrders.map(renderOrderCard)
+              filteredAllOrders.map((order, idx) => renderOrderCard(order, idx + 1))
             )}
           </div>
         )}
