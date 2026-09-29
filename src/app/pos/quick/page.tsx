@@ -455,7 +455,7 @@ export default function QuickPOSPage() {
       )}
 
       {/* Bottom Action Bar */}
-      {checkoutState === 'ready' && cart.length > 0 && (
+      {(checkoutState === 'ready' || checkoutState === 'processing') && cart.length > 0 && (
         <div className="fixed bottom-0 left-0 right-0 z-50 safe-bottom animate-in slide-in-from-bottom duration-300">
           <div className="bg-zinc-950/95 backdrop-blur-xl border-t border-white/10 p-3 space-y-2.5 shadow-[0_-10px_40px_rgba(0,0,0,0.6)]">
             {/* Cart Details */}
