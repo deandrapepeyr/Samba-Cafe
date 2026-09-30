@@ -89,6 +89,7 @@ export default function POSPage() {
   const [paymentMethod, setPaymentMethod] = useState<'QRIS' | 'Cash' | 'Bayar Nanti' | null>(null);
   const [cashReceived, setCashReceived] = useState<string>('');
   const [customerName, setCustomerName] = useState('');
+  const [toastMessage, setToastMessage] = useState<{title: string, desc: string, variant?: 'success' | 'alert'} | null>(null);
 
   // QRIS State
   const [isQRISModalOpen, setIsQRISModalOpen] = useState(false);
@@ -120,6 +121,7 @@ export default function POSPage() {
   const [orderNumber, setOrderNumber] = useState('');
   const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(true);
+  const [isMobileCartSheetOpen, setIsMobileCartSheetOpen] = useState(false);
   
   const [isEditMode, setIsEditMode] = useState(false);
   const [oldCartItems, setOldCartItems] = useState<any[]>([]);
@@ -584,28 +586,43 @@ export default function POSPage() {
     await finalizeTransaction();
   };
 
-  const finalizeTransaction = async (methodOverride?: 'QRIS' | 'Cash' | 'Bayar Nanti' | null, isBackground: boolean = false) => {
+  const finalizeTransaction = async (methodOverride?: 'QRIS' | 'Cash' | 'Bayar Nanti' | null, isBackground: boolean = true, cashOverride?: number) => {
     const actualMethod = methodOverride !== undefined ? methodOverride : paymentMethod;
+    const finalCashReceived = cashOverride !== undefined ? cashOverride : (cashReceived ? parseInt(cashReceived.replace(/\./g, '')) : null);
+    const changeAmount = (actualMethod === 'Cash' && finalCashReceived) ? finalCashReceived - total : 0;
+
+    // Instant UI Update
+    setCheckoutStep('none');
+    setIsQRISModalOpen(false);
+    setIsProcessingCheckout(false);
     
-    if (isBackground) {
-      setCheckoutStep('success');
-      // Auto reset setelah 1 detik untuk checkout instan
-      setTimeout(() => {
-        completeAndNewOrder();
-      }, 1000);
+    if (changeAmount > 0) {
+      setToastMessage({
+        title: `Kembalian: Rp ${changeAmount.toLocaleString('id-ID')}`,
+        desc: `Order #${orderNumber} lunas. Berikan kembalian!`,
+        variant: 'alert'
+      });
+      setTimeout(() => setToastMessage(null), 8000); // stay longer for change
     } else {
-      setIsProcessingCheckout(true);
+      setToastMessage({
+        title: 'Pembayaran Berhasil! ✅',
+        desc: `Order #${orderNumber} (${actualMethod}) telah dicatat.`,
+        variant: 'success'
+      });
+      setTimeout(() => setToastMessage(null), 3000);
     }
     
     const transactionId = orderNumber;
+    completeAndNewOrder(); // clear cart instantly
+
     const transaction = {
       id: transactionId,
-        method: actualMethod,
-        total: total,
-        cashier_name: userName || 'Unknown',
-        status: (actualMethod === 'Bayar Nanti') ? 'preparing' : (isAllQuickFood ? 'completed' : 'preparing'),
-        cash_received: actualMethod === 'Cash' && cashReceived ? parseInt(cashReceived.replace(/\./g, '')) : null,
-        customer_name: customerName || null
+      method: actualMethod,
+      total: total,
+      cashier_name: userName || 'Unknown',
+      status: (actualMethod === 'Bayar Nanti') ? 'preparing' : (isAllQuickFood ? 'completed' : 'preparing'),
+      cash_received: actualMethod === 'Cash' ? finalCashReceived : null,
+      customer_name: customerName || null
     };
 
     const itemsToInsert = cart.map(item => ({
@@ -623,7 +640,6 @@ export default function POSPage() {
         if (!navigator.onLine) {
           if (isEditMode) {
             console.warn("⚠️ Tidak bisa mengedit pesanan dalam Offline Mode. Harap tunggu koneksi kembali.");
-            if (!isBackground) setIsProcessingCheckout(false);
             return;
           }
           throw new Error("Offline Mode");
@@ -795,15 +811,10 @@ export default function POSPage() {
 
       if (!isBackground) {
         setIsProcessingCheckout(false);
-        setCheckoutStep('success');
       }
     };
 
-    if (isBackground) {
-      executeDB(); // Run immediately in background without awaiting
-    } else {
-      await executeDB();
-    }
+    executeDB(); // Selalu jalankan di background
   };
 
   const completeAndNewOrder = async () => {
@@ -812,6 +823,7 @@ export default function POSPage() {
     setPaymentMethod(null);
     setCashReceived('');
     setCustomerName('');
+    setIsMobileCartSheetOpen(false);
     const newId = await generateNextOrderId();
     setOrderNumber(newId);
   };
@@ -968,13 +980,81 @@ export default function POSPage() {
           >
             <LockKeyhole size={20} className="mr-2" /> {role ? 'Buka Shift Kasir' : 'Log In Kasir'}
           </Button>
+        ) : cart.length > 0 ? (
+          <div className="space-y-4">
+            <Input 
+              placeholder="Nama Customer (Opsional)" 
+              value={customerName}
+              onChange={e => setCustomerName(e.target.value)}
+              className="bg-zinc-900/50 border-white/10 h-11 focus-visible:ring-primary placeholder:text-zinc-500"
+            />
+            
+            {paymentMethod === 'Cash' ? (
+              <div className="space-y-3 animate-in fade-in zoom-in-95 duration-200">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-sm font-bold text-zinc-300">Pilih Nominal Tunai</span>
+                  <button onClick={() => setPaymentMethod(null)} className="text-xs text-rose-400 hover:text-rose-300 font-bold px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 rounded-lg transition-colors">Batal</button>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {getQuickCashSuggestions(total).map((val) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => {
+                        setCashReceived(val.toString());
+                        finalizeTransaction('Cash', true, val);
+                      }}
+                      className={`p-3 rounded-2xl text-sm font-bold transition-all duration-300 border shadow-sm ${
+                        parseInt(cashReceived.replace(/\./g, '') || '0') === val
+                          ? 'bg-primary text-primary-foreground border-primary scale-95'
+                          : 'bg-zinc-900 text-zinc-200 border-white/10 hover:bg-zinc-800 hover:border-primary/50'
+                      }`}
+                    >
+                      {val === total ? 'Uang Pas' : `Rp ${val.toLocaleString('id-ID')}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-3">
+                <button 
+                  onClick={() => finalizeTransaction('QRIS', true)}
+                  className="bg-blue-500/10 hover:bg-blue-500 text-blue-500 hover:text-white border border-blue-500/20 p-3 rounded-2xl font-bold flex flex-col items-center justify-center gap-1.5 transition-all group"
+                >
+                  <QrCode size={22} className="group-hover:scale-110 transition-transform" />
+                  <span className="text-xs">QRIS</span>
+                </button>
+                
+                <button 
+                  onClick={() => setPaymentMethod('Cash')}
+                  className="bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white border border-emerald-500/20 p-3 rounded-2xl font-bold flex flex-col items-center justify-center gap-1.5 transition-all group"
+                >
+                  <Banknote size={22} className="group-hover:scale-110 transition-transform" />
+                  <span className="text-xs">Tunai</span>
+                </button>
+
+                <button 
+                  onClick={() => {
+                    if (!customerName) {
+                      alert("⚠️ Masukkan nama customer untuk kasbon!");
+                      return;
+                    }
+                    finalizeTransaction('Bayar Nanti', true);
+                  }}
+                  className="bg-amber-500/10 hover:bg-amber-500 text-amber-500 hover:text-white border border-amber-500/20 p-3 rounded-2xl font-bold flex flex-col items-center justify-center gap-1.5 transition-all group"
+                >
+                  <Clock size={22} className="group-hover:scale-110 transition-transform" />
+                  <span className="text-xs">Hutang</span>
+                </button>
+              </div>
+            )}
+          </div>
         ) : (
           <Button 
-            className="w-full h-14 rounded-xl text-lg font-bold bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 shadow-xl shadow-primary/20 hover:shadow-primary/30 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none"
-            disabled={cart.length === 0}
-            onClick={() => { setPaymentMethod(null); setCashReceived(''); setCheckoutStep('method'); }}
+            className="w-full h-14 rounded-xl text-lg font-bold bg-zinc-800/50 text-zinc-600 border border-white/5"
+            disabled
           >
-            Charge / Checkout
+            Pilih Menu Dahulu
           </Button>
         )}
       </div>
@@ -1131,6 +1211,33 @@ export default function POSPage() {
               })}
             </div>
         </div>
+      </div>
+
+      {/* Mobile Floating Cart Bar */}
+      <div className={`lg:hidden fixed bottom-[80px] left-4 right-4 z-40 animate-in slide-in-from-bottom-5 fade-in duration-300 ${cartItemCount > 0 ? 'block' : 'hidden'}`}>
+        <Sheet open={isMobileCartSheetOpen} onOpenChange={setIsMobileCartSheetOpen}>
+            <SheetTrigger className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-2xl p-4 flex items-center justify-between shadow-[0_10px_40px_-10px_rgba(234,179,8,0.5)] border border-primary/20 transition-transform active:scale-[0.98]">
+              <div className="flex items-center gap-3">
+                <div className="bg-primary-foreground/20 px-3 py-1.5 rounded-xl font-bold text-sm">
+                  {cartItemCount} Item
+                </div>
+                <span className="font-bold text-sm">My Orders</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="font-bold text-lg">
+                  Rp {total.toLocaleString('id-ID')}
+                </div>
+                <ShoppingCart size={20} />
+              </div>
+            </SheetTrigger>
+            <SheetContent side="bottom" className="h-[85vh] p-0 bg-card border-t border-border rounded-t-3xl flex flex-col z-[100] outline-none">
+              <SheetHeader className="p-0 border-b border-border sr-only">
+                <SheetTitle>Current Order</SheetTitle>
+              </SheetHeader>
+              <div className="w-12 h-1.5 bg-border rounded-full mx-auto mt-3 shrink-0" />
+              {renderCartContent()}
+            </SheetContent>
+        </Sheet>
       </div>
 
       {/* Desktop Cart Sidebar */}
@@ -1598,11 +1705,14 @@ export default function POSPage() {
                         <button
                           key={val}
                           type="button"
-                          onClick={() => setCashReceived(val.toString())}
-                          className={`p-2 rounded-xl text-xs font-semibold transition-all duration-300 border ${
+                          onClick={() => {
+                            setCashReceived(val.toString());
+                            finalizeTransaction('Cash', true, val);
+                          }}
+                          className={`p-3 rounded-2xl text-sm font-bold transition-all duration-300 border shadow-sm ${
                             parseInt(cashReceived.replace(/\./g, '') || '0') === val
-                              ? 'bg-primary text-primary-foreground border-primary'
-                              : 'bg-zinc-900 text-zinc-300 border-white/5 hover:bg-zinc-800'
+                              ? 'bg-primary text-primary-foreground border-primary scale-95'
+                              : 'bg-zinc-900 text-zinc-200 border-white/10 hover:bg-zinc-800 hover:border-primary/50'
                           }`}
                         >
                           {val === total ? 'Uang Pas' : `Rp ${val.toLocaleString('id-ID')}`}
@@ -1633,37 +1743,21 @@ export default function POSPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Success Overlay Fullscreen (Mirip MAMA MODE) */}
-      {checkoutStep === 'success' && (
-        <div 
-          className="fixed inset-0 z-[200] bg-zinc-950/90 backdrop-blur-xl flex flex-col items-center justify-center animate-in fade-in zoom-in-95 duration-200 cursor-pointer"
-          onClick={completeAndNewOrder}
-        >
-          <div className="w-24 h-24 bg-emerald-500/20 border-2 border-emerald-500/40 rounded-full flex items-center justify-center mb-5 shadow-[0_0_60px_rgba(16,185,129,0.4)]">
-            <CheckCircle2 size={48} className="text-emerald-500 drop-shadow-lg" />
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-6 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-[300] animate-in slide-in-from-top-10 fade-in duration-300">
+          <div 
+            className={`${toastMessage.variant === 'alert' ? 'bg-primary border-primary shadow-[0_10px_40px_rgba(234,179,8,0.4)] text-primary-foreground' : 'bg-emerald-500 border-emerald-400 shadow-[0_10px_40px_rgba(16,185,129,0.3)] text-zinc-950'} px-4 py-3 sm:px-6 sm:py-4 rounded-2xl border flex items-center gap-3 sm:gap-4 cursor-pointer w-full sm:w-auto sm:min-w-[320px]`} 
+            onClick={() => setToastMessage(null)}
+          >
+            <div className={`${toastMessage.variant === 'alert' ? 'bg-primary-foreground/10' : 'bg-zinc-950/10'} p-2 rounded-full shrink-0`}>
+              <CheckCircle2 size={24} className={toastMessage.variant === 'alert' ? 'text-primary-foreground' : 'text-zinc-950'} />
+            </div>
+            <div className="min-w-0">
+              <h4 className="font-black text-base sm:text-lg leading-tight truncate">{toastMessage.title}</h4>
+              <p className="text-xs sm:text-sm font-medium opacity-90 truncate">{toastMessage.desc}</p>
+            </div>
           </div>
-          <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight mb-2">Selesai! ✅</h2>
-          <p className="text-emerald-400 font-medium text-lg">Pesanan #{orderNumber} berhasil disimpan</p>
-          
-          <div className="mt-6 flex flex-col items-center gap-3">
-            {isAllQuickFood ? (
-              <div className="bg-emerald-500/10 border border-emerald-500/20 px-4 py-2 rounded-full text-center">
-                <p className="text-sm font-bold text-emerald-400">Langsung Serahkan ke Customer</p>
-              </div>
-            ) : (
-              <div className="bg-amber-500/10 border border-amber-500/20 px-4 py-2 rounded-full text-center">
-                <p className="text-sm font-bold text-amber-500">⏳ Masuk Antrean Dapur</p>
-              </div>
-            )}
-          </div>
-          
-          {!navigator.onLine && (
-            <p className="text-[10px] text-amber-500 font-bold mt-4 bg-amber-500/10 py-1 px-3 rounded-md">
-              Offline Mode: Disimpan secara lokal
-            </p>
-          )}
-
-          <p className="text-xs text-zinc-500 mt-10 animate-pulse bg-zinc-900/50 px-4 py-2 rounded-full border border-white/5">Ketuk dimana saja untuk lanjut</p>
         </div>
       )}
 
