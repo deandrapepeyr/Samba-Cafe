@@ -118,6 +118,7 @@ export default function POSPage() {
   const [shiftSummary, setShiftSummary] = useState<any>(null);
 
   const [isShiftSummaryOpen, setIsShiftSummaryOpen] = useState(false);
+  const [isHutangNameDialogOpen, setIsHutangNameDialogOpen] = useState(false);
   const [orderNumber, setOrderNumber] = useState('');
   const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(true);
@@ -981,12 +982,13 @@ export default function POSPage() {
             <LockKeyhole size={20} className="mr-2" /> {role ? 'Buka Shift Kasir' : 'Log In Kasir'}
           </Button>
         ) : cart.length > 0 ? (
-          <div className="space-y-4">
+          <div className="space-y-4 md:hidden">
             <Input 
+              id="customer-name-input-mobile"
               placeholder="Nama Customer (Opsional)" 
               value={customerName}
               onChange={e => setCustomerName(e.target.value)}
-              className="bg-zinc-900/50 border-white/10 h-11 focus-visible:ring-primary placeholder:text-zinc-500"
+              className="bg-zinc-900/50 border-white/10 h-11 focus-visible:ring-primary placeholder:text-zinc-500 transition-all"
             />
             
             {paymentMethod === 'Cash' ? (
@@ -1036,7 +1038,7 @@ export default function POSPage() {
                 <button 
                   onClick={() => {
                     if (!customerName) {
-                      alert("⚠️ Masukkan nama customer untuk kasbon!");
+                      setIsHutangNameDialogOpen(true);
                       return;
                     }
                     finalizeTransaction('Bayar Nanti', true);
@@ -1060,6 +1062,88 @@ export default function POSPage() {
       </div>
     </>
   );
+
+  const renderCheckoutFAB = () => {
+    if (isPageLoading || isLocked || cart.length === 0) return null;
+
+    return (
+      <div className="hidden md:flex absolute bottom-6 left-1/2 -translate-x-1/2 z-40 bg-zinc-900/90 backdrop-blur-xl p-3 rounded-[2rem] border border-white/10 shadow-2xl items-center gap-3 animate-in slide-in-from-bottom-8">
+        <div className="bg-zinc-950/50 rounded-2xl p-1.5 flex items-center gap-2 pr-4 shrink-0 border border-white/5">
+           <div className="bg-primary/20 text-primary w-10 h-10 rounded-xl flex items-center justify-center font-bold">
+             {cartItemCount}
+           </div>
+           <div className="flex flex-col">
+             <span className="text-xs text-zinc-400">Total</span>
+             <span className="text-sm font-bold text-primary">Rp {total.toLocaleString('id-ID')}</span>
+           </div>
+        </div>
+
+        <Input 
+          id="customer-name-input-desktop"
+          placeholder="Nama Cust..." 
+          value={customerName}
+          onChange={e => setCustomerName(e.target.value)}
+          className="w-32 bg-zinc-900 border-white/10 h-11 focus-visible:ring-primary placeholder:text-zinc-500 rounded-xl transition-all"
+        />
+
+        <div className="h-8 w-px bg-white/10 mx-1" />
+
+        {paymentMethod === 'Cash' ? (
+          <div className="flex items-center gap-2">
+            <button onClick={() => setPaymentMethod(null)} className="h-11 px-3 text-xs text-rose-400 hover:bg-rose-500/10 rounded-xl font-bold transition-colors">Batal</button>
+            <div className="flex items-center gap-2 overflow-x-auto max-w-[400px] scrollbar-hide">
+              {getQuickCashSuggestions(total).map((val) => (
+                <button
+                  key={val}
+                  onClick={() => {
+                    setCashReceived(val.toString());
+                    finalizeTransaction('Cash', true, val);
+                  }}
+                  className={`h-11 px-4 rounded-xl text-sm font-bold whitespace-nowrap transition-all duration-300 border ${
+                    parseInt(cashReceived.replace(/\./g, '') || '0') === val
+                      ? 'bg-primary text-primary-foreground border-primary scale-95'
+                      : 'bg-zinc-800 text-zinc-200 border-white/5 hover:bg-zinc-700'
+                  }`}
+                >
+                  {val === total ? 'Pas' : (val >= 1000 ? `${val/1000}k` : val)}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => finalizeTransaction('QRIS', true)}
+              className="bg-blue-500/10 hover:bg-blue-500 text-blue-500 hover:text-white border border-blue-500/20 h-11 px-5 rounded-xl font-bold flex items-center gap-2 transition-all group"
+            >
+              <QrCode size={18} className="group-hover:scale-110 transition-transform" />
+              <span>QRIS</span>
+            </button>
+            <button 
+              onClick={() => setPaymentMethod('Cash')}
+              className="bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white border border-emerald-500/20 h-11 px-5 rounded-xl font-bold flex items-center gap-2 transition-all group"
+            >
+              <Banknote size={18} className="group-hover:scale-110 transition-transform" />
+              <span>Tunai</span>
+            </button>
+            <button 
+              onClick={() => {
+                if (!customerName) {
+                  setIsHutangNameDialogOpen(true);
+                  return;
+                }
+                finalizeTransaction('Bayar Nanti', true);
+              }}
+              className="bg-amber-500/10 hover:bg-amber-500 text-amber-500 hover:text-white border border-amber-500/20 h-11 px-4 rounded-xl font-bold flex items-center gap-2 transition-all group"
+            >
+              <Clock size={18} className="group-hover:scale-110 transition-transform" />
+              <span className="hidden xl:inline">Hutang</span>
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <MainLayout 
@@ -1211,6 +1295,8 @@ export default function POSPage() {
               })}
             </div>
         </div>
+        
+        {renderCheckoutFAB()}
       </div>
 
       {/* Mobile Floating Cart Bar */}
@@ -1953,6 +2039,47 @@ export default function POSPage() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Input Nama Hutang Dialog */}
+      <Dialog open={isHutangNameDialogOpen} onOpenChange={setIsHutangNameDialogOpen}>
+        <DialogContent className="bg-card border-border sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Nama Customer (Kasbon)</DialogTitle>
+            <DialogDescription>
+              Silakan masukkan nama customer untuk melanjutkan transaksi kasbon.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Input 
+              autoFocus
+              placeholder="Masukkan nama customer..." 
+              value={customerName}
+              onChange={e => setCustomerName(e.target.value)}
+              className="bg-background border-border h-12 text-lg focus-visible:ring-primary"
+              onKeyDown={e => {
+                if (e.key === 'Enter' && customerName.trim() !== '') {
+                  setIsHutangNameDialogOpen(false);
+                  finalizeTransaction('Bayar Nanti', true);
+                }
+              }}
+            />
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setIsHutangNameDialogOpen(false)}>Batal</Button>
+            <Button 
+              className="bg-amber-500 hover:bg-amber-600 text-white font-bold" 
+              onClick={() => {
+                if (!customerName) return;
+                setIsHutangNameDialogOpen(false);
+                finalizeTransaction('Bayar Nanti', true);
+              }}
+              disabled={!customerName}
+            >
+              Lanjutkan
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </MainLayout>
