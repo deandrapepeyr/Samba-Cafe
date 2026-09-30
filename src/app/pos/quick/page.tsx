@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { ArrowLeft, QrCode, Banknote, CheckCircle2, Settings2, X, RotateCcw, Zap, Minus, ChevronDown, ChevronUp, Heart } from 'lucide-react';
 
 type Product = {
@@ -65,6 +66,16 @@ export default function QuickPOSPage() {
 
     async function fetchData() {
       setIsCheckingShift(true);
+      
+      // Instant render from cache
+      try {
+        const cached = localStorage.getItem('samba_products_cache');
+        if (cached) { 
+          setProducts(JSON.parse(cached)); 
+          setIsLoadingData(false); 
+        }
+      } catch(e) {}
+
       const [productsRes, stocksRes, recipesRes] = await Promise.all([
         supabase.from('products').select('*').eq('is_available', true),
         supabase.from('stocks').select('id, quantity'),
@@ -74,7 +85,9 @@ export default function QuickPOSPage() {
       if (stocksRes.data) setStocksData(stocksRes.data);
       if (recipesRes.data) setRecipesData(recipesRes.data);
       if (productsRes.data) {
-        setProducts(productsRes.data.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
+        const sorted = productsRes.data.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+        setProducts(sorted);
+        try { localStorage.setItem('samba_products_cache', JSON.stringify(sorted)); } catch(e) {}
       }
       setIsLoadingData(false);
 
@@ -174,88 +187,16 @@ export default function QuickPOSPage() {
   const handlePayment = async (method: 'QRIS' | 'Cash') => {
     if (cart.length === 0) return;
 
-    setCheckoutState('processing');
-
-    const orderId = await generateOrderId();
-
-    const transaction = {
-      id: orderId,
-      method,
-      total,
-      cashier_name: userName || 'MAMA MODE',
-      status: `completed|${new Date().toISOString()}`,
-      cash_received: method === 'Cash' ? total : null,
-      customer_name: null
-    };
-
-    const itemsToInsert = cart.map(item => ({
-      transaction_id: orderId,
-      product_name: item.product.name,
-      price: item.product.price,
-      quantity: item.quantity,
-      notes: null,
-      supplier_price: item.product.supplier_price || 0
-    }));
-
-    try {
-      if (!navigator.onLine) throw new Error('Offline');
-
-      const dbOps = async () => {
-        const { error: txErr } = await supabase.from('transactions').insert([transaction]);
-        if (txErr) throw txErr;
-        const { error: itemsErr } = await supabase.from('transaction_items').insert(itemsToInsert);
-        if (itemsErr) throw itemsErr;
-
-        // Deduct titipan stock
-        for (const cartItem of cart.filter(i => i.product.is_titipan)) {
-          const newStock = Math.max(0, (cartItem.product.stock || 0) - cartItem.quantity);
-          await supabase.from('products').update({ stock: newStock }).eq('id', cartItem.product.id);
-        }
-
-        // Deduct recipe-based stock
-        const productIds = cart.map(i => i.product.id);
-        const { data: recipes } = await supabase.from('product_ingredients').select('*').in('product_id', productIds);
-        if (recipes && recipes.length > 0) {
-          const stockDeductions: Record<string, number> = {};
-          for (const cartItem of cart) {
-            const itemRecipes = recipes.filter(r => r.product_id === cartItem.product.id && !r.variant_name);
-            for (const recipe of itemRecipes) {
-              if (!stockDeductions[recipe.stock_id]) stockDeductions[recipe.stock_id] = 0;
-              stockDeductions[recipe.stock_id] += recipe.quantity_required * cartItem.quantity;
-            }
-          }
-          const stockIds = Object.keys(stockDeductions);
-          if (stockIds.length > 0) {
-            const { data: currentStocks } = await supabase.from('stocks').select('id, quantity').in('id', stockIds);
-            if (currentStocks) {
-              for (const stock of currentStocks) {
-                const amount = stockDeductions[stock.id];
-                if (amount) {
-                  await supabase.from('stocks').update({ quantity: Math.max(0, stock.quantity - amount), last_updated: new Date().toISOString() }).eq('id', stock.id);
-                }
-              }
-            }
-          }
-        }
-      };
-
-      await Promise.race([
-        dbOps(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
-      ]);
-    } catch (err) {
-      console.warn('Quick POS offline fallback:', err);
-      const queue = JSON.parse(localStorage.getItem('offline_transactions') || '[]');
-      queue.push({ transaction, itemsToInsert });
-      localStorage.setItem('offline_transactions', JSON.stringify(queue));
-    }
-
-    setSuccessOrderId(orderId);
+    // Langsung tampilkan success tanpa loading
     setCheckoutState('success');
+    
+    // Capture state saat ini untuk background task
+    const currentCart = [...cart];
+    const currentTotal = total;
 
     // Optimistically update local stock state so it decreases instantly
     setProducts(prevProducts => prevProducts.map(p => {
-      const cartItem = cart.find(c => c.product.id === p.id);
+      const cartItem = currentCart.find(c => c.product.id === p.id);
       if (cartItem && p.is_titipan && p.stock !== undefined && p.stock !== null) {
         return { ...p, stock: Math.max(0, p.stock - cartItem.quantity) };
       }
@@ -264,7 +205,7 @@ export default function QuickPOSPage() {
 
     setStocksData(prevStocks => prevStocks.map(s => {
       let totalDeduction = 0;
-      cart.forEach(cartItem => {
+      currentCart.forEach(cartItem => {
         const itemRecipes = recipesData.filter(r => r.product_id === cartItem.product.id);
         const recipe = itemRecipes.find(r => r.stock_id === s.id);
         if (recipe) {
@@ -277,7 +218,7 @@ export default function QuickPOSPage() {
       return s;
     }));
     
-    // Auto reset after 1.5 seconds
+    // Auto reset after 1 second biar lebih cepat lagi
     setTimeout(() => {
       setCheckoutState(prev => {
         if (prev === 'success') {
@@ -287,7 +228,89 @@ export default function QuickPOSPage() {
         }
         return prev;
       });
-    }, 1500);
+    }, 1000);
+
+    // Proses DB secara asynchronous di background
+    const processDB = async () => {
+      const orderId = await generateOrderId();
+
+      const transaction = {
+        id: orderId,
+        method,
+        total: currentTotal,
+        cashier_name: userName || 'MAMA MODE',
+        status: `completed|${new Date().toISOString()}`,
+        cash_received: method === 'Cash' ? currentTotal : null,
+        customer_name: null
+      };
+
+      const itemsToInsert = currentCart.map(item => ({
+        transaction_id: orderId,
+        product_name: item.product.name,
+        price: item.product.price,
+        quantity: item.quantity,
+        notes: null,
+        supplier_price: item.product.supplier_price || 0
+      }));
+
+      try {
+        if (!navigator.onLine) throw new Error('Offline');
+
+        const dbOps = async () => {
+          const { error: txErr } = await supabase.from('transactions').insert([transaction]);
+          if (txErr) throw txErr;
+          const { error: itemsErr } = await supabase.from('transaction_items').insert(itemsToInsert);
+          if (itemsErr) throw itemsErr;
+
+          // Deduct titipan stock
+          for (const cartItem of currentCart.filter(i => i.product.is_titipan)) {
+            const newStock = Math.max(0, (cartItem.product.stock || 0) - cartItem.quantity);
+            await supabase.from('products').update({ stock: newStock }).eq('id', cartItem.product.id);
+          }
+
+          // Deduct recipe-based stock
+          const productIds = currentCart.map(i => i.product.id);
+          const { data: recipes } = await supabase.from('product_ingredients').select('*').in('product_id', productIds);
+          if (recipes && recipes.length > 0) {
+            const stockDeductions: Record<string, number> = {};
+            for (const cartItem of currentCart) {
+              const itemRecipes = recipes.filter(r => r.product_id === cartItem.product.id && !r.variant_name);
+              for (const recipe of itemRecipes) {
+                if (!stockDeductions[recipe.stock_id]) stockDeductions[recipe.stock_id] = 0;
+                stockDeductions[recipe.stock_id] += recipe.quantity_required * cartItem.quantity;
+              }
+            }
+            const stockIds = Object.keys(stockDeductions);
+            if (stockIds.length > 0) {
+              const { data: currentStocks } = await supabase.from('stocks').select('id, quantity').in('id', stockIds);
+              if (currentStocks) {
+                for (const stock of currentStocks) {
+                  const amount = stockDeductions[stock.id];
+                  if (amount) {
+                    await supabase.from('stocks').update({ quantity: Math.max(0, stock.quantity - amount), last_updated: new Date().toISOString() }).eq('id', stock.id);
+                  }
+                }
+              }
+            }
+          }
+        };
+
+        await Promise.race([
+          dbOps(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+        ]);
+        
+        setSuccessOrderId(orderId);
+      } catch (err) {
+        console.warn('Quick POS offline fallback:', err);
+        const queue = JSON.parse(localStorage.getItem('offline_transactions') || '[]');
+        queue.push({ transaction, itemsToInsert });
+        localStorage.setItem('offline_transactions', JSON.stringify(queue));
+      }
+    };
+
+    // Jalankan tanpa di-await
+    processDB();
   };
 
   const handleNewOrder = () => {
@@ -316,12 +339,13 @@ export default function QuickPOSPage() {
       {/* Header */}
       <header className="relative z-10 flex items-center justify-between px-4 py-3 border-b border-white/5 bg-zinc-950/80 backdrop-blur-xl safe-top">
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push('/pos')}
-            className="p-2 -ml-1 rounded-xl hover:bg-white/5 transition-colors"
+          <Link
+            href="/pos"
+            prefetch={true}
+            className="p-2 -ml-1 rounded-xl hover:bg-white/5 transition-colors block"
           >
             <ArrowLeft size={20} className="text-zinc-400" />
-          </button>
+          </Link>
           <div className="flex items-center gap-2">
             <div className="p-1.5 bg-rose-500/10 rounded-lg border border-rose-500/20">
               <Heart size={16} className="text-rose-500 fill-rose-500" />
@@ -382,17 +406,11 @@ export default function QuickPOSPage() {
         </div>
       )}
 
-      {/* Loading */}
-      {(isLoading || isCheckingShift || isLoadingData) && (
-        <div className="relative z-10 flex-1 flex items-center justify-center">
-          <div className="w-10 h-10 border-4 border-rose-500 border-t-transparent rounded-full animate-spin"></div>
-        </div>
-      )}
 
 
 
       {/* Main Grid — Menu Items */}
-      {!isLocked && !isLoading && !isCheckingShift && !isLoadingData && enabledProducts.length > 0 && checkoutState !== 'success' && (
+      {!isLocked && enabledProducts.length > 0 && checkoutState !== 'success' && (
         <div className="relative z-10 flex-1 overflow-y-auto p-3 pb-60">
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
             {enabledProducts.map(product => {

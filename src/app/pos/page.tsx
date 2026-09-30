@@ -5,6 +5,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { supabase } from '@/lib/supabase';
 import { Search, Plus, Minus, FileEdit, Menu, X, QrCode, Banknote, CheckCircle2, ShoppingCart, LockKeyhole, UserCircle, LogIn, Lock, LogOut, Eye, EyeOff, KeyRound, ShieldCheck, Utensils, Clock, ListPlus, Zap, Heart } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -583,17 +584,27 @@ export default function POSPage() {
     await finalizeTransaction();
   };
 
-  const finalizeTransaction = async () => {
-    setIsProcessingCheckout(true);
+  const finalizeTransaction = async (methodOverride?: 'QRIS' | 'Cash' | 'Bayar Nanti' | null, isBackground: boolean = false) => {
+    const actualMethod = methodOverride !== undefined ? methodOverride : paymentMethod;
+    
+    if (isBackground) {
+      setCheckoutStep('success');
+      // Auto reset setelah 1 detik untuk checkout instan
+      setTimeout(() => {
+        completeAndNewOrder();
+      }, 1000);
+    } else {
+      setIsProcessingCheckout(true);
+    }
     
     const transactionId = orderNumber;
     const transaction = {
       id: transactionId,
-        method: paymentMethod,
+        method: actualMethod,
         total: total,
         cashier_name: userName || 'Unknown',
-        status: (paymentMethod === 'Bayar Nanti') ? 'preparing' : (isAllQuickFood ? 'completed' : 'preparing'),
-        cash_received: paymentMethod === 'Cash' && cashReceived ? parseInt(cashReceived.replace(/\./g, '')) : null,
+        status: (actualMethod === 'Bayar Nanti') ? 'preparing' : (isAllQuickFood ? 'completed' : 'preparing'),
+        cash_received: actualMethod === 'Cash' && cashReceived ? parseInt(cashReceived.replace(/\./g, '')) : null,
         customer_name: customerName || null
     };
 
@@ -606,187 +617,193 @@ export default function POSPage() {
       supplier_price: item.product.supplier_price || 0
     }));
 
-    try {
-      // If offline, skip direct to local storage catch block
-      if (!navigator.onLine) {
-        if (isEditMode) {
-          alert("⚠️ Tidak bisa mengedit pesanan dalam Offline Mode. Harap tunggu koneksi kembali.");
-          setIsProcessingCheckout(false);
-          return;
+    const executeDB = async () => {
+      try {
+        // If offline, skip direct to local storage catch block
+        if (!navigator.onLine) {
+          if (isEditMode) {
+            console.warn("⚠️ Tidak bisa mengedit pesanan dalam Offline Mode. Harap tunggu koneksi kembali.");
+            if (!isBackground) setIsProcessingCheckout(false);
+            return;
+          }
+          throw new Error("Offline Mode");
         }
-        throw new Error("Offline Mode");
-      }
 
-      const dbOperations = async () => {
-        if (isEditMode) {
-          const { error: txError } = await supabase.from('transactions').update({
-            method: paymentMethod,
-            total: total,
-            status: (paymentMethod === 'Bayar Nanti') ? 'preparing' : (isAllQuickFood ? 'completed' : 'preparing'),
-            cash_received: paymentMethod === 'Cash' && cashReceived ? parseInt(cashReceived.replace(/\./g, '')) : null,
-            customer_name: customerName || null
-          }).eq('id', transactionId);
-          if (txError) throw txError;
+        const dbOperations = async () => {
+          if (isEditMode) {
+            const { error: txError } = await supabase.from('transactions').update({
+              method: actualMethod,
+              total: total,
+              status: (actualMethod === 'Bayar Nanti') ? 'preparing' : (isAllQuickFood ? 'completed' : 'preparing'),
+              cash_received: actualMethod === 'Cash' && cashReceived ? parseInt(cashReceived.replace(/\./g, '')) : null,
+              customer_name: customerName || null
+            }).eq('id', transactionId);
+            if (txError) throw txError;
 
-          await supabase.from('transaction_items').delete().eq('transaction_id', transactionId);
-          const { error: itemsError } = await supabase.from('transaction_items').insert(itemsToInsert);
-          if (itemsError) throw itemsError;
+            await supabase.from('transaction_items').delete().eq('transaction_id', transactionId);
+            const { error: itemsError } = await supabase.from('transaction_items').insert(itemsToInsert);
+            if (itemsError) throw itemsError;
 
-          // Stock adjustment for Titipan items
-          const titipanDelta: Record<string, number> = {};
-          for (const cartItem of cart.filter(i => i.product.is_titipan)) {
-            titipanDelta[cartItem.product.id] = (titipanDelta[cartItem.product.id] || 0) + cartItem.quantity;
-          }
-          for (const oldItem of oldCartItems) {
-            const p = products.find(prod => prod.name === oldItem.product_name);
-            if (p?.is_titipan) {
-              titipanDelta[p.id] = (titipanDelta[p.id] || 0) - oldItem.quantity;
+            // Stock adjustment for Titipan items
+            const titipanDelta: Record<string, number> = {};
+            for (const cartItem of cart.filter(i => i.product.is_titipan)) {
+              titipanDelta[cartItem.product.id] = (titipanDelta[cartItem.product.id] || 0) + cartItem.quantity;
             }
-          }
-          for (const id of Object.keys(titipanDelta)) {
-            const delta = titipanDelta[id];
-            if (delta) {
-              const p = products.find(prod => prod.id === id);
-              if (p) {
-                const newStock = Math.max(0, (p.stock || 0) - delta);
-                await supabase.from('products').update({ stock: newStock }).eq('id', id);
+            for (const oldItem of oldCartItems) {
+              const p = products.find(prod => prod.name === oldItem.product_name);
+              if (p?.is_titipan) {
+                titipanDelta[p.id] = (titipanDelta[p.id] || 0) - oldItem.quantity;
               }
             }
-          }
+            for (const id of Object.keys(titipanDelta)) {
+              const delta = titipanDelta[id];
+              if (delta) {
+                const p = products.find(prod => prod.id === id);
+                if (p) {
+                  const newStock = Math.max(0, (p.stock || 0) - delta);
+                  await supabase.from('products').update({ stock: newStock }).eq('id', id);
+                }
+              }
+            }
 
-          // Stock adjustment (Delta) for ALL items via recipes (Titipan menus might use Cafe ingredients)
-          const allProductIds = Array.from(new Set([
-            ...cart.map(i => i.product.id),
-            ...oldCartItems.map(i => products.find(p => p.name === i.product_name)?.id).filter(Boolean)
-          ]));
-          
-          const { data: recipes } = await supabase.from('product_ingredients').select('*').in('product_id', allProductIds as string[]);
-          
-          if (recipes && recipes.length > 0) {
-            const stockDelta: Record<string, number> = {};
+            // Stock adjustment (Delta) for ALL items via recipes (Titipan menus might use Cafe ingredients)
+            const allProductIds = Array.from(new Set([
+              ...cart.map(i => i.product.id),
+              ...oldCartItems.map(i => products.find(p => p.name === i.product_name)?.id).filter(Boolean)
+            ]));
             
-            for (const cartItem of cart) {
-              const itemRecipes = recipes.filter(r => r.product_id === cartItem.product.id);
-              for (const recipe of itemRecipes) {
-                const isBaseRecipe = !recipe.variant_name;
-                let matchesVariant = false;
-                if (!isBaseRecipe && cartItem.variantChoices) {
-                  const selectedOptions = cartItem.variantChoices[recipe.variant_name] || [];
-                  if (selectedOptions.includes(recipe.choice_name)) {
-                    matchesVariant = true;
+            const { data: recipes } = await supabase.from('product_ingredients').select('*').in('product_id', allProductIds as string[]);
+            
+            if (recipes && recipes.length > 0) {
+              const stockDelta: Record<string, number> = {};
+              
+              for (const cartItem of cart) {
+                const itemRecipes = recipes.filter(r => r.product_id === cartItem.product.id);
+                for (const recipe of itemRecipes) {
+                  const isBaseRecipe = !recipe.variant_name;
+                  let matchesVariant = false;
+                  if (!isBaseRecipe && cartItem.variantChoices) {
+                    const selectedOptions = cartItem.variantChoices[recipe.variant_name] || [];
+                    if (selectedOptions.includes(recipe.choice_name)) {
+                      matchesVariant = true;
+                    }
+                  }
+                  
+                  if (isBaseRecipe || matchesVariant) {
+                    if (!stockDelta[recipe.stock_id]) stockDelta[recipe.stock_id] = 0;
+                    stockDelta[recipe.stock_id] += (recipe.quantity_required * cartItem.quantity);
                   }
                 }
-                
-                if (isBaseRecipe || matchesVariant) {
-                  if (!stockDelta[recipe.stock_id]) stockDelta[recipe.stock_id] = 0;
-                  stockDelta[recipe.stock_id] += (recipe.quantity_required * cartItem.quantity);
+              }
+              
+              for (const oldItem of oldCartItems) {
+                const productId = products.find(p => p.name === oldItem.product_name)?.id;
+                const itemRecipes = recipes.filter(r => r.product_id === productId);
+                for (const recipe of itemRecipes) {
+                  const isBaseRecipe = !recipe.variant_name;
+                  const noteMatches = !isBaseRecipe && oldItem.notes && recipe.choice_name && oldItem.notes.includes(recipe.choice_name);
+                  
+                  if (isBaseRecipe || noteMatches) {
+                    if (!stockDelta[recipe.stock_id]) stockDelta[recipe.stock_id] = 0;
+                    stockDelta[recipe.stock_id] -= (recipe.quantity_required * oldItem.quantity);
+                  }
+                }
+              }
+
+              const stockIds = Object.keys(stockDelta).filter(id => stockDelta[id] !== 0);
+              if (stockIds.length > 0) {
+                const { data: currentStocks } = await supabase.from('stocks').select('id, quantity').in('id', stockIds);
+                if (currentStocks) {
+                  for (const stock of currentStocks) {
+                    const delta = stockDelta[stock.id];
+                    if (delta) {
+                      const newQuantity = Math.max(0, stock.quantity - delta);
+                      await supabase.from('stocks').update({ quantity: newQuantity, last_updated: new Date().toISOString() }).eq('id', stock.id);
+                    }
+                  }
                 }
               }
             }
-            
-            for (const oldItem of oldCartItems) {
-              const productId = products.find(p => p.name === oldItem.product_name)?.id;
-              const itemRecipes = recipes.filter(r => r.product_id === productId);
-              for (const recipe of itemRecipes) {
-                // For old items we cannot reliably know variant choices from notes safely.
-                // However, if the old item had variant choices saved in DB we would parse them.
-                // Currently transaction_items lacks variantChoices, so we only revert base recipes
-                // OR we can revert based on the notes parsed. For simplicity, if notes exist and match choice_name:
-                const isBaseRecipe = !recipe.variant_name;
-                const noteMatches = !isBaseRecipe && oldItem.notes && recipe.choice_name && oldItem.notes.includes(recipe.choice_name);
-                
-                if (isBaseRecipe || noteMatches) {
-                  if (!stockDelta[recipe.stock_id]) stockDelta[recipe.stock_id] = 0;
-                  stockDelta[recipe.stock_id] -= (recipe.quantity_required * oldItem.quantity);
-                }
-              }
+          } else {
+            const { error: txError } = await supabase.from('transactions').insert([transaction]);
+            if (txError) throw txError;
+
+            const { error: itemsError } = await supabase.from('transaction_items').insert(itemsToInsert);
+            if (itemsError) throw itemsError;
+
+            // Deduct stock directly for titipan items
+            const titipanItems = cart.filter(item => item.product.is_titipan);
+            for (const cartItem of titipanItems) {
+               const newStock = Math.max(0, (cartItem.product.stock || 0) - cartItem.quantity);
+               await supabase.from('products').update({ stock: newStock }).eq('id', cartItem.product.id);
             }
 
-            const stockIds = Object.keys(stockDelta).filter(id => stockDelta[id] !== 0);
-            if (stockIds.length > 0) {
+            // Deduct stock based on recipe for ALL items (Titipan menus might use Cafe ingredients)
+            const productIds = cart.map(item => item.product.id);
+            const { data: recipes } = await supabase.from('product_ingredients').select('*').in('product_id', productIds);
+            
+            if (recipes && recipes.length > 0) {
+              const stockDeductions: Record<string, number> = {};
+              for (const cartItem of cart) {
+                const itemRecipes = recipes.filter(r => r.product_id === cartItem.product.id);
+                for (const recipe of itemRecipes) {
+                  const isBaseRecipe = !recipe.variant_name;
+                  let matchesVariant = false;
+                  if (!isBaseRecipe && cartItem.variantChoices) {
+                    const selectedOptions = cartItem.variantChoices[recipe.variant_name] || [];
+                    if (selectedOptions.includes(recipe.choice_name)) {
+                      matchesVariant = true;
+                    }
+                  }
+                  
+                  if (isBaseRecipe || matchesVariant) {
+                    if (!stockDeductions[recipe.stock_id]) stockDeductions[recipe.stock_id] = 0;
+                    stockDeductions[recipe.stock_id] += (recipe.quantity_required * cartItem.quantity);
+                  }
+                }
+              }
+
+              const stockIds = Object.keys(stockDeductions);
               const { data: currentStocks } = await supabase.from('stocks').select('id, quantity').in('id', stockIds);
+              
               if (currentStocks) {
                 for (const stock of currentStocks) {
-                  const delta = stockDelta[stock.id];
-                  if (delta) {
-                    const newQuantity = Math.max(0, stock.quantity - delta);
+                  const amountToDeduct = stockDeductions[stock.id];
+                  if (amountToDeduct) {
+                    const newQuantity = Math.max(0, stock.quantity - amountToDeduct);
                     await supabase.from('stocks').update({ quantity: newQuantity, last_updated: new Date().toISOString() }).eq('id', stock.id);
                   }
                 }
               }
             }
           }
-        } else {
-          const { error: txError } = await supabase.from('transactions').insert([transaction]);
-          if (txError) throw txError;
+        };
 
-          const { error: itemsError } = await supabase.from('transaction_items').insert(itemsToInsert);
-          if (itemsError) throw itemsError;
+        // Wrap in 5-second timeout to prevent UI freezing on bad network
+        await Promise.race([
+          dbOperations(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout: Jaringan lambat")), 5000))
+        ]);
 
-          // Deduct stock directly for titipan items
-          const titipanItems = cart.filter(item => item.product.is_titipan);
-          for (const cartItem of titipanItems) {
-             const newStock = Math.max(0, (cartItem.product.stock || 0) - cartItem.quantity);
-             await supabase.from('products').update({ stock: newStock }).eq('id', cartItem.product.id);
-          }
+      } catch (error: any) {
+        console.warn("Failed to sync to Supabase, saving to offline queue:", error);
+        // Offline Queueing Logic
+        const offlineQueue = JSON.parse(localStorage.getItem('offline_transactions') || '[]');
+        offlineQueue.push({ transaction, itemsToInsert });
+        localStorage.setItem('offline_transactions', JSON.stringify(offlineQueue));
+      }
 
-          // Deduct stock based on recipe for ALL items (Titipan menus might use Cafe ingredients)
-          const productIds = cart.map(item => item.product.id);
-          const { data: recipes } = await supabase.from('product_ingredients').select('*').in('product_id', productIds);
-          
-          if (recipes && recipes.length > 0) {
-            const stockDeductions: Record<string, number> = {};
-            for (const cartItem of cart) {
-              const itemRecipes = recipes.filter(r => r.product_id === cartItem.product.id);
-              for (const recipe of itemRecipes) {
-                const isBaseRecipe = !recipe.variant_name;
-                let matchesVariant = false;
-                if (!isBaseRecipe && cartItem.variantChoices) {
-                  const selectedOptions = cartItem.variantChoices[recipe.variant_name] || [];
-                  if (selectedOptions.includes(recipe.choice_name)) {
-                    matchesVariant = true;
-                  }
-                }
-                
-                if (isBaseRecipe || matchesVariant) {
-                  if (!stockDeductions[recipe.stock_id]) stockDeductions[recipe.stock_id] = 0;
-                  stockDeductions[recipe.stock_id] += (recipe.quantity_required * cartItem.quantity);
-                }
-              }
-            }
+      if (!isBackground) {
+        setIsProcessingCheckout(false);
+        setCheckoutStep('success');
+      }
+    };
 
-            const stockIds = Object.keys(stockDeductions);
-            const { data: currentStocks } = await supabase.from('stocks').select('id, quantity').in('id', stockIds);
-            
-            if (currentStocks) {
-              for (const stock of currentStocks) {
-                const amountToDeduct = stockDeductions[stock.id];
-                if (amountToDeduct) {
-                  const newQuantity = Math.max(0, stock.quantity - amountToDeduct);
-                  await supabase.from('stocks').update({ quantity: newQuantity, last_updated: new Date().toISOString() }).eq('id', stock.id);
-                }
-              }
-            }
-          }
-        }
-      };
-
-      // Wrap in 5-second timeout to prevent UI freezing on bad network
-      await Promise.race([
-        dbOperations(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout: Jaringan lambat")), 5000))
-      ]);
-
-    } catch (error: any) {
-      console.warn("Failed to sync to Supabase, saving to offline queue:", error);
-      // Offline Queueing Logic
-      const offlineQueue = JSON.parse(localStorage.getItem('offline_transactions') || '[]');
-      offlineQueue.push({ transaction, itemsToInsert });
-      localStorage.setItem('offline_transactions', JSON.stringify(offlineQueue));
+    if (isBackground) {
+      executeDB(); // Run immediately in background without awaiting
+    } else {
+      await executeDB();
     }
-
-    setIsProcessingCheckout(false);
-    setCheckoutStep('success');
   };
 
   const completeAndNewOrder = async () => {
@@ -1013,15 +1030,15 @@ export default function POSPage() {
               </div>
               {/* Action Buttons */}
               <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                <Button
-                  variant="outline"
-                  className="h-14 w-14 sm:w-auto px-0 sm:px-6 border-rose-500/20 text-rose-500 hover:bg-rose-500 hover:text-zinc-950 transition-all duration-300 gap-2 rounded-2xl text-sm font-bold bg-rose-500/10 hover:border-rose-500 shadow-lg shadow-rose-500/5 flex items-center justify-center"
-                  onClick={() => router.push('/pos/quick')}
+                <Link
+                  href="/pos/quick"
+                  prefetch={true}
+                  className="h-14 w-14 sm:w-auto px-0 sm:px-6 border border-rose-500/20 text-rose-500 hover:bg-rose-500 hover:text-zinc-950 transition-all duration-300 gap-2 rounded-2xl text-sm font-bold bg-rose-500/10 hover:border-rose-500 shadow-lg shadow-rose-500/5 flex items-center justify-center"
                   title="MAMA MODE — One Click POS"
                 >
                   <Heart size={20} className={activeShift ? "animate-pulse fill-rose-500 text-rose-500" : ""} />
                   <span className="hidden sm:inline">MAMA MODE</span>
-                </Button>
+                </Link>
 
                 {/* Desktop Cart Toggle */}
                 <Button variant="outline" className="hidden md:flex items-center gap-2 h-14 rounded-2xl border-white/10 bg-zinc-900/50 hover:bg-zinc-800 hover:border-primary/50 transition-all duration-300" onClick={() => setIsCartOpen(!isCartOpen)}>
@@ -1057,12 +1074,6 @@ export default function POSPage() {
 
         {/* Product Grid */}
         <div className="flex-1 p-4 md:p-6 overflow-y-auto">
-          {isPageLoading || isLoadingData ? (
-            <div className="h-64 flex flex-col items-center justify-center text-muted-foreground gap-4">
-              <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-              <p className="text-sm font-medium animate-pulse">Menyiapkan menu & memeriksa kasir...</p>
-            </div>
-          ) : (
             <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 pb-20 md:pb-0">
               {filteredProducts.map(product => {
                 const cartItem = cart.find(c => c.product.id === product.id);
@@ -1119,7 +1130,6 @@ export default function POSPage() {
                 );
               })}
             </div>
-          )}
         </div>
       </div>
 
@@ -1408,7 +1418,7 @@ export default function POSPage() {
       </Dialog>
 
       {/* Checkout Step Dialog */}
-      <Dialog open={checkoutStep !== 'none'} onOpenChange={(open) => !open && setCheckoutStep('none')}>
+      <Dialog open={checkoutStep === 'method' || checkoutStep === 'confirm'} onOpenChange={(open) => !open && setCheckoutStep('none')}>
         <DialogContent className="bg-card border-border sm:max-w-md max-h-[90vh] overflow-y-auto">
           {checkoutStep === 'method' && (
             <>
@@ -1418,7 +1428,10 @@ export default function POSPage() {
               </DialogHeader>
               <div className="grid grid-cols-3 gap-3 py-4">
                 <button 
-                  onClick={() => setPaymentMethod('QRIS')}
+                  onClick={() => {
+                    setPaymentMethod('QRIS');
+                    finalizeTransaction('QRIS', true);
+                  }}
                   className="p-3 sm:p-4 rounded-2xl bg-background border border-border hover:border-primary flex flex-col items-center justify-center gap-2 transition-all group"
                 >
                   <div className="p-2 sm:p-3 bg-blue-500/10 text-blue-500 rounded-xl group-hover:scale-110 transition-transform">
@@ -1617,70 +1630,42 @@ export default function POSPage() {
               </DialogFooter>
             </>
           )}
-
-          {checkoutStep === 'success' && (
-            <div className="py-6 text-center space-y-5">
-              <div className="relative inline-block">
-                <div className="absolute inset-0 rounded-full bg-green-500/20 animate-ping" />
-                <CheckCircle2 size={64} className="text-green-500 relative z-10 mx-auto" />
-              </div>
-
-              <div>
-                <DialogTitle className="text-2xl font-bold">Pembayaran Berhasil!</DialogTitle>
-                <p className="text-xs text-muted-foreground mt-1">Order <span className="font-mono font-bold text-foreground">#{orderNumber}</span> telah dicatat ke sistem.</p>
-                {!navigator.onLine && (
-                  <p className="text-[10px] text-amber-500 font-bold mt-2 bg-amber-500/10 py-1 px-2 rounded-md inline-block">
-                    Offline Mode: Disimpan secara lokal
-                  </p>
-                )}
-              </div>
-
-              {isAllQuickFood ? (
-                <div className="bg-emerald-500/10 border border-emerald-500/20 p-3.5 rounded-xl text-left flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-emerald-500 text-white rounded-lg text-xs font-bold">✓</div>
-                    <div>
-                      <p className="text-xs font-bold text-emerald-400">Langsung Serahkan ke Customer</p>
-                      <p className="text-[11px] text-muted-foreground">Pesanan siap, tidak perlu antrean</p>
-                    </div>
-                  </div>
-                  <span className="text-xs font-semibold text-primary">Rp {total.toLocaleString('id-ID')}</span>
-                </div>
-              ) : (
-                <div className="bg-amber-500/10 border border-amber-500/20 p-3.5 rounded-xl text-left flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-amber-500 text-white rounded-lg text-xs font-bold animate-pulse">⏳</div>
-                    <div>
-                      <p className="text-xs font-bold text-amber-700 dark:text-amber-400">Masuk Antrean Dapur</p>
-                      <p className="text-[11px] text-muted-foreground">Status: Sedang Dibuat (Preparing)</p>
-                    </div>
-                  </div>
-                  <span className="text-xs font-semibold text-primary">Rp {total.toLocaleString('id-ID')}</span>
-                </div>
-              )}
-
-              <div className="flex flex-col sm:flex-row gap-2 pt-2">
-                <Button 
-                  variant="outline"
-                  onClick={() => {
-                    completeAndNewOrder();
-                    router.push('/orders');
-                  }} 
-                  className="flex-1 text-xs border-primary/40 text-primary hover:bg-primary/5 font-semibold"
-                >
-                  Lihat Order List ➔
-                </Button>
-                <Button 
-                  onClick={completeAndNewOrder} 
-                  className="flex-1 bg-primary text-primary-foreground text-xs font-semibold"
-                >
-                  Pesanan Baru
-                </Button>
-              </div>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
+
+      {/* Success Overlay Fullscreen (Mirip MAMA MODE) */}
+      {checkoutStep === 'success' && (
+        <div 
+          className="fixed inset-0 z-[200] bg-zinc-950/90 backdrop-blur-xl flex flex-col items-center justify-center animate-in fade-in zoom-in-95 duration-200 cursor-pointer"
+          onClick={completeAndNewOrder}
+        >
+          <div className="w-24 h-24 bg-emerald-500/20 border-2 border-emerald-500/40 rounded-full flex items-center justify-center mb-5 shadow-[0_0_60px_rgba(16,185,129,0.4)]">
+            <CheckCircle2 size={48} className="text-emerald-500 drop-shadow-lg" />
+          </div>
+          <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight mb-2">Selesai! ✅</h2>
+          <p className="text-emerald-400 font-medium text-lg">Pesanan #{orderNumber} berhasil disimpan</p>
+          
+          <div className="mt-6 flex flex-col items-center gap-3">
+            {isAllQuickFood ? (
+              <div className="bg-emerald-500/10 border border-emerald-500/20 px-4 py-2 rounded-full text-center">
+                <p className="text-sm font-bold text-emerald-400">Langsung Serahkan ke Customer</p>
+              </div>
+            ) : (
+              <div className="bg-amber-500/10 border border-amber-500/20 px-4 py-2 rounded-full text-center">
+                <p className="text-sm font-bold text-amber-500">⏳ Masuk Antrean Dapur</p>
+              </div>
+            )}
+          </div>
+          
+          {!navigator.onLine && (
+            <p className="text-[10px] text-amber-500 font-bold mt-4 bg-amber-500/10 py-1 px-3 rounded-md">
+              Offline Mode: Disimpan secara lokal
+            </p>
+          )}
+
+          <p className="text-xs text-zinc-500 mt-10 animate-pulse bg-zinc-900/50 px-4 py-2 rounded-full border border-white/5">Ketuk dimana saja untuk lanjut</p>
+        </div>
+      )}
 
       {/* Start Shift Dialog */}
       <Dialog 
