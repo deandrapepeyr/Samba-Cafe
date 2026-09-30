@@ -836,7 +836,7 @@ export default function POSPage() {
 
   const getQuickCashSuggestions = (totalAmount: number) => {
     console.log("Computing quick cash suggestions for:", totalAmount);
-    const defaults = [10000, 15000, 20000, 30000, 50000, 100000];
+    const defaults = [5000, 10000, 15000, 20000, 30000, 50000, 100000];
     const suggestions = [totalAmount];
     defaults.forEach(d => {
       if (d > totalAmount && !suggestions.includes(d)) {
@@ -1238,7 +1238,7 @@ export default function POSPage() {
 
         {/* Product Grid */}
         <div className="flex-1 p-4 md:p-6 overflow-y-auto">
-            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 pb-20 md:pb-0">
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 pb-32">
               {filteredProducts.map(product => {
                 const cartItem = cart.find(c => c.product.id === product.id);
                 const qtyInCart = cartItem ? cartItem.quantity : 0;
