@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { getCustomerSession, createCustomerSession, CustomerSession } from '@/lib/customerSession';
-import { Search, Plus, Minus, ShoppingCart, ArrowLeft, ArrowRight, CheckCircle2, ChevronRight, X } from 'lucide-react';
+import { Search, Plus, Minus, ShoppingCart, ArrowLeft, ArrowRight, CheckCircle2, ChevronRight, X, BellRing } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Product, Category, ProductVariant } from '@/app/pos/page'; // reuse types
@@ -42,6 +42,7 @@ export default function CustomerOrderPage() {
   
   // Checkout State
   const [isProcessing, setIsProcessing] = useState(false);
+  const [hasReadyOrder, setHasReadyOrder] = useState(false);
 
   // Variant Modal
   const [isOptionsModalOpen, setIsOptionsModalOpen] = useState(false);
@@ -91,6 +92,36 @@ export default function CustomerOrderPage() {
     }
     loadMenu();
   }, []);
+
+  useEffect(() => {
+    if (!session?.sessionId) return;
+    
+    const checkReadyOrders = async () => {
+      const { data } = await supabase
+        .from('transactions')
+        .select('status')
+        .eq('customer_session_id', session.sessionId)
+        .eq('status', 'ready');
+      setHasReadyOrder(data && data.length > 0);
+    };
+    
+    checkReadyOrders();
+
+    const channel = supabase
+      .channel(`menu_tracking_${session.sessionId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'transactions' },
+        (payload) => {
+          checkReadyOrders();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session?.sessionId]);
 
   const handleStartOrdering = (e: React.FormEvent) => {
     e.preventDefault();
@@ -293,13 +324,17 @@ export default function CustomerOrderPage() {
               <Button 
                 variant="ghost" 
                 onClick={() => router.push('/order/track')} 
-                className="rounded-full bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 text-amber-500 hover:bg-amber-500/20 hover:border-amber-500/50 text-[11px] font-bold px-3.5 py-1.5 h-auto flex items-center gap-2 shadow-[0_0_15px_rgba(245,158,11,0.15)] transition-all"
+                className={`rounded-full border text-[11px] font-bold px-3.5 py-1.5 h-auto flex items-center gap-2 transition-all ${
+                  hasReadyOrder 
+                    ? 'bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border-emerald-500/50 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)] animate-pulse'
+                    : 'bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/30 text-amber-500 hover:bg-amber-500/20 hover:border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.15)]'
+                }`}
               >
                 <span className="relative flex h-2 w-2 shrink-0">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${hasReadyOrder ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
+                  <span className={`relative inline-flex rounded-full h-2 w-2 ${hasReadyOrder ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
                 </span>
-                Cek Status Order
+                {hasReadyOrder ? 'Pesanan Siap! !' : 'Cek Status Order'}
               </Button>
             )}
             <Button variant="ghost" size="icon" onClick={() => setView('cart')} className="relative rounded-full bg-white/5 hover:bg-white/10 shrink-0">
@@ -320,6 +355,25 @@ export default function CustomerOrderPage() {
 
       {view === 'menu' && (
         <div className="flex-1 overflow-y-auto">
+          {hasReadyOrder && (
+            <div className="px-4 pt-4 pb-2">
+              <div 
+                onClick={() => router.push('/order/track')}
+                className="bg-gradient-to-r from-emerald-500/10 to-emerald-500/5 border border-emerald-500/30 rounded-2xl p-4 flex items-center justify-between cursor-pointer shadow-[0_0_20px_rgba(16,185,129,0.15)] animate-pulse"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-500 shrink-0">
+                    <BellRing size={20} className="animate-bounce" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-emerald-400 text-sm">Pesananmu Sudah Siap!</h3>
+                    <p className="text-zinc-400 text-xs mt-0.5">Silakan ambil di kasir ya.</p>
+                  </div>
+                </div>
+                <ChevronRight className="text-emerald-500" size={20} />
+              </div>
+            </div>
+          )}
           {/* Search */}
           <div className="px-4 py-3">
             <div className="relative group">
