@@ -95,14 +95,16 @@ export default function OrderTrackingPage() {
     { label: 'Selesai', active: isCompleted, completed: isCompleted }
   ];
 
+  const isPending = order.status === 'pending';
+  
   const currentStatusLabel = 
     isCompleted ? 'Pesanan Selesai' :
     isReady ? 'Pesanan Siap Diambil' :
     isPreparing ? 'Pesanan Sedang Disiapkan' :
+    isPending ? 'Menunggu Konfirmasi Kasir' :
     isPaid ? 'Pembayaran Berhasil' :
-    isWaitingPayment ? 'Menunggu Konfirmasi Kasir' :
     isRejected ? 'Pembayaran Ditolak' :
-    'Menunggu Pembayaran';
+    'Pesanan Diproses';
 
   return (
     <div className="min-h-[100dvh] bg-[#0a0a0a] text-white flex flex-col pb-12">
@@ -128,9 +130,10 @@ export default function OrderTrackingPage() {
             <p className="text-xs opacity-80">
               {isReady && 'Silakan ambil pesanan Anda di kasir.'}
               {isPreparing && 'Koki kami sedang membuat pesanan Anda dengan penuh cinta.'}
+              {isPending && 'Pesanan Anda sudah masuk dan sedang menunggu kasir untuk menerimanya.'}
               {isWaitingPayment && 'Kasir sedang mengecek pembayaran Anda.'}
               {isRejected && 'Pembayaran tidak dapat diverifikasi. Silakan hubungi kasir atau coba lagi.'}
-              {order.payment_status === 'UNPAID' && order.method === 'Bayar Nanti' && 'Silakan lakukan pembayaran tunai di kasir.'}
+              {order.payment_status === 'UNPAID' && order.method === 'Bayar Nanti' && !isPending && 'Silakan lakukan pembayaran tunai di kasir.'}
             </p>
           </div>
         </div>
