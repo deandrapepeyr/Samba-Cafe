@@ -219,10 +219,10 @@ export default function OrdersPage() {
         )
         .subscribe();
 
-      // Fallback polling every 5s
+      // Fallback polling every 3s
       const pollInterval = setInterval(() => {
         fetchOrders(false);
-      }, 30000);
+      }, 3000);
 
       return () => {
         supabase.removeChannel(channel);

@@ -74,8 +74,13 @@ export default function OrderTrackingPage() {
       )
       .subscribe();
 
+    const pollInterval = setInterval(() => {
+      fetchOrders();
+    }, 3000);
+
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(pollInterval);
     };
   }, [router]);
 
