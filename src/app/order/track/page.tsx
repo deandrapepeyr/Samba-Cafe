@@ -4,14 +4,17 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { getCustomerSession } from '@/lib/customerSession';
-import { CheckCircle2, Circle, QrCode, Clock, RefreshCw, AlertCircle, ChevronLeft } from 'lucide-react';
+import { CheckCircle2, Circle, QrCode, Clock, RefreshCw, AlertCircle, ChevronLeft, BellRing } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 export default function OrderTrackingPage() {
   const router = useRouter();
   const [orders, setOrders] = useState<any[]>([]);
   const [session, setSession] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasNotifiedReady, setHasNotifiedReady] = useState(false);
+  const [showReadyModal, setShowReadyModal] = useState(false);
 
   useEffect(() => {
     const currentSession = getCustomerSession();
@@ -60,6 +63,37 @@ export default function OrderTrackingPage() {
     };
   }, [router]);
 
+  const isReady = orders.some(o => o.status === 'ready');
+
+  useEffect(() => {
+    if (isReady && !hasNotifiedReady) {
+      setHasNotifiedReady(true);
+      setShowReadyModal(true);
+      
+      try {
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.15); // A5
+        osc.frequency.setValueAtTime(1174.66, audioCtx.currentTime + 0.3); // D6
+        
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.6);
+        
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.6);
+      } catch (e) {
+        console.log('Audio playback error', e);
+      }
+    }
+  }, [isReady, hasNotifiedReady]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -80,7 +114,7 @@ export default function OrderTrackingPage() {
   
   const isPending = orders.some(o => o.status === 'pending');
   const isCompleted = orders.every(o => o.status.startsWith('completed'));
-  const isReady = orders.some(o => o.status === 'ready');
+  // isReady is defined above
   const isPreparing = orders.some(o => o.status === 'preparing');
 
   const steps = [
@@ -204,6 +238,24 @@ export default function OrderTrackingPage() {
           Pesan Menu Lain
         </Button>
       </div>
+      {/* Ready Notification Modal */}
+      <Dialog open={showReadyModal} onOpenChange={setShowReadyModal}>
+        <DialogContent className="sm:max-w-sm bg-zinc-900 border-white/10 text-white rounded-[32px] p-6 text-center shadow-2xl">
+          <div className="w-24 h-24 bg-emerald-500/20 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce shadow-[0_0_40px_rgba(16,185,129,0.3)] border-4 border-emerald-500/30">
+            <BellRing size={48} />
+          </div>
+          <DialogTitle className="text-2xl font-black mb-3 leading-tight">Yeay!<br/>Pesanan Siap 🎉</DialogTitle>
+          <DialogDescription className="text-zinc-400 text-[15px] mb-8 leading-relaxed">
+            Makanan & minuman kamu sudah siap nih. Silakan ambil langsung di meja kasir ya!
+          </DialogDescription>
+          <Button 
+            onClick={() => setShowReadyModal(false)}
+            className="w-full h-14 rounded-2xl text-base font-bold bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black shadow-lg shadow-amber-500/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+          >
+            Oke, Otw Ambil! 🏃
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
