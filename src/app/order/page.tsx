@@ -165,9 +165,9 @@ export default function CustomerOrderPage() {
         // Append to existing order
         targetOrderId = existingTx.id;
         
-        // Update total
+        // Update total and set status back to pending to notify cashier
         const newTotal = existingTx.total + cartTotal;
-        await supabase.from('transactions').update({ total: newTotal }).eq('id', targetOrderId);
+        await supabase.from('transactions').update({ total: newTotal, status: 'pending' }).eq('id', targetOrderId);
 
       } else {
         // Create new order

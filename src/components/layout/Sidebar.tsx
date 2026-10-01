@@ -96,6 +96,12 @@ export function Sidebar({ onLogoutClick, onLoginClick }: { onLogoutClick?: () =>
             playNotificationSound();
             setNewOrderNotification({ id: payload.new.id, name: payload.new.customer_name || 'Customer' });
             setTimeout(() => setNewOrderNotification(null), 10000);
+          } else if (payload.eventType === 'UPDATE' && payload.new?.order_source === 'CUSTOMER_QR' && payload.new?.status === 'pending') {
+            // Because Supabase 'old' payload might only contain the ID, we rely on the client setting it to pending
+            // If it becomes pending via update, it means new items were added!
+            playNotificationSound();
+            setNewOrderNotification({ id: payload.new.id, name: `${payload.new.customer_name || 'Customer'} (Tambahan)` });
+            setTimeout(() => setNewOrderNotification(null), 10000);
           }
         })
         .subscribe();
