@@ -43,6 +43,7 @@ export default function CustomerOrderPage() {
   // Checkout State
   const [isProcessing, setIsProcessing] = useState(false);
   const [hasReadyOrder, setHasReadyOrder] = useState(false);
+  const activeOrderIdsRef = useRef<string[]>([]);
 
   // Variant Modal
   const [isOptionsModalOpen, setIsOptionsModalOpen] = useState(false);
@@ -96,16 +97,19 @@ export default function CustomerOrderPage() {
   useEffect(() => {
     if (!session?.sessionId) return;
     
-    const checkReadyOrders = async () => {
+    const fetchOrders = async () => {
       const { data } = await supabase
         .from('transactions')
-        .select('status')
-        .eq('customer_session_id', session.sessionId)
-        .eq('status', 'ready');
-      setHasReadyOrder(data !== null && data.length > 0);
+        .select('id, status')
+        .eq('customer_session_id', session.sessionId);
+        
+      if (data) {
+        activeOrderIdsRef.current = data.map(d => d.id);
+        setHasReadyOrder(data.some(d => d.status === 'ready'));
+      }
     };
     
-    checkReadyOrders();
+    fetchOrders();
 
     const channel = supabase
       .channel(`menu_tracking_${session.sessionId}`)
@@ -113,15 +117,21 @@ export default function CustomerOrderPage() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'transactions' },
         (payload) => {
+          const rowId = (payload.new as any)?.id || (payload.old as any)?.id;
           const newRow = payload.new as any;
-          if (newRow && newRow.customer_session_id === session.sessionId) {
-            if (newRow.status === 'ready') {
-              setHasReadyOrder(true);
+          
+          if (rowId && activeOrderIdsRef.current.includes(rowId)) {
+            if (newRow && newRow.status) {
+              if (newRow.status === 'ready') {
+                setHasReadyOrder(true);
+              } else {
+                fetchOrders();
+              }
             } else {
-              checkReadyOrders();
+              fetchOrders();
             }
-          } else if (!newRow) {
-            checkReadyOrders();
+          } else if (newRow && newRow.customer_session_id === session.sessionId) {
+            fetchOrders();
           }
         }
       )
