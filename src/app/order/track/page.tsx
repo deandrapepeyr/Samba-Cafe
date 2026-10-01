@@ -15,6 +15,7 @@ export default function OrderTrackingPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [hasNotifiedReady, setHasNotifiedReady] = useState(false);
   const [showReadyModal, setShowReadyModal] = useState(false);
+  const [queueCount, setQueueCount] = useState<number | null>(null);
 
   useEffect(() => {
     const currentSession = getCustomerSession();
@@ -33,6 +34,16 @@ export default function OrderTrackingPage() {
         
       if (data && data.length > 0) {
         setOrders(data);
+        
+        // Count active queue ahead of this order
+        const firstOrder = data[0];
+        const { count } = await supabase
+          .from('transactions')
+          .select('*', { count: 'exact', head: true })
+          .in('status', ['pending', 'preparing'])
+          .lt('created_at', firstOrder.created_at);
+          
+        setQueueCount(count);
       } else {
         router.replace('/order');
       }
@@ -49,7 +60,12 @@ export default function OrderTrackingPage() {
         (payload) => {
           setOrders(prev => {
             const exists = prev.some(o => o.id === (payload.new as any)?.id || o.id === (payload.old as any)?.id);
-            if (exists || (payload.new && (payload.new as any).customer_session_id === currentSession.sessionId)) {
+            if (
+              exists || 
+              (payload.new && (payload.new as any).customer_session_id === currentSession.sessionId) ||
+              (payload.old && ['pending', 'preparing'].includes((payload.old as any).status)) ||
+              (payload.new && ['pending', 'preparing'].includes((payload.new as any).status))
+            ) {
               fetchOrders();
             }
             return prev;
@@ -117,6 +133,15 @@ export default function OrderTrackingPage() {
   // isReady is defined above
   const isPreparing = orders.some(o => o.status === 'preparing');
 
+  let queueNumber = '-';
+  if (orders.length > 0) {
+    const idParts = orders[0].id.split('_');
+    const seq = parseInt(idParts[idParts.length - 1], 10);
+    if (!isNaN(seq)) {
+      queueNumber = seq.toString();
+    }
+  }
+
   const steps = [
     { label: 'Pesanan Diterima', active: true, completed: true },
     { label: 'Sedang Disiapkan', active: isPreparing || isReady || isCompleted, completed: isReady || isCompleted },
@@ -146,6 +171,28 @@ export default function OrderTrackingPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 w-full max-w-md mx-auto pb-24">
+        
+        {/* Queue Info Card */}
+        {(!isReady && !isCompleted && !isRejected) && (
+          <div className="bg-gradient-to-br from-zinc-900 to-black border border-white/10 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
+            <div className="absolute -right-6 -top-6 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl"></div>
+            <div className="flex justify-between items-center relative z-10">
+              <div>
+                <p className="text-sm font-bold text-zinc-400 mb-1">Nomor Antrean</p>
+                <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500">
+                  {queueNumber}
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-xs font-medium text-zinc-500 mb-1">Ada di depanmu</p>
+                <div className="text-3xl font-bold text-white">
+                  {queueCount !== null ? queueCount : '-'} <span className="text-lg text-zinc-400 font-medium">antrean</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Real-time Status Banner */}
         <div className={`p-4 rounded-2xl border flex items-start gap-4 shadow-xl ${
           isReady ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400 shadow-emerald-500/10' :
