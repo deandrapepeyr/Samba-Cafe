@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { Home, LayoutDashboard, Settings, UserCircle, LogOut, LogIn, Coffee, Package, FileText, ChevronLeft, ChevronRight, Loader2, ChefHat, BookOpen, Lock, QrCode } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { Home, LayoutDashboard, Settings, UserCircle, LogOut, LogIn, Coffee, Package, FileText, ChevronLeft, ChevronRight, Loader2, ChefHat, BookOpen, Lock, QrCode, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -13,10 +13,12 @@ import { Button } from '@/components/ui/button';
 
 export function Sidebar({ onLogoutClick, onLoginClick }: { onLogoutClick?: () => void; onLoginClick?: () => void } = {}) {
   const pathname = usePathname();
+  const router = useRouter();
   const { role, userName, logout, isLoading, login } = useAuth();
   const [isExpanded, setIsExpanded] = useState(true); // Always true on first render to match SSR
   const [mounted, setMounted] = useState(false);
   const [activeOrdersCount, setActiveOrdersCount] = useState<number>(0);
+  const [newOrderNotification, setNewOrderNotification] = useState<{id: string, name: string} | null>(null);
 
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState<{name: string; role: any} | null>(null);
@@ -61,11 +63,40 @@ export function Sidebar({ onLogoutClick, onLoginClick }: { onLogoutClick?: () =>
     if (mounted && role) {
       fetchActiveCount();
       
+      const playNotificationSound = () => {
+        try {
+          const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+          const playNote = (frequency: number, startTime: number, duration: number) => {
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(frequency, startTime);
+            gainNode.gain.setValueAtTime(0, startTime);
+            gainNode.gain.linearRampToValueAtTime(0.3, startTime + 0.05);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.start(startTime);
+            oscillator.stop(startTime + duration);
+          };
+          const now = audioCtx.currentTime;
+          playNote(523.25, now, 0.4); // C5
+          playNote(659.25, now + 0.15, 0.6); // E5
+        } catch (e) {
+          console.log("Audio not supported", e);
+        }
+      };
+
       const channelId = `sidebar_orders_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const channel = supabase
         .channel(channelId)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => {
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, (payload) => {
           fetchActiveCount();
+          if (payload.eventType === 'INSERT' && payload.new?.order_source === 'CUSTOMER_QR') {
+            playNotificationSound();
+            setNewOrderNotification({ id: payload.new.id, name: payload.new.customer_name || 'Customer' });
+            setTimeout(() => setNewOrderNotification(null), 10000);
+          }
         })
         .subscribe();
 
@@ -117,7 +148,7 @@ export function Sidebar({ onLogoutClick, onLoginClick }: { onLogoutClick?: () =>
     if (data) {
       const active = data.filter(t => {
         const st = (t.status || 'preparing').toLowerCase();
-        return st === 'preparing' || st === 'ready' || st === 'paid';
+        return st === 'pending' || st === 'preparing' || st === 'ready' || st === 'paid';
       }).length;
       setActiveOrdersCount(active);
     }
@@ -430,6 +461,37 @@ export function Sidebar({ onLogoutClick, onLoginClick }: { onLogoutClick?: () =>
         </DialogContent>
       </Dialog>
     </div>
+
+      {newOrderNotification && (
+        <div className="fixed bottom-6 right-6 z-[100] animate-in slide-in-from-bottom-5 fade-in duration-300">
+          <div className="bg-gradient-to-r from-amber-500 to-orange-500 p-1 rounded-2xl shadow-2xl shadow-amber-500/30">
+            <div className="bg-[#0a0a0a] px-5 py-4 rounded-xl flex items-center gap-4 border border-white/10">
+              <div className="w-10 h-10 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center shrink-0 animate-pulse">
+                <ChefHat size={20} />
+              </div>
+              <div className="flex-col pr-2">
+                <p className="text-[10px] text-amber-500 font-bold tracking-widest uppercase mb-0.5">Pesanan Baru (QR)</p>
+                <p className="text-sm text-white font-medium line-clamp-1">Nama/Meja: <span className="font-bold">{newOrderNotification.name}</span></p>
+              </div>
+              <Button 
+                onClick={() => {
+                  setNewOrderNotification(null);
+                  router.push('/orders');
+                }}
+                className="ml-auto bg-amber-500 hover:bg-amber-400 text-black font-bold h-9 rounded-lg px-4 text-xs shadow-lg shadow-amber-500/20"
+              >
+                Cek Pesanan
+              </Button>
+              <button 
+                onClick={() => setNewOrderNotification(null)}
+                className="absolute -top-2 -right-2 w-7 h-7 bg-zinc-800 text-white rounded-full flex items-center justify-center border border-white/10 hover:bg-red-500 transition-colors shadow-lg"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
