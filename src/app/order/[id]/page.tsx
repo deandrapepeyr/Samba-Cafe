@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { getCustomerSession } from '@/lib/customerSession';
-import { CheckCircle2, Circle, QrCode, Clock, RefreshCw, AlertCircle } from 'lucide-react';
+import { CheckCircle2, Circle, QrCode, Clock, RefreshCw, AlertCircle, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function OrderTrackingPage() {
@@ -101,14 +101,19 @@ export default function OrderTrackingPage() {
     'Pesanan Diproses';
 
   return (
-    <div className="min-h-[100dvh] bg-[#0a0a0a] text-white flex flex-col pb-12">
+    <div className="h-[100dvh] bg-[#0a0a0a] text-white flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="bg-zinc-900/50 border-b border-white/5 px-6 pt-12 pb-6">
-        <h1 className="text-xl font-black mb-1">Detail Pesanan</h1>
-        <p className="text-sm font-medium text-zinc-400">ID: {order.id.replace('order_', '')}</p>
+      <div className="bg-zinc-900/50 border-b border-white/5 px-6 pt-12 pb-6 flex items-center justify-between shrink-0">
+        <div>
+          <h1 className="text-xl font-black mb-1">Detail Pesanan</h1>
+          <p className="text-sm font-medium text-zinc-400">ID: {order.id.replace('order_', '')}</p>
+        </div>
+        <button onClick={() => router.push('/order')} className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors">
+          <ChevronLeft size={24} />
+        </button>
       </div>
 
-      <div className="flex-1 px-4 py-6 space-y-6 max-w-md mx-auto w-full">
+      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 w-full max-w-md mx-auto pb-24">
         {/* Real-time Status Banner */}
         <div className={`p-4 rounded-2xl border flex items-start gap-4 shadow-xl ${
           isReady ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400 shadow-emerald-500/10' :
