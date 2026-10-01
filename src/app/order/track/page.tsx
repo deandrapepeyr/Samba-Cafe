@@ -1,16 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { getCustomerSession } from '@/lib/customerSession';
 import { CheckCircle2, Circle, QrCode, Clock, RefreshCw, AlertCircle, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function OrderTrackingPage() {
-  const { id } = useParams();
   const router = useRouter();
-  const [order, setOrder] = useState<any>(null);
+  const [orders, setOrders] = useState<any[]>([]);
   const [session, setSession] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -22,31 +21,36 @@ export default function OrderTrackingPage() {
     }
     setSession(currentSession);
 
-    const fetchOrder = async () => {
+    const fetchOrders = async () => {
       const { data, error } = await supabase
         .from('transactions')
         .select('*, transaction_items(*)')
-        .eq('id', id)
-        .single();
+        .eq('customer_session_id', currentSession.sessionId)
+        .order('created_at', { ascending: true });
         
-      if (data && data.customer_session_id === currentSession.sessionId) {
-        setOrder(data);
+      if (data && data.length > 0) {
+        setOrders(data);
       } else {
         router.replace('/order');
       }
       setIsLoading(false);
     };
 
-    fetchOrder();
+    fetchOrders();
 
-    // Listen to real-time updates for this order
     const channel = supabase
-      .channel(`order_tracking_${id}`)
+      .channel(`order_tracking_${currentSession.sessionId}`)
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'transactions', filter: `id=eq.${id}` },
+        { event: '*', schema: 'public', table: 'transactions' },
         (payload) => {
-          setOrder((prev: any) => ({ ...prev, ...payload.new }));
+          setOrders(prev => {
+            const exists = prev.some(o => o.id === (payload.new as any)?.id || o.id === (payload.old as any)?.id);
+            if (exists || (payload.new && (payload.new as any).customer_session_id === currentSession.sessionId)) {
+              fetchOrders();
+            }
+            return prev;
+          });
         }
       )
       .subscribe();
@@ -54,9 +58,7 @@ export default function OrderTrackingPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [id, router]);
-
-
+  }, [router]);
 
   if (isLoading) {
     return (
@@ -66,21 +68,20 @@ export default function OrderTrackingPage() {
     );
   }
 
-  if (!order) return null;
+  if (orders.length === 0) return null;
 
-  // Derive logical stepper state
-  const isPaid = order.payment_status === 'PAID';
-  const isWaitingPayment = order.payment_status === 'WAITING_CONFIRMATION';
-  const isRejected = order.payment_status === 'PAYMENT_REJECTED';
-  const isPreparing = order.status === 'preparing';
-  const isReady = order.status === 'ready';
-  const isCompleted = order.status.startsWith('completed');
+  // Synthesize state from all orders
+  const allItems = orders.flatMap(o => o.transaction_items || []);
+  const grandTotal = orders.reduce((sum, o) => sum + (o.total || 0), 0);
+
+  const isPaid = orders.some(o => o.payment_status === 'PAID');
+  const isWaitingPayment = orders.some(o => o.payment_status === 'WAITING_CONFIRMATION');
+  const isRejected = orders.some(o => o.payment_status === 'PAYMENT_REJECTED');
   
-  // Status logic mapping to steps
-  // 1. Order Received (Always true if we have the order)
-  // 2. Payment Confirmed (True if PAID, or skipped if Open Bill?)
-  // Wait, open bill can be tracked without payment. 
-  // Let's adapt based on method.
+  const isPending = orders.some(o => o.status === 'pending');
+  const isCompleted = orders.every(o => o.status.startsWith('completed'));
+  const isReady = orders.some(o => o.status === 'ready');
+  const isPreparing = orders.some(o => o.status === 'preparing');
 
   const steps = [
     { label: 'Pesanan Diterima', active: true, completed: true },
@@ -89,24 +90,21 @@ export default function OrderTrackingPage() {
     { label: 'Selesai', active: isCompleted, completed: isCompleted }
   ];
 
-  const isPending = order.status === 'pending';
-  
-  const currentStatusLabel = 
-    isCompleted ? 'Pesanan Selesai' :
-    isReady ? 'Pesanan Siap Diambil' :
-    isPreparing ? 'Pesanan Sedang Disiapkan' :
-    isPending ? 'Menunggu Konfirmasi Kasir' :
-    isPaid ? 'Pembayaran Berhasil' :
-    isRejected ? 'Pembayaran Ditolak' :
-    'Pesanan Diproses';
+  let currentStatusLabel = 'Pesanan Diproses';
+  if (isCompleted) currentStatusLabel = 'Pesanan Selesai';
+  else if (isReady) currentStatusLabel = 'Pesanan Siap Diambil';
+  else if (isPending) currentStatusLabel = 'Menunggu Konfirmasi Kasir';
+  else if (isPreparing) currentStatusLabel = 'Pesanan Sedang Disiapkan';
+  else if (isPaid) currentStatusLabel = 'Pembayaran Berhasil';
+  else if (isRejected) currentStatusLabel = 'Pembayaran Ditolak';
 
   return (
     <div className="h-[100dvh] bg-[#0a0a0a] text-white flex flex-col overflow-hidden">
       {/* Header */}
       <div className="bg-zinc-900/50 border-b border-white/5 px-6 pt-12 pb-6 flex items-center justify-between shrink-0">
         <div>
-          <h1 className="text-xl font-black mb-1">Detail Pesanan</h1>
-          <p className="text-sm font-medium text-zinc-400">ID: {order.id.replace('order_', '')}</p>
+          <h1 className="text-xl font-black mb-1">Tagihan & Pesanan</h1>
+          <p className="text-sm font-medium text-zinc-400">Meja/Nama: {session.customerName}</p>
         </div>
         <button onClick={() => router.push('/order')} className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors">
           <ChevronLeft size={24} />
@@ -132,7 +130,7 @@ export default function OrderTrackingPage() {
               {isPending && 'Pesanan Anda sudah masuk dan sedang menunggu kasir untuk menerimanya.'}
               {isWaitingPayment && 'Kasir sedang mengecek pembayaran Anda.'}
               {isRejected && 'Pembayaran tidak dapat diverifikasi. Silakan hubungi kasir atau coba lagi.'}
-              {order.payment_status === 'UNPAID' && order.method === 'Bayar Nanti' && !isPending && 'Silakan lakukan pembayaran tunai di kasir.'}
+              {orders[0]?.method === 'Bayar Nanti' && !isPending && 'Silakan lakukan pembayaran tunai di kasir.'}
             </p>
           </div>
         </div>
@@ -181,7 +179,7 @@ export default function OrderTrackingPage() {
         {/* Items Summary */}
         <div className="bg-zinc-900/30 border border-white/5 rounded-2xl p-5 space-y-4">
           <h3 className="font-bold text-sm text-zinc-400 border-b border-white/5 pb-3">Daftar Item</h3>
-          {order.transaction_items?.map((item: any) => (
+          {allItems.map((item: any) => (
             <div key={item.id} className="flex items-start justify-between text-sm">
               <div>
                 <div className="font-bold text-zinc-200">
@@ -194,8 +192,8 @@ export default function OrderTrackingPage() {
             </div>
           ))}
           <div className="flex justify-between items-center pt-3 border-t border-white/5 text-base font-black">
-            <span>Total</span>
-            <span className="text-amber-500">Rp {order.total.toLocaleString('id-ID')}</span>
+            <span>Total Tagihan</span>
+            <span className="text-amber-500">Rp {grandTotal.toLocaleString('id-ID')}</span>
           </div>
         </div>
 

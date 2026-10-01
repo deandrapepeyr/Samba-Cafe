@@ -46,9 +46,9 @@ type Order = {
   total: number;
   cashier_name: string;
   customer_name: string | null;
-  status: string; // 'pending' | 'preparing' | 'ready' | 'completed' | 'Paid'
   order_source?: string;
   payment_status?: string;
+  customer_session_id?: string | null;
   completedAt?: Date;
   items: OrderItem[];
 };
@@ -161,6 +161,7 @@ export default function OrdersPage() {
           status: normStatus,
           order_source: tx.order_source || 'POS',
           payment_status: tx.payment_status,
+          customer_session_id: tx.customer_session_id,
           completedAt,
           items: items.map(item => ({
             name: item.product_name,
@@ -233,6 +234,35 @@ export default function OrdersPage() {
     setUpdatingId(orderId);
     localUpdatesRef.current[orderId] = Date.now();
     
+    // Find the order being updated
+    const targetOrder = orders.find(o => o.id === orderId);
+
+    // If accepting a CUSTOMER_QR order, check if we need to merge
+    if (newStatus === 'preparing' && targetOrder && targetOrder.order_source === 'CUSTOMER_QR' && targetOrder.customer_session_id) {
+      // Find an existing ACTIVE order for this same customer session
+      const existingOrder = orders.find(o => 
+        o.id !== orderId && 
+        o.customer_session_id === targetOrder.customer_session_id && 
+        (o.status === 'preparing' || o.status === 'ready' || o.status === 'pending')
+      );
+
+      if (existingOrder) {
+        // Merge! Move items to existingOrder
+        await supabase.from('transaction_items').update({ transaction_id: existingOrder.id }).eq('transaction_id', orderId);
+        
+        // Update total
+        const newTotal = existingOrder.total + targetOrder.total;
+        await supabase.from('transactions').update({ total: newTotal }).eq('id', existingOrder.id);
+        
+        // Delete the new merged order
+        await supabase.from('transactions').delete().eq('id', orderId);
+        
+        fetchOrders(false);
+        setUpdatingId(null);
+        return;
+      }
+    }
+
     // Optimistic UI update
     setOrders(prev => prev.map(o => o.id === orderId ? { 
       ...o, 
