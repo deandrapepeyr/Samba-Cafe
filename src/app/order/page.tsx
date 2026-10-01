@@ -113,7 +113,16 @@ export default function CustomerOrderPage() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'transactions' },
         (payload) => {
-          checkReadyOrders();
+          const newRow = payload.new as any;
+          if (newRow && newRow.customer_session_id === session.sessionId) {
+            if (newRow.status === 'ready') {
+              setHasReadyOrder(true);
+            } else {
+              checkReadyOrders();
+            }
+          } else if (!newRow) {
+            checkReadyOrders();
+          }
         }
       )
       .subscribe();
