@@ -30,6 +30,7 @@ export default function CustomerOrderPage() {
   // Data
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [topProducts, setTopProducts] = useState<Product[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   
   // Menu State
@@ -57,16 +58,32 @@ export default function CustomerOrderPage() {
 
     // Load Menu
     async function loadMenu() {
-      const [categoriesRes, productsRes] = await Promise.all([
+      let topProductsList: Product[] = [];
+      const [categoriesRes, productsRes, popularItemsRes] = await Promise.all([
         supabase.from('categories').select('*'),
-        supabase.from('products').select('*').eq('is_available', true)
+        supabase.from('products').select('*'),
+        supabase.from('transaction_items').select('product_name')
       ]);
       
       if (categoriesRes.data) {
         setCategories([{ id: '1', name: 'All Menu' }, ...categoriesRes.data]);
       }
       if (productsRes.data) {
-        setProducts(productsRes.data.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
+        const sortedProducts = productsRes.data.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+        setProducts(sortedProducts);
+        
+        if (popularItemsRes.data && popularItemsRes.data.length > 0) {
+          const counts: Record<string, number> = {};
+          popularItemsRes.data.forEach(item => {
+            counts[item.product_name] = (counts[item.product_name] || 0) + 1;
+          });
+          const sortedNames = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(e => e[0]);
+          topProductsList = sortedProducts.filter(p => sortedNames.includes(p.name)).sort((a, b) => sortedNames.indexOf(a.name) - sortedNames.indexOf(b.name)).slice(0, 5);
+        }
+        if (topProductsList.length === 0) {
+          topProductsList = sortedProducts.filter(p => p.is_available).slice(0, 5);
+        }
+        setTopProducts(topProductsList);
       }
       setIsLoadingData(false);
     }
@@ -82,6 +99,7 @@ export default function CustomerOrderPage() {
   };
 
   const handleProductClick = (product: Product) => {
+    if (!product.is_available) return;
     if (product.variants && product.variants.length > 0) {
       setSelectedProductForOptions(product);
       const initialChoices: Record<string, string[]> = {};
@@ -300,15 +318,15 @@ export default function CustomerOrderPage() {
 
           {/* Categories */}
           {searchQuery.trim() === '' && (
-            <div className="px-4 py-2 flex gap-2 overflow-x-auto snap-x scrollbar-none pb-2">
+            <div className="px-4 py-3 flex gap-3 overflow-x-auto snap-x scrollbar-none pb-3 mb-2">
               {categories.map(cat => (
                 <button
                   key={cat.id}
                   onClick={() => setActiveCategory(cat.id)}
-                  className={`snap-start shrink-0 h-9 px-4 rounded-full text-[13px] font-bold transition-all ${
+                  className={`snap-start shrink-0 h-10 px-5 rounded-2xl text-[13px] font-bold transition-all flex items-center justify-center border ${
                     activeCategory === cat.id 
-                      ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20' 
-                      : 'bg-zinc-900 text-zinc-400 border border-white/5 hover:bg-zinc-800'
+                      ? 'bg-amber-500 text-black border-amber-500 shadow-lg shadow-amber-500/20' 
+                      : 'bg-zinc-900/50 text-zinc-400 border-white/5 hover:bg-zinc-800'
                   }`}
                 >
                   {cat.name}
@@ -321,12 +339,71 @@ export default function CustomerOrderPage() {
           {isLoadingData ? (
             <div className="p-8 text-center text-zinc-500 text-sm">Memuat menu...</div>
           ) : (
-            <div className="grid grid-cols-2 gap-3 px-4 pt-2 pb-32">
+            <div className="pb-32">
+              {/* Best Sellers Carousel */}
+              {searchQuery.trim() === '' && activeCategory === '1' && topProducts.length > 0 && (
+                <div className="mb-6">
+                  <div className="px-4 mb-3 flex items-center justify-between">
+                    <h2 className="text-lg font-black text-white flex items-center gap-2">
+                      <span className="text-amber-500">🔥</span> Paling Banyak Dipesan
+                    </h2>
+                  </div>
+                  <div className="px-4 flex gap-4 overflow-x-auto snap-x scrollbar-none pb-4">
+                    {topProducts.map(product => (
+                      <div 
+                        key={`top-${product.id}`}
+                        onClick={() => handleProductClick(product)}
+                        className={`snap-center shrink-0 w-[240px] bg-zinc-900/40 border border-white/5 rounded-3xl overflow-hidden flex flex-col transition-all ${
+                          product.is_available ? 'active:scale-95 cursor-pointer hover:border-amber-500/30' : 'opacity-50 grayscale cursor-not-allowed'
+                        }`}
+                      >
+                        <div className="h-[160px] bg-zinc-800/50 relative overflow-hidden flex items-center justify-center">
+                          {product.image_url ? (
+                            <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" loading="lazy" />
+                          ) : (
+                            <span className="text-zinc-700 font-bold text-2xl uppercase">{product.name.charAt(0)}</span>
+                          )}
+                          <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                            <span className="text-[10px] font-bold text-white uppercase tracking-wider">Best Seller</span>
+                          </div>
+                          {!product.is_available && (
+                            <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-[2px]">
+                              <div className="bg-zinc-900 text-white text-xs font-bold px-3 py-1.5 rounded-full border border-white/10">
+                                HABIS
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="p-4 flex flex-col gap-2">
+                          <h3 className="font-bold text-base leading-snug line-clamp-2 text-white">{product.name}</h3>
+                          <div className="flex items-center justify-between mt-1">
+                            <span className="font-black text-amber-500 text-base">Rp{product.price.toLocaleString('id-ID')}</span>
+                            {product.is_available && (
+                              <button className="w-8 h-8 rounded-full bg-amber-500 text-black flex items-center justify-center font-bold shadow-lg shadow-amber-500/20">
+                                <Plus size={16} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* All Menu Section Title */}
+              <div className="px-4 mb-3">
+                <h2 className="text-lg font-black text-white">Semua Menu</h2>
+              </div>
+              <div className="grid grid-cols-2 gap-3 px-4 pt-2">
               {filteredProducts.map(product => (
                 <div 
                   key={product.id}
                   onClick={() => handleProductClick(product)}
-                  className="bg-zinc-900/40 border border-white/5 rounded-2xl overflow-hidden flex flex-col transition-all active:scale-95"
+                  className={`bg-zinc-900/40 border border-white/5 rounded-2xl overflow-hidden flex flex-col transition-all ${
+                    product.is_available ? 'active:scale-95 cursor-pointer' : 'opacity-50 grayscale cursor-not-allowed'
+                  }`}
                 >
                   <div className="aspect-square bg-zinc-800/50 relative overflow-hidden flex items-center justify-center">
                     {product.image_url ? (
@@ -334,14 +411,23 @@ export default function CustomerOrderPage() {
                     ) : (
                       <span className="text-zinc-700 font-bold text-xs uppercase">{product.name.charAt(0)}</span>
                     )}
+                    {!product.is_available && (
+                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-[2px]">
+                        <div className="bg-zinc-900 text-white text-xs font-bold px-3 py-1.5 rounded-full border border-white/10">
+                          HABIS
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="p-3 flex flex-col flex-1 justify-between gap-2">
                     <h3 className="font-semibold text-[13px] leading-snug line-clamp-2">{product.name}</h3>
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-amber-500 text-sm">Rp{product.price.toLocaleString('id-ID')}</span>
-                      <button className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center font-bold">
-                        <Plus size={14} />
-                      </button>
+                      {product.is_available && (
+                        <button className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center font-bold">
+                          <Plus size={14} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
