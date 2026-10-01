@@ -45,7 +45,7 @@ export default function OrderTrackingPage() {
           
         setQueueCount(count);
       } else {
-        router.replace('/order');
+        setOrders([]);
       }
       setIsLoading(false);
     };
@@ -118,7 +118,36 @@ export default function OrderTrackingPage() {
     );
   }
 
-  if (orders.length === 0) return null;
+  if (orders.length === 0) {
+    return (
+      <div className="h-[100dvh] bg-[#0a0a0a] text-white flex flex-col overflow-hidden">
+        <div className="bg-zinc-900/50 border-b border-white/5 px-6 pt-12 pb-6 flex items-center justify-between shrink-0">
+          <div>
+            <h1 className="text-xl font-black mb-1">Status Pesanan</h1>
+            <p className="text-sm font-medium text-zinc-400">Meja/Nama: {session.customerName}</p>
+          </div>
+          <button onClick={() => router.push('/order')} className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors">
+            <ChevronLeft size={24} />
+          </button>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center px-6 text-center space-y-4">
+          <div className="w-20 h-20 bg-zinc-900 rounded-full flex items-center justify-center text-zinc-600 mb-2">
+            <Clock size={40} />
+          </div>
+          <h2 className="text-xl font-bold">Belum Ada Pesanan Aktif</h2>
+          <p className="text-zinc-500 text-sm max-w-[250px] mx-auto">
+            Kamu belum membuat pesanan atau semua pesananmu sudah selesai.
+          </p>
+          <Button 
+            onClick={() => router.push('/order')}
+            className="mt-6 h-12 px-8 rounded-full bg-amber-500 hover:bg-amber-400 text-black font-bold"
+          >
+            Pesan Sekarang
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   // Synthesize state from all orders
   const allItems = orders.flatMap(o => o.transaction_items || []);

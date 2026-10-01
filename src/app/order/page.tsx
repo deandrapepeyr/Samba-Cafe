@@ -293,13 +293,13 @@ export default function CustomerOrderPage() {
               <Button 
                 variant="ghost" 
                 onClick={() => router.push('/order/track')} 
-                className="rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 hover:bg-amber-500/20 text-xs font-bold px-3 py-1.5 h-auto flex items-center gap-1.5"
+                className="rounded-full bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 text-amber-500 hover:bg-amber-500/20 hover:border-amber-500/50 text-[11px] font-bold px-3.5 py-1.5 h-auto flex items-center gap-2 shadow-[0_0_15px_rgba(245,158,11,0.15)] transition-all"
               >
-                <span className="relative flex h-2 w-2">
+                <span className="relative flex h-2 w-2 shrink-0">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
                 </span>
-                Status
+                Cek Status Order
               </Button>
             )}
             <Button variant="ghost" size="icon" onClick={() => setView('cart')} className="relative rounded-full bg-white/5 hover:bg-white/10 shrink-0">
