@@ -433,6 +433,7 @@ export default function CustomerOrderPage() {
                 </div>
               ))}
             </div>
+            </div>
           )}
 
           {/* Floating Cart Button */}
