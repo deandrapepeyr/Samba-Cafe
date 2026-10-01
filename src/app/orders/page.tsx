@@ -48,6 +48,7 @@ type Order = {
   customer_name: string | null;
   order_source?: string;
   payment_status?: string;
+  status: string;
   customer_session_id?: string | null;
   completedAt?: Date;
   items: OrderItem[];
