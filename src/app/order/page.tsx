@@ -288,14 +288,29 @@ export default function CustomerOrderPage() {
           </h1>
         </div>
         {view === 'menu' ? (
-          <Button variant="ghost" size="icon" onClick={() => setView('cart')} className="relative rounded-full bg-white/5 hover:bg-white/10 shrink-0">
-            <ShoppingCart size={20} />
-            {cartItemCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-amber-500 text-black text-[10px] font-black w-4 h-4 flex items-center justify-center rounded-full border border-[#0a0a0a]">
-                {cartItemCount}
-              </span>
+          <div className="flex items-center gap-2">
+            {session && (
+              <Button 
+                variant="ghost" 
+                onClick={() => router.push('/order/track')} 
+                className="rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 hover:bg-amber-500/20 text-xs font-bold px-3 py-1.5 h-auto flex items-center gap-1.5"
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                </span>
+                Status
+              </Button>
             )}
-          </Button>
+            <Button variant="ghost" size="icon" onClick={() => setView('cart')} className="relative rounded-full bg-white/5 hover:bg-white/10 shrink-0">
+              <ShoppingCart size={20} />
+              {cartItemCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-amber-500 text-black text-[10px] font-black w-4 h-4 flex items-center justify-center rounded-full border border-[#0a0a0a]">
+                  {cartItemCount}
+                </span>
+              )}
+            </Button>
+          </div>
         ) : (
           <Button variant="ghost" size="icon" onClick={() => setView('menu')} className="rounded-full bg-white/5 hover:bg-white/10 shrink-0">
             <X size={20} />
