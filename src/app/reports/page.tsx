@@ -16,6 +16,7 @@ type Transaction = {
   total: number;
   status: string;
   customer_name: string;
+  order_source?: string;
   transaction_items?: { product_name: string; price: number; quantity: number }[];
 };
 
@@ -26,6 +27,8 @@ type ChartDataPoint = {
   pesanan: number;
   qris: number;
   cash: number;
+  customerQr: number;
+  pos: number;
   pendapatanKafe: number;
   uangTitipan: number;
   kasMasuk: number;
@@ -70,7 +73,7 @@ export default function ReportsPage() {
     
     const { data: txData } = await supabase
       .from('transactions')
-      .select('id, created_at, method, total, status, customer_name, transaction_items(product_name, price, quantity)')
+      .select('id, created_at, method, total, status, customer_name, order_source, transaction_items(product_name, price, quantity)')
       .neq('status', 'cancelled')
       .order('created_at', { ascending: false });
 
@@ -214,6 +217,12 @@ export default function ReportsPage() {
       if (tx.method === 'QRIS') dataMap[key].qris += tx.total;
       if (tx.method === 'Cash') dataMap[key].cash += tx.total;
 
+      if (tx.order_source === 'CUSTOMER_QR') {
+        dataMap[key].customerQr += tx.total;
+      } else {
+        dataMap[key].pos += tx.total;
+      }
+
       let txTitipan = 0;
       if (tx.transaction_items) {
         tx.transaction_items.forEach(item => {
@@ -233,7 +242,7 @@ export default function ReportsPage() {
   };
 
   const createEmptyPoint = (label: string, rawDate: string, isCurrent: boolean): ChartDataPoint => ({
-    label, rawDate, isCurrent, value: 0, pesanan: 0, qris: 0, cash: 0, pendapatanKafe: 0, uangTitipan: 0, kasMasuk: 0
+    label, rawDate, isCurrent, value: 0, pesanan: 0, qris: 0, cash: 0, customerQr: 0, pos: 0, pendapatanKafe: 0, uangTitipan: 0, kasMasuk: 0
   });
 
   const formatCompact = (value: number) => {
@@ -367,6 +376,10 @@ export default function ReportsPage() {
                               <div className="space-y-1.5 text-xs">
                                 <div className="flex justify-between"><span className="text-zinc-400">QRIS</span> <span className="font-medium">Rp {data.qris.toLocaleString('id-ID')}</span></div>
                                 <div className="flex justify-between"><span className="text-zinc-400">Cash</span> <span className="font-medium">Rp {data.cash.toLocaleString('id-ID')}</span></div>
+                                <div className="border-t border-white/10 my-1.5" />
+                                <div className="flex justify-between"><span className="text-zinc-400">POS</span> <span className="font-medium text-blue-400">Rp {data.pos.toLocaleString('id-ID')}</span></div>
+                                <div className="flex justify-between"><span className="text-zinc-400">Customer QR</span> <span className="font-medium text-purple-400">Rp {data.customerQr.toLocaleString('id-ID')}</span></div>
+                                <div className="border-t border-white/10 my-1.5" />
                                 <div className="flex justify-between"><span className="text-zinc-400">Kafe</span> <span className="font-medium text-emerald-400">Rp {data.pendapatanKafe.toLocaleString('id-ID')}</span></div>
                                 <div className="flex justify-between"><span className="text-zinc-400">Titipan</span> <span className="font-medium text-orange-400">Rp {data.uangTitipan.toLocaleString('id-ID')}</span></div>
                                 {data.kasMasuk > 0 && <div className="flex justify-between"><span className="text-zinc-400">Kas Masuk</span> <span className="font-medium text-blue-400">+ Rp {data.kasMasuk.toLocaleString('id-ID')}</span></div>}
@@ -441,7 +454,7 @@ export default function ReportsPage() {
                       <p className="text-xs text-zinc-500 font-medium">Periode: {report.rawDate}</p>
                     </div>
 
-                    <div className="grid grid-cols-2 md:flex gap-4 md:gap-8 text-sm text-zinc-400">
+                    <div className="grid grid-cols-2 lg:flex flex-wrap gap-4 md:gap-6 text-sm text-zinc-400">
                       <div className="flex flex-col gap-0.5">
                         <span className="text-[10px] uppercase font-bold text-zinc-500">QRIS</span>
                         <span className="font-semibold text-zinc-200">Rp {report.qris.toLocaleString('id-ID')}</span>
@@ -449,6 +462,10 @@ export default function ReportsPage() {
                       <div className="flex flex-col gap-0.5">
                         <span className="text-[10px] uppercase font-bold text-zinc-500">Cash</span>
                         <span className="font-semibold text-zinc-200">Rp {report.cash.toLocaleString('id-ID')}</span>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] uppercase font-bold text-zinc-500">Customer QR</span>
+                        <span className="font-bold text-purple-400">Rp {report.customerQr.toLocaleString('id-ID')}</span>
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <span className="text-[10px] uppercase font-bold text-zinc-500">Milik Kafe</span>

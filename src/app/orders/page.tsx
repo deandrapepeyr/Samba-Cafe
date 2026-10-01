@@ -46,7 +46,9 @@ type Order = {
   total: number;
   cashier_name: string;
   customer_name: string | null;
-  status: string; // 'preparing' | 'ready' | 'completed' | 'Paid'
+  status: string; // 'pending' | 'preparing' | 'ready' | 'completed' | 'Paid'
+  order_source?: string;
+  payment_status?: string;
   completedAt?: Date;
   items: OrderItem[];
 };
@@ -60,6 +62,7 @@ export default function OrdersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'kanban' | 'list'>('kanban');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'pos' | 'customer_qr'>('all');
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -119,7 +122,7 @@ export default function OrdersPage() {
     const { data: txData } = await supabase
       .from('transactions')
       .select('*')
-      .or(`created_at.gte.${startOfDay.toISOString()},status.eq.preparing,status.eq.ready,status.eq.Paid,status.eq.paid,status.is.null`)
+      .or(`created_at.gte.${startOfDay.toISOString()},status.eq.pending,status.eq.preparing,status.eq.ready,status.eq.Paid,status.eq.paid,status.is.null`)
       .order('created_at', { ascending: true });
 
     if (txData && txData.length > 0) {
@@ -156,6 +159,8 @@ export default function OrdersPage() {
           cashier_name: tx.cashier_name,
           customer_name: tx.customer_name,
           status: normStatus,
+          order_source: tx.order_source || 'POS',
+          payment_status: tx.payment_status,
           completedAt,
           items: items.map(item => ({
             name: item.product_name,
@@ -166,8 +171,8 @@ export default function OrdersPage() {
         };
       });
 
-      // Sound notification if new pending order came in
-      const activePreparingCount = formattedOrders.filter(o => o.status === 'preparing').length;
+      // Sound notification if new pending or preparing order came in
+      const activePreparingCount = formattedOrders.filter(o => o.status === 'preparing' || o.status === 'pending').length;
       if (!isInitial && activePreparingCount > prevOrderCountRef.current) {
         playNotificationSound();
       }
@@ -251,6 +256,32 @@ export default function OrdersPage() {
     } else {
       if (selectedOrder && selectedOrder.id === orderId) {
         setSelectedOrder(prev => prev ? { ...prev, status: newStatus } : null);
+      }
+    }
+    setUpdatingId(null);
+  };
+
+  const updatePaymentStatus = async (orderId: string, newPaymentStatus: string, newOrderStatus?: string) => {
+    setUpdatingId(orderId);
+    localUpdatesRef.current[orderId] = Date.now();
+    
+    setOrders(prev => prev.map(o => o.id === orderId ? { 
+      ...o, 
+      payment_status: newPaymentStatus,
+      ...(newOrderStatus ? { status: newOrderStatus } : {})
+    } : o));
+
+    const updates: any = { payment_status: newPaymentStatus };
+    if (newOrderStatus) updates.status = newOrderStatus;
+
+    const { error } = await supabase.from('transactions').update(updates).eq('id', orderId);
+    
+    if (error) {
+      alert("Gagal mengupdate status pembayaran: " + error.message);
+      fetchOrders(false);
+    } else {
+      if (selectedOrder && selectedOrder.id === orderId) {
+        setSelectedOrder(prev => prev ? { ...prev, payment_status: newPaymentStatus, ...(newOrderStatus ? {status: newOrderStatus}:{}) } : null);
       }
     }
     setUpdatingId(null);
@@ -405,11 +436,15 @@ export default function OrdersPage() {
 
   if (!role) return null;
 
+  // Filter helper
+  const matchesSourceFilter = (o: Order) => sourceFilter === 'all' || (sourceFilter === 'pos' && o.order_source === 'POS') || (sourceFilter === 'customer_qr' && o.order_source === 'CUSTOMER_QR');
+
   // Filtered lists
-  const preparingOrders = orders.filter(o => o.status === 'preparing' && (o.id.includes(searchQuery) || o.items.some(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()))));
-  const readyOrders = orders.filter(o => o.status === 'ready' && (o.id.includes(searchQuery) || o.items.some(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()))));
+  const pendingOrders = orders.filter(o => o.status === 'pending' && matchesSourceFilter(o) && (o.id.includes(searchQuery) || o.items.some(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()))));
+  const preparingOrders = orders.filter(o => o.status === 'preparing' && matchesSourceFilter(o) && (o.id.includes(searchQuery) || o.items.some(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()))));
+  const readyOrders = orders.filter(o => o.status === 'ready' && matchesSourceFilter(o) && (o.id.includes(searchQuery) || o.items.some(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()))));
   const completedOrders = orders
-    .filter(o => o.status === 'completed' && (o.id.includes(searchQuery) || o.items.some(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()))))
+    .filter(o => o.status === 'completed' && matchesSourceFilter(o) && (o.id.includes(searchQuery) || o.items.some(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()))))
     .sort((a, b) => {
       const timeA = a.completedAt ? a.completedAt.getTime() : a.createdAt.getTime();
       const timeB = b.completedAt ? b.completedAt.getTime() : b.createdAt.getTime();
@@ -419,7 +454,7 @@ export default function OrdersPage() {
   const filteredAllOrders = orders.filter(o => {
     const matchesSearch = o.id.includes(searchQuery) || o.items.some(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchesStatus = statusFilter === 'all' || o.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    return matchesSearch && matchesStatus && matchesSourceFilter(o);
   });
 
   const renderOrderCard = (order: Order, customNumber?: number) => {
@@ -450,6 +485,11 @@ export default function OrdersPage() {
                   </span>
                 )}
                 <span className="font-mono font-bold text-sm text-zinc-100">{order.id.startsWith('order_') ? order.id : `order_${order.id}`}</span>
+                {order.order_source === 'CUSTOMER_QR' && (
+                  <span className="shrink-0 whitespace-nowrap text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-purple-500/10 text-purple-400 border-purple-500/20">
+                    📱 CUSTOMER QR
+                  </span>
+                )}
                 <span className={`shrink-0 whitespace-nowrap text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${
                   order.method === 'QRIS' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 
                   order.method === 'Bayar Nanti' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20 animate-pulse' :
@@ -457,6 +497,11 @@ export default function OrdersPage() {
                 }`}>
                   {order.method}
                 </span>
+                {order.payment_status === 'WAITING_CONFIRMATION' && (
+                  <span className="shrink-0 whitespace-nowrap text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-yellow-500/10 text-yellow-400 border-yellow-500/20 animate-pulse">
+                    Menunggu Konfirmasi Pembayaran
+                  </span>
+                )}
               </div>
               {order.customer_name && (
                 <p className="text-[11px] font-medium text-zinc-300 truncate">
@@ -498,6 +543,23 @@ export default function OrdersPage() {
                 <Receipt size={12} />
                 Detail
               </button>
+
+              {order.status === 'pending' && order.payment_status === 'WAITING_CONFIRMATION' && (
+                <>
+                  <button onClick={() => updatePaymentStatus(order.id, 'PAID', 'preparing')} className="h-7 px-2.5 text-[10px] font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-all shrink-0">
+                    Konfirmasi Bayar
+                  </button>
+                  <button onClick={() => updatePaymentStatus(order.id, 'PAYMENT_REJECTED')} className="h-7 px-2.5 text-[10px] font-bold text-white bg-red-600 hover:bg-red-500 rounded-lg transition-all shrink-0">
+                    Tolak
+                  </button>
+                </>
+              )}
+
+              {order.status === 'pending' && order.method === 'Bayar Nanti' && order.order_source === 'CUSTOMER_QR' && (
+                <button onClick={() => updateOrderStatus(order.id, 'preparing')} className="h-7 px-2.5 text-[10px] font-bold text-black bg-amber-500 hover:bg-amber-400 rounded-lg transition-all shrink-0">
+                  Terima Pesanan
+                </button>
+              )}
 
               {order.status === 'preparing' && (
                 <button
@@ -581,7 +643,31 @@ export default function OrdersPage() {
         </div>
 
         {/* Status Counters */}
-        <div className="grid grid-cols-2 gap-4 shrink-0">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 shrink-0">
+          <button 
+            className={`group text-left p-4 rounded-2xl transition-all duration-300 relative overflow-hidden ${
+              sourceFilter === 'pos' 
+                ? 'bg-blue-500/10 border-blue-500/30 ring-1 ring-blue-500/20 shadow-lg shadow-blue-500/5' 
+                : 'bg-zinc-900/40 border-white/5 hover:bg-zinc-900/60 hover:border-white/10'
+            } border backdrop-blur-md`}
+            onClick={() => setSourceFilter(sourceFilter === 'pos' ? 'all' : 'pos')}
+          >
+            <p className="relative text-[10px] font-bold text-zinc-400 uppercase tracking-widest group-hover:text-blue-500/70 transition-colors">POS</p>
+            <div className="relative mt-2 text-xl font-black text-zinc-100 group-hover:text-blue-500 transition-colors">Kasir</div>
+          </button>
+
+          <button 
+            className={`group text-left p-4 rounded-2xl transition-all duration-300 relative overflow-hidden ${
+              sourceFilter === 'customer_qr' 
+                ? 'bg-purple-500/10 border-purple-500/30 ring-1 ring-purple-500/20 shadow-lg shadow-purple-500/5' 
+                : 'bg-zinc-900/40 border-white/5 hover:bg-zinc-900/60 hover:border-white/10'
+            } border backdrop-blur-md`}
+            onClick={() => setSourceFilter(sourceFilter === 'customer_qr' ? 'all' : 'customer_qr')}
+          >
+            <p className="relative text-[10px] font-bold text-zinc-400 uppercase tracking-widest group-hover:text-purple-500/70 transition-colors">Customer QR</p>
+            <div className="relative mt-2 text-xl font-black text-zinc-100 group-hover:text-purple-500 transition-colors">Mandiri</div>
+          </button>
+
           <button 
             className={`group text-left p-4 rounded-2xl transition-all duration-300 relative overflow-hidden ${
               statusFilter === 'preparing' 
@@ -591,9 +677,9 @@ export default function OrdersPage() {
             onClick={() => setStatusFilter(statusFilter === 'preparing' ? 'all' : 'preparing')}
           >
             {statusFilter === 'preparing' && <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 to-transparent" />}
-            <p className="relative text-xs font-bold text-zinc-400 uppercase tracking-widest group-hover:text-amber-500/70 transition-colors">Pesanan Aktif</p>
+            <p className="relative text-[10px] font-bold text-zinc-400 uppercase tracking-widest group-hover:text-amber-500/70 transition-colors">Pesanan Aktif</p>
             <div className="relative flex items-center justify-between mt-2">
-              <span className={`text-3xl font-black tracking-tighter ${statusFilter === 'preparing' ? 'text-amber-500' : 'text-zinc-100 group-hover:text-amber-500 transition-colors'}`}>{preparingOrders.length + readyOrders.length}</span>
+              <span className={`text-xl font-black tracking-tighter ${statusFilter === 'preparing' ? 'text-amber-500' : 'text-zinc-100 group-hover:text-amber-500 transition-colors'}`}>{pendingOrders.length + preparingOrders.length + readyOrders.length}</span>
               <Utensils size={24} className={statusFilter === 'preparing' ? 'text-amber-500' : 'text-zinc-600 group-hover:text-amber-500/50 transition-colors'} strokeWidth={1.5} />
             </div>
           </button>
@@ -607,9 +693,9 @@ export default function OrdersPage() {
             onClick={() => setStatusFilter(statusFilter === 'completed' ? 'all' : 'completed')}
           >
             {statusFilter === 'completed' && <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent" />}
-            <p className="relative text-xs font-bold text-zinc-400 uppercase tracking-widest group-hover:text-zinc-300 transition-colors">Selesai</p>
+            <p className="relative text-[10px] font-bold text-zinc-400 uppercase tracking-widest group-hover:text-zinc-300 transition-colors">Selesai</p>
             <div className="relative flex items-center justify-between mt-2">
-              <span className={`text-3xl font-black tracking-tighter ${statusFilter === 'completed' ? 'text-zinc-300' : 'text-zinc-100 group-hover:text-zinc-300 transition-colors'}`}>{completedOrders.length}</span>
+              <span className={`text-xl font-black tracking-tighter ${statusFilter === 'completed' ? 'text-zinc-300' : 'text-zinc-100 group-hover:text-zinc-300 transition-colors'}`}>{completedOrders.length}</span>
               <PackageCheck size={24} className={statusFilter === 'completed' ? 'text-zinc-400' : 'text-zinc-600 group-hover:text-zinc-400 transition-colors'} strokeWidth={1.5} />
             </div>
           </button>
@@ -710,18 +796,19 @@ export default function OrdersPage() {
                   </div>
                   <h2 className="font-bold text-base text-zinc-200 tracking-wide">Pesanan Aktif</h2>
                 </div>
-                <span className="text-sm font-bold text-amber-500 bg-amber-500/10 px-3 py-1 rounded-full">{preparingOrders.length + readyOrders.length}</span>
+                <span className="text-sm font-bold text-amber-500 bg-amber-500/10 px-3 py-1 rounded-full">{pendingOrders.length + preparingOrders.length + readyOrders.length}</span>
               </div>
 
               <div className="space-y-4 pb-4">
-                {preparingOrders.length === 0 && readyOrders.length === 0 ? (
+                {pendingOrders.length === 0 && preparingOrders.length === 0 && readyOrders.length === 0 ? (
                   <div className="border border-dashed border-white/10 rounded-2xl p-12 text-center text-zinc-500 text-sm font-medium">
                     Belum ada pesanan aktif
                   </div>
                 ) : (
                   <>
-                    {preparingOrders.map((order, idx) => renderOrderCard(order, idx + 1))}
-                    {readyOrders.map((order, idx) => renderOrderCard(order, preparingOrders.length + idx + 1))}
+                    {pendingOrders.map((order, idx) => renderOrderCard(order, idx + 1))}
+                    {preparingOrders.map((order, idx) => renderOrderCard(order, pendingOrders.length + idx + 1))}
+                    {readyOrders.map((order, idx) => renderOrderCard(order, pendingOrders.length + preparingOrders.length + idx + 1))}
                   </>
                 )}
               </div>

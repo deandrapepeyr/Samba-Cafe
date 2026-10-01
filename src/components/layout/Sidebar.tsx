@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, LayoutDashboard, Settings, UserCircle, LogOut, LogIn, Coffee, Package, FileText, ChevronLeft, ChevronRight, Loader2, ChefHat, BookOpen, Lock } from 'lucide-react';
+import { Home, LayoutDashboard, Settings, UserCircle, LogOut, LogIn, Coffee, Package, FileText, ChevronLeft, ChevronRight, Loader2, ChefHat, BookOpen, Lock, QrCode } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -267,6 +267,10 @@ export function Sidebar({ onLogoutClick, onLoginClick }: { onLogoutClick?: () =>
                   <Link href="/settings" className={cn("flex items-center gap-3 px-3 py-3 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-all", { "bg-primary/10 text-primary hover:bg-primary/10": pathname === '/settings' })}>
                     <Settings size={20} className="shrink-0" />
                     <span className={cn("font-medium", isExpanded ? "block" : "hidden")}>Settings</span>
+                  </Link>
+                  <Link href="/qr" className={cn("flex items-center gap-3 px-3 py-3 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-all", { "bg-primary/10 text-primary hover:bg-primary/10": pathname === '/qr' })}>
+                    <QrCode size={20} className="shrink-0" />
+                    <span className={cn("font-medium", isExpanded ? "block" : "hidden")}>Cetak QR</span>
                   </Link>
                 </>
               )}

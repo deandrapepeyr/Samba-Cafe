@@ -1,0 +1,521 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
+import { getCustomerSession, createCustomerSession, CustomerSession } from '@/lib/customerSession';
+import { Search, Plus, Minus, ShoppingCart, ArrowLeft, ArrowRight, CheckCircle2, ChevronRight, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Product, Category, ProductVariant } from '@/app/pos/page'; // reuse types
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
+
+type CartItem = {
+  id: string;
+  product: Product;
+  quantity: number;
+  notes?: string;
+  variantChoices?: Record<string, string[]>;
+};
+
+export default function CustomerOrderPage() {
+  const router = useRouter();
+  
+  // States
+  const [session, setSession] = useState<CustomerSession | null>(null);
+  const [nameInput, setNameInput] = useState('');
+  const [view, setView] = useState<'welcome' | 'menu' | 'cart' | 'checkout'>('welcome');
+  
+  // Data
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+  
+  // Menu State
+  const [activeCategory, setActiveCategory] = useState('1');
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Cart State
+  const [cart, setCart] = useState<CartItem[]>([]);
+  
+  // Checkout State
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // Variant Modal
+  const [isOptionsModalOpen, setIsOptionsModalOpen] = useState(false);
+  const [selectedProductForOptions, setSelectedProductForOptions] = useState<Product | null>(null);
+  const [selectedVariantChoices, setSelectedVariantChoices] = useState<Record<string, string[]>>({});
+
+  useEffect(() => {
+    // Check existing session
+    const existing = getCustomerSession();
+    if (existing) {
+      setSession(existing);
+      setView('menu');
+    }
+
+    // Load Menu
+    async function loadMenu() {
+      const [categoriesRes, productsRes] = await Promise.all([
+        supabase.from('categories').select('*'),
+        supabase.from('products').select('*').eq('is_available', true)
+      ]);
+      
+      if (categoriesRes.data) {
+        setCategories([{ id: '1', name: 'All Menu' }, ...categoriesRes.data]);
+      }
+      if (productsRes.data) {
+        setProducts(productsRes.data.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
+      }
+      setIsLoadingData(false);
+    }
+    loadMenu();
+  }, []);
+
+  const handleStartOrdering = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nameInput.trim()) return;
+    const newSession = createCustomerSession(nameInput.trim());
+    setSession(newSession);
+    setView('menu');
+  };
+
+  const handleProductClick = (product: Product) => {
+    if (product.variants && product.variants.length > 0) {
+      setSelectedProductForOptions(product);
+      const initialChoices: Record<string, string[]> = {};
+      product.variants.forEach(v => {
+        if (v.is_required && v.choices.length > 0) {
+          initialChoices[v.name] = [v.choices[0].name];
+        } else {
+          initialChoices[v.name] = [];
+        }
+      });
+      setSelectedVariantChoices(initialChoices);
+      setIsOptionsModalOpen(true);
+    } else {
+      addToCart(product, '', 0, {});
+    }
+  };
+
+  const addToCart = (product: Product, notes: string = '', addonPrice: number = 0, variantChoices?: Record<string, string[]>) => {
+    const cartItemId = notes ? `${product.id}-${notes}` : product.id;
+    setCart(prev => {
+      const existing = prev.find(item => item.product.id === product.id && (item.notes || '') === notes);
+      if (existing) {
+        return prev.map(item =>
+          (item.product.id === product.id && (item.notes || '') === notes)
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        );
+      }
+      const productWithAddonPrice = { ...product, price: product.price + addonPrice };
+      return [...prev, { id: cartItemId, product: productWithAddonPrice, quantity: 1, notes, variantChoices }];
+    });
+    setIsOptionsModalOpen(false);
+  };
+
+  const updateQuantity = (id: string, delta: number) => {
+    setCart(prev => prev.map(item => {
+      if (item.id === id) {
+        return { ...item, quantity: Math.max(0, item.quantity + delta) };
+      }
+      return item;
+    }).filter(item => item.quantity > 0));
+  };
+
+  const cartTotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+  const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+  const generateOrderId = async () => {
+    const today = new Date();
+    const prefix = `C_${today.getFullYear().toString().slice(-2)}${(today.getMonth() + 1).toString().padStart(2, '0')}${today.getDate().toString().padStart(2, '0')}_`;
+    
+    const { data } = await supabase
+      .from('transactions')
+      .select('id')
+      .like('id', `${prefix}%`)
+      .order('id', { ascending: false })
+      .limit(1);
+      
+    if (data && data.length > 0) {
+      const lastSequence = parseInt(data[0].id.split('_').pop() || '0', 10);
+      return `${prefix}${(lastSequence + 1).toString().padStart(4, '0')}`;
+    }
+    return `${prefix}0001`;
+  };
+
+  const submitOrder = async () => {
+    if (!session || isProcessing || cart.length === 0) return;
+    setIsProcessing(true);
+
+    try {
+      const orderId = await generateOrderId();
+      const paymentStatus = 'UNPAID';
+      
+      const transaction = {
+        id: orderId,
+        method: 'Bayar Nanti',
+        total: cartTotal,
+        cashier_name: 'Customer QR',
+        customer_name: session.customerName,
+        status: 'pending',
+        order_source: 'CUSTOMER_QR',
+        customer_session_id: session.sessionId,
+        payment_status: paymentStatus
+      };
+
+      const itemsToInsert = cart.map(item => ({
+        transaction_id: orderId,
+        product_name: item.product.name,
+        price: item.product.price,
+        quantity: item.quantity,
+        notes: item.notes || null,
+        supplier_price: item.product.supplier_price || 0
+      }));
+
+      const { error: txError } = await supabase.from('transactions').insert([transaction]);
+      if (txError) throw txError;
+
+      const { error: itemsError } = await supabase.from('transaction_items').insert(itemsToInsert);
+      if (itemsError) throw itemsError;
+
+      // Clear cart and redirect
+      setCart([]);
+      router.push(`/order/${orderId}`);
+
+    } catch (err) {
+      console.error("Order submission failed", err);
+      alert("Gagal membuat pesanan, silakan coba lagi.");
+      setIsProcessing(false);
+    }
+  };
+
+  // --- RENDERS ---
+
+  if (view === 'welcome') {
+    return (
+      <div className="min-h-screen bg-black text-white flex flex-col justify-center px-6 py-12 relative overflow-hidden">
+        {/* Abstract Background Elements */}
+        <div className="absolute top-[-20%] left-[-10%] w-[70vw] h-[70vw] bg-amber-500/10 rounded-full blur-[100px] pointer-events-none" />
+        <div className="absolute bottom-[-10%] right-[-20%] w-[80vw] h-[80vw] bg-orange-600/10 rounded-full blur-[120px] pointer-events-none" />
+
+        <div className="relative z-10 w-full max-w-md mx-auto space-y-8">
+          <div className="space-y-3 text-center">
+            <h1 className="text-4xl md:text-5xl font-black tracking-tight bg-gradient-to-br from-white to-white/60 bg-clip-text text-transparent">
+              Samba Cafe
+            </h1>
+            <p className="text-zinc-400 text-sm md:text-base font-medium">
+              Pesan langsung dari mejamu, tanpa antre.
+            </p>
+          </div>
+
+          <form onSubmit={handleStartOrdering} className="bg-zinc-900/50 p-6 md:p-8 rounded-3xl border border-white/5 shadow-2xl backdrop-blur-xl space-y-6">
+            <div className="space-y-2">
+              <label htmlFor="name" className="text-sm font-semibold text-zinc-300 ml-1">
+                Siapa namamu?
+              </label>
+              <Input
+                id="name"
+                autoFocus
+                placeholder="Misal: Andi"
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                className="h-14 text-lg bg-black/50 border-white/10 focus:border-amber-500/50 focus:ring-amber-500/20 rounded-2xl px-5"
+                maxLength={30}
+              />
+            </div>
+            <Button
+              type="submit"
+              disabled={!nameInput.trim()}
+              className="w-full h-14 rounded-2xl text-base font-bold bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black shadow-lg shadow-amber-500/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            >
+              Mulai Pesan <ArrowRight className="ml-2" size={20} />
+            </Button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  const filteredProducts = products.filter(p => {
+    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = searchQuery.trim() !== '' ? true : (activeCategory === '1' || p.category_id === activeCategory);
+    return matchesCategory && matchesSearch;
+  });
+
+  return (
+    <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col relative pb-28">
+      {/* Header */}
+      <div className="sticky top-0 z-40 bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center justify-between">
+        <div className="flex flex-col">
+          <span className="text-xs font-medium text-amber-500">Hi, {session?.customerName} 👋</span>
+          <h1 className="text-lg font-black tracking-tight">
+            {view === 'menu' ? 'Mau pesan apa hari ini?' : view === 'cart' ? 'Keranjang' : 'Checkout'}
+          </h1>
+        </div>
+        {view !== 'menu' && (
+          <Button variant="ghost" size="icon" onClick={() => setView('menu')} className="rounded-full bg-white/5 hover:bg-white/10">
+            <X size={20} />
+          </Button>
+        )}
+      </div>
+
+      {view === 'menu' && (
+        <div className="flex-1 overflow-y-auto">
+          {/* Search */}
+          <div className="px-4 py-3">
+            <div className="relative group">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-amber-500 transition-colors" size={18} />
+              <input
+                placeholder="Cari minuman, makanan..."
+                className="w-full h-12 pl-12 pr-4 bg-zinc-900/50 border border-white/10 rounded-2xl text-sm text-zinc-100 placeholder:text-zinc-500 outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 transition-all shadow-inner"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Categories */}
+          {searchQuery.trim() === '' && (
+            <div className="px-4 py-2 flex gap-2 overflow-x-auto snap-x scrollbar-none pb-2">
+              {categories.map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => setActiveCategory(cat.id)}
+                  className={`snap-start shrink-0 h-9 px-4 rounded-full text-[13px] font-bold transition-all ${
+                    activeCategory === cat.id 
+                      ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20' 
+                      : 'bg-zinc-900 text-zinc-400 border border-white/5 hover:bg-zinc-800'
+                  }`}
+                >
+                  {cat.name}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Product Grid */}
+          {isLoadingData ? (
+            <div className="p-8 text-center text-zinc-500 text-sm">Memuat menu...</div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 px-4 pt-2 pb-6">
+              {filteredProducts.map(product => (
+                <div 
+                  key={product.id}
+                  onClick={() => handleProductClick(product)}
+                  className="bg-zinc-900/40 border border-white/5 rounded-2xl overflow-hidden flex flex-col transition-all active:scale-95"
+                >
+                  <div className="aspect-square bg-zinc-800/50 relative overflow-hidden flex items-center justify-center">
+                    {product.image_url ? (
+                      <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" loading="lazy" />
+                    ) : (
+                      <span className="text-zinc-700 font-bold text-xs uppercase">{product.name.charAt(0)}</span>
+                    )}
+                  </div>
+                  <div className="p-3 flex flex-col flex-1 justify-between gap-2">
+                    <h3 className="font-semibold text-[13px] leading-snug line-clamp-2">{product.name}</h3>
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-amber-500 text-sm">Rp{product.price.toLocaleString('id-ID')}</span>
+                      <button className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center font-bold">
+                        <Plus size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Floating Cart Button */}
+          {cartItemCount > 0 && (
+            <div className="fixed bottom-6 left-0 right-0 px-4 z-50">
+              <button
+                onClick={() => setView('cart')}
+                className="w-full h-14 bg-gradient-to-r from-amber-500 to-orange-500 rounded-2xl shadow-xl shadow-amber-500/20 text-black font-bold flex items-center justify-between px-5 hover:scale-[1.02] active:scale-[0.98] transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-black/10 flex items-center justify-center text-sm">
+                    {cartItemCount}
+                  </div>
+                  <span>Lihat Keranjang</span>
+                </div>
+                <span>Rp {cartTotal.toLocaleString('id-ID')}</span>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {view === 'cart' && (
+        <div className="flex-1 flex flex-col">
+          <ScrollArea className="flex-1 px-4 py-2">
+            <div className="space-y-3 pb-6">
+              {cart.map(item => (
+                <div key={item.id} className="flex items-center gap-3 bg-zinc-900/40 border border-white/5 p-3 rounded-2xl">
+                  {item.product.image_url ? (
+                    <img src={item.product.image_url} className="w-14 h-14 rounded-xl object-cover" />
+                  ) : (
+                    <div className="w-14 h-14 rounded-xl bg-zinc-800 flex items-center justify-center shrink-0">
+                      <span className="text-zinc-600 font-bold">{item.product.name.charAt(0)}</span>
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-bold text-sm text-zinc-100 truncate">{item.product.name}</h4>
+                    {item.notes && <p className="text-[10px] text-zinc-500 line-clamp-1 mt-0.5">{item.notes}</p>}
+                    <p className="font-bold text-amber-500 text-sm mt-1">Rp {item.product.price.toLocaleString('id-ID')}</p>
+                  </div>
+                  <div className="flex flex-col items-center gap-1.5 shrink-0 bg-black/40 p-1 rounded-xl">
+                    <button onClick={() => updateQuantity(item.id, 1)} className="w-7 h-7 rounded-lg bg-zinc-800 text-white flex items-center justify-center"><Plus size={14} /></button>
+                    <span className="font-bold text-[13px]">{item.quantity}</span>
+                    <button onClick={() => updateQuantity(item.id, -1)} className="w-7 h-7 rounded-lg bg-zinc-800 text-zinc-400 flex items-center justify-center"><Minus size={14} /></button>
+                  </div>
+                </div>
+              ))}
+              {cart.length === 0 && (
+                <div className="py-20 text-center text-zinc-500 flex flex-col items-center gap-3">
+                  <ShoppingCart size={40} className="opacity-20" />
+                  <p>Keranjang kosong</p>
+                  <Button variant="outline" className="mt-4 border-white/10 text-white" onClick={() => setView('menu')}>
+                    Pilih Menu
+                  </Button>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+          
+          {cart.length > 0 && (
+            <div className="p-4 bg-[#0a0a0a] border-t border-white/5 space-y-4">
+              <div className="flex justify-between items-center text-sm font-medium">
+                <span className="text-zinc-400">Total Pesanan</span>
+                <span className="text-lg font-black text-amber-500">Rp {cartTotal.toLocaleString('id-ID')}</span>
+              </div>
+              <Button
+                onClick={() => setView('checkout')}
+                className="w-full h-14 rounded-2xl text-base font-bold bg-amber-500 hover:bg-amber-400 text-black shadow-lg shadow-amber-500/20"
+              >
+                Lanjutkan Pesanan
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {view === 'checkout' && (
+        <div className="flex-1 px-4 py-6 space-y-6">
+          <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-4 space-y-3">
+            <div className="flex justify-between items-center pb-3 border-b border-white/5">
+              <span className="text-sm">Nama Pemesan</span>
+              <span className="font-bold text-amber-500">{session?.customerName}</span>
+            </div>
+            <div className="flex justify-between items-center pb-3 border-b border-white/5">
+              <span className="text-sm">Jumlah Item</span>
+              <span className="font-bold">{cartItemCount} item</span>
+            </div>
+            <div className="flex justify-between items-center pt-1">
+              <span className="text-sm">Total Bayar</span>
+              <span className="text-xl font-black text-amber-500">Rp {cartTotal.toLocaleString('id-ID')}</span>
+            </div>
+          </div>
+
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-start gap-3">
+            <div className="mt-1 w-5 h-5 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0">
+              <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+            </div>
+            <div>
+              <div className="font-bold text-sm text-amber-500">Pembayaran di Kasir</div>
+              <div className="text-xs text-zinc-400 mt-1">Silakan selesaikan pembayaran langsung di kasir (tunai/QRIS) saat pesanan selesai.</div>
+            </div>
+          </div>
+
+          <Button
+            onClick={submitOrder}
+            disabled={isProcessing}
+            className="w-full h-14 rounded-2xl text-base font-bold bg-amber-500 hover:bg-amber-400 text-black shadow-lg shadow-amber-500/20 disabled:opacity-50 mt-8"
+          >
+            {isProcessing ? 'Memproses...' : 'Buat Pesanan Sekarang'}
+          </Button>
+        </div>
+      )}
+
+      {/* Options Dialog for Variants (simplified for mobile) */}
+      <Dialog open={isOptionsModalOpen} onOpenChange={setIsOptionsModalOpen}>
+        <DialogContent className="sm:max-w-[425px] bg-[#1a1a1a] border-white/10 text-white rounded-t-3xl sm:rounded-2xl mt-auto sm:mt-0 p-0 overflow-hidden">
+          {selectedProductForOptions && (
+            <div className="flex flex-col max-h-[85vh]">
+              <div className="p-5 border-b border-white/5 bg-black/20">
+                <h2 className="text-lg font-bold">{selectedProductForOptions.name}</h2>
+                <p className="text-amber-500 font-bold text-sm">Rp {selectedProductForOptions.price.toLocaleString('id-ID')}</p>
+              </div>
+              <ScrollArea className="p-5 flex-1">
+                {selectedProductForOptions.variants?.map(variant => (
+                   <div key={variant.name} className="mb-6 last:mb-2">
+                     <p className="font-semibold text-sm mb-3 text-zinc-300">
+                       {variant.name} {variant.is_required && <span className="text-amber-500 text-xs ml-1">(Wajib)</span>}
+                     </p>
+                     <div className="space-y-2">
+                       {variant.choices.map(choice => {
+                         const isSelected = selectedVariantChoices[variant.name]?.includes(choice.name);
+                         return (
+                           <label key={choice.name} className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
+                             isSelected ? 'bg-amber-500/10 border-amber-500/50' : 'bg-black/20 border-white/5'
+                           }`}>
+                             <div className="flex items-center gap-3">
+                               <input 
+                                 type={variant.is_multiple ? 'checkbox' : 'radio'}
+                                 className="w-4 h-4 accent-amber-500"
+                                 checked={isSelected}
+                                 onChange={() => {
+                                   setSelectedVariantChoices(prev => {
+                                     const current = prev[variant.name] || [];
+                                     if (variant.is_multiple) {
+                                       if (isSelected) return { ...prev, [variant.name]: current.filter(c => c !== choice.name) };
+                                       return { ...prev, [variant.name]: [...current, choice.name] };
+                                     } else {
+                                       return { ...prev, [variant.name]: [choice.name] };
+                                     }
+                                   });
+                                 }}
+                               />
+                               <span className="text-sm font-medium">{choice.name}</span>
+                             </div>
+                             {choice.price > 0 && <span className="text-xs text-amber-500 font-bold">+Rp{choice.price.toLocaleString('id-ID')}</span>}
+                           </label>
+                         );
+                       })}
+                     </div>
+                   </div>
+                ))}
+              </ScrollArea>
+              <div className="p-5 bg-[#141414] border-t border-white/5">
+                <Button 
+                  onClick={() => {
+                    // Logic to extract addons and calculate extra price
+                    let addonPrice = 0;
+                    let notesArr: string[] = [];
+                    selectedProductForOptions.variants?.forEach(v => {
+                      const selected = selectedVariantChoices[v.name] || [];
+                      selected.forEach(s => {
+                        const choice = v.choices.find(c => c.name === s);
+                        if (choice) {
+                          addonPrice += choice.price;
+                          notesArr.push(s);
+                        }
+                      });
+                    });
+                    const notes = notesArr.join(', ');
+                    addToCart(selectedProductForOptions, notes, addonPrice, selectedVariantChoices);
+                  }}
+                  className="w-full h-12 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl"
+                >
+                  Tambahkan ke Keranjang
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

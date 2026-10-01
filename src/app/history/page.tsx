@@ -22,6 +22,7 @@ type Transaction = {
   total: number;
   cashier_name: string;
   customer_name: string | null;
+  order_source?: string;
   itemsCount: number;
   status: string;
   cash_received?: number;
@@ -120,6 +121,7 @@ export default function HistoryPage() {
           total: tx.total,
           cashier_name: tx.cashier_name,
           customer_name: tx.customer_name,
+          order_source: tx.order_source,
           cash_received: tx.cash_received,
           itemsCount: items.reduce((sum, item) => sum + item.quantity, 0),
           status: tx.status,
@@ -362,6 +364,7 @@ export default function HistoryPage() {
                             <div className="flex items-center gap-2 font-bold text-foreground">
                               <Receipt size={16} className="text-primary" />
                               <span>{trx.id.startsWith('order_') ? trx.id : `order_${trx.id}`}</span>
+                              {trx.order_source === 'CUSTOMER_QR' && <span className="px-1.5 py-0.5 text-[8px] bg-purple-500/10 text-purple-500 rounded font-bold uppercase">QR</span>}
                             </div>
                             <div className="flex items-center gap-1.5">
                               <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
@@ -443,6 +446,7 @@ export default function HistoryPage() {
                                 <td className="p-4 pl-6 font-medium flex items-center gap-2 group-hover:text-primary transition-colors">
                                   <Receipt size={16} className="text-primary" />
                                   {trx.id.startsWith('order_') ? trx.id : `order_${trx.id}`}
+                                  {trx.order_source === 'CUSTOMER_QR' && <span className="px-1.5 py-0.5 text-[8px] bg-purple-500/10 text-purple-500 rounded font-bold uppercase">QR</span>}
                                 </td>
                                 <td className="p-4 text-muted-foreground">{trx.date}</td>
                                 <td className="p-4 text-muted-foreground">{trx.cashier_name || 'Unknown'}{trx.customer_name ? ` (${trx.customer_name})` : ''}</td>
