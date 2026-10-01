@@ -102,7 +102,7 @@ export default function CustomerOrderPage() {
         .select('status')
         .eq('customer_session_id', session.sessionId)
         .eq('status', 'ready');
-      setHasReadyOrder(data && data.length > 0);
+      setHasReadyOrder(data !== null && data.length > 0);
     };
     
     checkReadyOrders();
