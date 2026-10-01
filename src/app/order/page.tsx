@@ -151,23 +151,47 @@ export default function CustomerOrderPage() {
     setIsProcessing(true);
 
     try {
-      const orderId = await generateOrderId();
-      const paymentStatus = 'UNPAID';
-      
-      const transaction = {
-        id: orderId,
-        method: 'Bayar Nanti',
-        total: cartTotal,
-        cashier_name: 'Customer QR',
-        customer_name: session.customerName,
-        status: 'pending',
-        order_source: 'CUSTOMER_QR',
-        customer_session_id: session.sessionId,
-        payment_status: paymentStatus
-      };
+      // Check for existing active transaction for this session
+      const { data: existingTx, error: fetchErr } = await supabase
+        .from('transactions')
+        .select('id, total, status')
+        .eq('customer_session_id', session.sessionId)
+        .in('status', ['pending', 'preparing', 'ready'])
+        .maybeSingle();
+
+      let targetOrderId;
+
+      if (existingTx) {
+        // Append to existing order
+        targetOrderId = existingTx.id;
+        
+        // Update total
+        const newTotal = existingTx.total + cartTotal;
+        await supabase.from('transactions').update({ total: newTotal }).eq('id', targetOrderId);
+
+      } else {
+        // Create new order
+        targetOrderId = await generateOrderId();
+        const paymentStatus = 'UNPAID';
+        
+        const transaction = {
+          id: targetOrderId,
+          method: 'Bayar Nanti',
+          total: cartTotal,
+          cashier_name: 'Customer QR',
+          customer_name: session.customerName,
+          status: 'pending',
+          order_source: 'CUSTOMER_QR',
+          customer_session_id: session.sessionId,
+          payment_status: paymentStatus
+        };
+
+        const { error: txError } = await supabase.from('transactions').insert([transaction]);
+        if (txError) throw txError;
+      }
 
       const itemsToInsert = cart.map(item => ({
-        transaction_id: orderId,
+        transaction_id: targetOrderId,
         product_name: item.product.name,
         price: item.product.price,
         quantity: item.quantity,
@@ -175,15 +199,12 @@ export default function CustomerOrderPage() {
         supplier_price: item.product.supplier_price || 0
       }));
 
-      const { error: txError } = await supabase.from('transactions').insert([transaction]);
-      if (txError) throw txError;
-
       const { error: itemsError } = await supabase.from('transaction_items').insert(itemsToInsert);
       if (itemsError) throw itemsError;
 
       // Clear cart and redirect
       setCart([]);
-      router.push(`/order/${orderId}`);
+      router.push(`/order/${targetOrderId}`);
 
     } catch (err) {
       console.error("Order submission failed", err);
