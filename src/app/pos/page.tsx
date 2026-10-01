@@ -123,6 +123,7 @@ export default function POSPage() {
   const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(true);
   const [isMobileCartSheetOpen, setIsMobileCartSheetOpen] = useState(false);
+  const [pendingQrOrders, setPendingQrOrders] = useState<any[]>([]);
   
   const [isEditMode, setIsEditMode] = useState(false);
   const [oldCartItems, setOldCartItems] = useState<any[]>([]);
@@ -155,6 +156,40 @@ export default function POSPage() {
   useEffect(() => {
     generateNextOrderId().then(setOrderNumber);
   }, []);
+
+  useEffect(() => {
+    if (!role) return;
+
+    const fetchPendingQR = async () => {
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+
+      const { data } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('status', 'pending')
+        .eq('order_source', 'CUSTOMER_QR')
+        .gte('created_at', startOfDay.toISOString());
+
+      if (data) {
+        setPendingQrOrders(data);
+      }
+    };
+
+    fetchPendingQR();
+
+    const channelId = `pos_pending_qr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const channel = supabase
+      .channel(channelId)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => {
+        fetchPendingQR();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [role]);
 
   useEffect(() => {
     if (isLoading) return; // Tunggu AuthContext selesai memuat dan sinkronisasi nama
@@ -1219,6 +1254,22 @@ export default function POSPage() {
           </header>
 
         <div className="px-4 md:px-6 pt-6 pb-2 w-full max-w-[100vw] overflow-hidden">
+          {pendingQrOrders.length > 0 && (
+            <div className="mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4 shadow-lg shadow-amber-500/5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center animate-pulse shrink-0">
+                  <QrCode size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-amber-500 text-sm md:text-base">Pesanan Customer QR Baru!</h3>
+                  <p className="text-xs md:text-sm text-zinc-400">Ada {pendingQrOrders.length} pesanan yang menunggu konfirmasi kasir.</p>
+                </div>
+              </div>
+              <Link href="/orders" className="w-full sm:w-auto bg-amber-500 hover:bg-amber-400 text-black font-bold h-10 px-6 rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-amber-500/20 transition-transform active:scale-95">
+                Cek Pesanan
+              </Link>
+            </div>
+          )}
           <div className="flex w-full overflow-x-auto snap-x snap-mandatory scrollbar-hide bg-zinc-900/40 p-1.5 rounded-2xl border border-white/5 shadow-inner gap-1">
             {categories.map(cat => (
               <button
