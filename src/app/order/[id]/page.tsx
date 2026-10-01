@@ -83,13 +83,7 @@ export default function OrderTrackingPage() {
   // Let's adapt based on method.
 
   const steps = [
-    { label: 'Order Diterima', active: true, completed: true },
-    { 
-      label: 'Pembayaran Dikonfirmasi', 
-      active: true, 
-      completed: isPaid || (order.method === 'Bayar Nanti' && isPaid) || isPreparing || isReady || isCompleted 
-      // Note: for Bayar Nanti, it might go straight to preparing without payment confirmation
-    },
+    { label: 'Pesanan Diterima', active: true, completed: true },
     { label: 'Sedang Disiapkan', active: isPreparing || isReady || isCompleted, completed: isReady || isCompleted },
     { label: 'Pesanan Siap', active: isReady || isCompleted, completed: isCompleted },
     { label: 'Selesai', active: isCompleted, completed: isCompleted }
@@ -199,6 +193,13 @@ export default function OrderTrackingPage() {
             <span className="text-amber-500">Rp {order.total.toLocaleString('id-ID')}</span>
           </div>
         </div>
+
+        <Button 
+          onClick={() => router.push('/order')}
+          className="w-full h-14 bg-zinc-900 border border-white/10 hover:bg-zinc-800 text-white font-bold rounded-2xl shadow-lg mt-4"
+        >
+          Pesan Menu Lain
+        </Button>
       </div>
     </div>
   );

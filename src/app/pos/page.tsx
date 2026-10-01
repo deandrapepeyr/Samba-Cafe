@@ -1261,7 +1261,7 @@ export default function POSPage() {
                   <QrCode size={20} />
                 </div>
                 <div>
-                  <h3 className="font-bold text-amber-500 text-sm md:text-base">Pesanan Customer QR Baru!</h3>
+                  <h3 className="font-bold text-amber-500 text-sm md:text-base">Pesanan Mandiri (QR) Masuk!</h3>
                   <p className="text-xs md:text-sm text-zinc-400">Ada {pendingQrOrders.length} pesanan yang menunggu konfirmasi kasir.</p>
                 </div>
               </div>

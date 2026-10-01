@@ -470,7 +470,7 @@ export function Sidebar({ onLogoutClick, onLoginClick }: { onLogoutClick?: () =>
                 <ChefHat size={20} />
               </div>
               <div className="flex-col pr-2">
-                <p className="text-[10px] text-amber-500 font-bold tracking-widest uppercase mb-0.5">Pesanan Baru (QR)</p>
+                <p className="text-[10px] text-amber-500 font-bold tracking-widest uppercase mb-0.5">Pesanan Mandiri (QR)</p>
                 <p className="text-sm text-white font-medium line-clamp-1">Nama/Meja: <span className="font-bold">{newOrderNotification.name}</span></p>
               </div>
               <Button 
