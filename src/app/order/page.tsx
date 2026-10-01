@@ -69,7 +69,9 @@ export default function CustomerOrderPage() {
         setCategories([{ id: '1', name: 'All Menu' }, ...categoriesRes.data]);
       }
       if (productsRes.data) {
-        const sortedProducts = productsRes.data.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+        const sortedProducts = productsRes.data
+          .filter(p => !p.is_titipan)
+          .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
         setProducts(sortedProducts);
         
         if (popularItemsRes.data && popularItemsRes.data.length > 0) {
