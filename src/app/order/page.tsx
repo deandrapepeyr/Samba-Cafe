@@ -255,8 +255,17 @@ export default function CustomerOrderPage() {
             {view === 'menu' ? 'Mau pesan apa hari ini?' : view === 'cart' ? 'Keranjang' : 'Checkout'}
           </h1>
         </div>
-        {view !== 'menu' && (
-          <Button variant="ghost" size="icon" onClick={() => setView('menu')} className="rounded-full bg-white/5 hover:bg-white/10">
+        {view === 'menu' ? (
+          <Button variant="ghost" size="icon" onClick={() => setView('cart')} className="relative rounded-full bg-white/5 hover:bg-white/10 shrink-0">
+            <ShoppingCart size={20} />
+            {cartItemCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-amber-500 text-black text-[10px] font-black w-4 h-4 flex items-center justify-center rounded-full border border-[#0a0a0a]">
+                {cartItemCount}
+              </span>
+            )}
+          </Button>
+        ) : (
+          <Button variant="ghost" size="icon" onClick={() => setView('menu')} className="rounded-full bg-white/5 hover:bg-white/10 shrink-0">
             <X size={20} />
           </Button>
         )}
