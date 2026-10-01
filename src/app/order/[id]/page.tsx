@@ -105,7 +105,7 @@ export default function OrderTrackingPage() {
     'Menunggu Pembayaran';
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col pb-12">
+    <div className="min-h-[100dvh] bg-[#0a0a0a] text-white flex flex-col pb-12">
       {/* Header */}
       <div className="bg-zinc-900/50 border-b border-white/5 px-6 pt-12 pb-6">
         <h1 className="text-xl font-black mb-1">Detail Pesanan</h1>

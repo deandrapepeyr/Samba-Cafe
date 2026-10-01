@@ -196,7 +196,7 @@ export default function CustomerOrderPage() {
 
   if (view === 'welcome') {
     return (
-      <div className="min-h-screen bg-black text-white flex flex-col justify-center px-6 py-12 relative overflow-hidden">
+      <div className="h-[100dvh] bg-black text-white flex flex-col justify-center px-6 py-12 relative overflow-hidden">
         {/* Abstract Background Elements */}
         <div className="absolute top-[-20%] left-[-10%] w-[70vw] h-[70vw] bg-amber-500/10 rounded-full blur-[100px] pointer-events-none" />
         <div className="absolute bottom-[-10%] right-[-20%] w-[80vw] h-[80vw] bg-orange-600/10 rounded-full blur-[120px] pointer-events-none" />
@@ -246,7 +246,7 @@ export default function CustomerOrderPage() {
   });
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col relative pb-28">
+    <div className="h-[100dvh] bg-[#0a0a0a] text-white flex flex-col relative overflow-hidden">
       {/* Header */}
       <div className="sticky top-0 z-40 bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center justify-between">
         <div className="flex flex-col">
@@ -300,7 +300,7 @@ export default function CustomerOrderPage() {
           {isLoadingData ? (
             <div className="p-8 text-center text-zinc-500 text-sm">Memuat menu...</div>
           ) : (
-            <div className="grid grid-cols-2 gap-3 px-4 pt-2 pb-6">
+            <div className="grid grid-cols-2 gap-3 px-4 pt-2 pb-32">
               {filteredProducts.map(product => (
                 <div 
                   key={product.id}
@@ -330,7 +330,7 @@ export default function CustomerOrderPage() {
 
           {/* Floating Cart Button */}
           {cartItemCount > 0 && (
-            <div className="fixed bottom-6 left-0 right-0 px-4 z-50">
+            <div className="absolute bottom-6 left-0 right-0 px-4 z-50">
               <button
                 onClick={() => setView('cart')}
                 className="w-full h-14 bg-gradient-to-r from-amber-500 to-orange-500 rounded-2xl shadow-xl shadow-amber-500/20 text-black font-bold flex items-center justify-between px-5 hover:scale-[1.02] active:scale-[0.98] transition-all"
@@ -403,7 +403,7 @@ export default function CustomerOrderPage() {
       )}
 
       {view === 'checkout' && (
-        <div className="flex-1 px-4 py-6 space-y-6">
+        <div className="flex-1 px-4 py-6 space-y-6 overflow-y-auto">
           <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-4 space-y-3">
             <div className="flex justify-between items-center pb-3 border-b border-white/5">
               <span className="text-sm">Nama Pemesan</span>
