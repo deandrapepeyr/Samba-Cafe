@@ -1790,7 +1790,7 @@ export default function SettingsPage() {
                                   >
                                     <option value="">-- Tanpa Potong Stok --</option>
                                     {stocks.filter(s => s.is_topping).map(s => (
-                                      <option key={s.id} value={s.id}>{s.name} ({s.quantity} {s.unit})</option>
+                                      <option key={s.id} value={s.id}>{s.name} - Tersisa: {s.quantity} {s.unit.replace(/[\d.,\s]/g, '') || 'pcs'}</option>
                                     ))}
                                   </select>
                                 </div>
