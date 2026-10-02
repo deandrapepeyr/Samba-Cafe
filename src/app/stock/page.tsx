@@ -704,7 +704,7 @@ export default function StockPage() {
                     <th className="font-medium py-3 px-4 text-right">Total Modal Stok</th>
                     <th className="font-medium py-3 px-4">Pembaruan</th>
                   </tr>
-                ) : (
+                ) : activeTab === 'titipan' ? (
                   <tr>
                     <th className="font-medium py-3 px-4">Nama Produk</th>
                     <th className="font-medium py-3 px-4">Penitip</th>
@@ -712,6 +712,16 @@ export default function StockPage() {
                     <th className="font-medium py-3 px-4 w-40">Stok Titip</th>
                     <th className="font-medium py-3 px-4">Batas Minimum</th>
                     <th className="font-medium py-3 px-4 text-right">Harga Titip</th>
+                    <th className="font-medium py-3 px-4 text-right">Harga Jual</th>
+                    <th className="font-medium py-3 px-4 text-right">Untung/pcs</th>
+                  </tr>
+                ) : (
+                  <tr>
+                    <th className="font-medium py-3 px-4">Nama Topping</th>
+                    <th className="font-medium py-3 px-4">Status</th>
+                    <th className="font-medium py-3 px-4 w-40">Stok Tersedia</th>
+                    <th className="font-medium py-3 px-4">Batas Minimum</th>
+                    <th className="font-medium py-3 px-4 text-right">Harga Modal</th>
                     <th className="font-medium py-3 px-4 text-right">Harga Jual</th>
                     <th className="font-medium py-3 px-4 text-right">Untung/pcs</th>
                   </tr>
@@ -791,7 +801,7 @@ export default function StockPage() {
                             <td className="py-3 px-4 text-right tabular-nums font-semibold text-primary">Rp {(item.quantity * item.cost_per_unit).toLocaleString('id-ID')}</td>
                             <td className="py-3 px-4 text-zinc-500 text-xs">{formatDate(item.last_updated)}</td>
                           </>
-                        ) : (
+                        ) : activeTab === 'titipan' ? (
                           <>
                             <td className="py-3 px-4 font-serif font-medium text-zinc-100">{item.name}</td>
                             <td className="py-3 px-4 text-zinc-500 text-xs">{item.titipan_name || '-'}</td>
@@ -824,8 +834,43 @@ export default function StockPage() {
                             </td>
                             <td className="py-3 px-4 text-zinc-500 text-xs">{item.min_stock_alert} pcs</td>
                             <td className="py-3 px-4 text-right tabular-nums text-zinc-500 text-xs">Rp {item.cost_per_unit.toLocaleString('id-ID')}</td>
-                            <td className="py-3 px-4 text-right tabular-nums text-zinc-200 font-semibold">Rp {(item.is_topping ? (item.sell_price || 0) : ((item as any).price || item.cost_per_unit)).toLocaleString('id-ID')}</td>
-                            <td className="py-3 px-4 text-right tabular-nums font-semibold text-primary">Rp {(item.is_topping ? ((item.sell_price || 0) - item.cost_per_unit) : (((item as any).price || item.cost_per_unit) - item.cost_per_unit)).toLocaleString('id-ID')}</td>
+                            <td className="py-3 px-4 text-right tabular-nums text-zinc-200 font-semibold">Rp {((item as any).price || item.cost_per_unit).toLocaleString('id-ID')}</td>
+                            <td className="py-3 px-4 text-right tabular-nums font-semibold text-primary">Rp {(((item as any).price || item.cost_per_unit) - item.cost_per_unit).toLocaleString('id-ID')}</td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="py-3 px-4 font-serif font-medium text-zinc-100">{item.name}</td>
+                            <td className="py-3 px-4">
+                              <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${isEmpty ? 'bg-red-500/10 text-red-500' : isLow ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+                                <div className={`w-1.5 h-1.5 rounded-full ${isEmpty ? 'bg-red-500' : isLow ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                                {isEmpty ? 'Habis' : isLow ? 'Menipis' : 'Aman'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4" onClick={(e) => { e.stopPropagation(); setInlineEditId(item.id); setInlineEditValue(item.quantity.toString()); }}>
+                              {inlineEditId === item.id ? (
+                                <div className="flex flex-col gap-1.5">
+                                  <input 
+                                    autoFocus
+                                    className="w-20 bg-background border border-primary/50 rounded px-2 py-1 text-sm font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                                    value={inlineEditValue}
+                                    onChange={e => setInlineEditValue(e.target.value.replace(/\D/g, ''))}
+                                    onBlur={() => handleInlineEditSave(item)}
+                                    onKeyDown={e => { if (e.key === 'Enter') handleInlineEditSave(item); else if (e.key === 'Escape') setInlineEditId(null); }}
+                                  />
+                                </div>
+                              ) : (
+                                <div className="flex flex-col gap-1.5 group/edit relative" title="Klik untuk edit cepat">
+                                  <span className="font-semibold text-zinc-200 group-hover/edit:text-primary transition-colors cursor-text">{item.quantity} <span className="text-zinc-500 font-normal text-xs ml-0.5">pcs</span></span>
+                                  <div className="h-1 rounded-full bg-black/50 overflow-hidden">
+                                    <div className={`h-full rounded-full ${isEmpty ? 'bg-red-500' : isLow ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${ratio}%` }} />
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-zinc-500 text-xs">{item.min_stock_alert} pcs</td>
+                            <td className="py-3 px-4 text-right tabular-nums text-zinc-500 text-xs">Rp {item.cost_per_unit.toLocaleString('id-ID')}</td>
+                            <td className="py-3 px-4 text-right tabular-nums text-zinc-200 font-semibold">Rp {(item.sell_price || 0).toLocaleString('id-ID')}</td>
+                            <td className="py-3 px-4 text-right tabular-nums font-semibold text-primary">Rp {((item.sell_price || 0) - item.cost_per_unit).toLocaleString('id-ID')}</td>
                           </>
                         )}
                       </tr>
