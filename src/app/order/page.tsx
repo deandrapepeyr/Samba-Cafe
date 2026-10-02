@@ -351,10 +351,7 @@ export default function CustomerOrderPage() {
   return (
     <div className="h-[100dvh] bg-[#0a0a0a] text-white flex flex-col relative overflow-hidden">
       {/* Header */}
-      <div 
-        className="sticky top-0 z-40 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center justify-between transition-all duration-300"
-        style={{ backgroundColor: `rgba(10, 10, 10, ${Math.min(0.95, 0.5 + scrollY / 200)})` }}
-      >
+      <div className="sticky top-0 z-40 bg-[#0a0a0a]/70 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center justify-between">
         <div className="flex flex-col">
           <span className="text-xs font-medium text-amber-500">Hi, {session?.customerName} 👋</span>
           <h1 className="text-lg font-black tracking-tight">
@@ -397,26 +394,21 @@ export default function CustomerOrderPage() {
       </div>
 
       {view === 'menu' && (
-        <div 
-          className="flex-1 overflow-y-auto scroll-smooth perspective-1000"
-          onScroll={(e) => setScrollY(e.currentTarget.scrollTop)}
-        >
+        <div className="flex-1 overflow-y-auto scroll-smooth relative">
           {/* Hero Section */}
           <div 
-            className="relative w-full h-[220px] bg-cover bg-center bg-no-repeat overflow-hidden shrink-0 shadow-[0_10px_30px_rgba(0,0,0,0.5)] mb-4 rounded-b-3xl origin-top transition-transform duration-75" 
-            style={{ 
-              backgroundImage: "url('/cafe_hero_bg.png')",
-              transform: `translateY(${scrollY * 0.4}px)`,
-              opacity: Math.max(0, 1 - (scrollY / 300))
-            }}
+            className="sticky top-0 w-full h-[260px] bg-cover bg-center bg-no-repeat overflow-hidden shrink-0 -z-10" 
+            style={{ backgroundImage: "url('/cafe_hero_bg.png')" }}
           >
             <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
             <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/20 to-transparent" />
-            <div className="absolute inset-0 flex items-center justify-center flex-col px-4 text-center z-10 mt-4">
-               <h1 className="text-4xl md:text-5xl font-black text-white drop-shadow-xl tracking-tight" style={{ transform: `translateY(${scrollY * 0.2}px)` }}>Samba Cafe</h1>
-               <p className="text-zinc-200 text-sm font-medium drop-shadow-lg mt-2 max-w-[280px] leading-relaxed" style={{ transform: `translateY(${scrollY * 0.15}px)` }}>Rasakan Kopi Premium & Suasana Nyaman Tanpa Antre</p>
+            <div className="absolute inset-0 flex items-center justify-center flex-col px-4 text-center z-10 mt-2">
+               <h1 className="text-4xl md:text-5xl font-black text-white drop-shadow-2xl tracking-tight">Samba Cafe</h1>
+               <p className="text-zinc-200 text-sm font-medium drop-shadow-xl mt-2 max-w-[280px] leading-relaxed">Rasakan Kopi Premium & Suasana Nyaman Tanpa Antre</p>
             </div>
           </div>
+          
+          <div className="relative z-10 bg-[#0a0a0a] rounded-t-3xl pt-5 pb-8 -mt-8 shadow-[0_-15px_40px_rgba(0,0,0,0.8)] min-h-[800px]">
           {hasReadyOrder && (
             <div className="px-4 pt-4 pb-2">
               <div 
@@ -616,10 +608,11 @@ export default function CustomerOrderPage() {
             </div>
             </div>
           )}
+          </div> {/* End Menu Content Container */}
 
           {/* Floating Cart Button */}
           {cartItemCount > 0 && (
-            <div className="absolute bottom-6 left-0 right-0 px-4 z-50">
+            <div className="sticky bottom-6 left-0 right-0 px-4 z-50 mt-4">
               <button
                 onClick={() => setView('cart')}
                 className="w-full h-14 bg-amber-500/60 backdrop-blur-2xl border border-amber-200/40 rounded-2xl shadow-[0_8px_32px_rgba(245,158,11,0.4)] text-white font-black flex items-center justify-between px-5 hover:scale-[1.02] active:scale-[0.98] transition-all"
