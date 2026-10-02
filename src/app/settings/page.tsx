@@ -1785,7 +1785,7 @@ export default function SettingsPage() {
                                         const stock = stocks.find(s => s.id === e.target.value);
                                         if (stock) {
                                           newV[vIdx].choices[cIdx].name = stock.name;
-                                          newV[vIdx].choices[cIdx].price = stock.sell_price || 0;
+                                          newV[vIdx].choices[cIdx].price = stock.sell_price || newV[vIdx].choices[cIdx].price || 0;
                                         }
                                       } else {
                                         newV[vIdx].choices[cIdx].price = 0;
@@ -1818,7 +1818,7 @@ export default function SettingsPage() {
                                       placeholder="0" 
                                       className={`h-10 pl-9 pr-3 bg-zinc-900/50 border-white/5 text-sm rounded-xl focus-visible:ring-amber-500/50 text-zinc-200 ${choice.stock_id ? 'opacity-50 cursor-not-allowed' : ''}`}
                                       value={choice.stock_id 
-                                        ? (stocks.find(s => s.id === choice.stock_id)?.sell_price || 0).toLocaleString('id-ID')
+                                        ? (stocks.find(s => s.id === choice.stock_id)?.sell_price || choice.price || 0).toLocaleString('id-ID')
                                         : (choice.price ? choice.price.toLocaleString('id-ID') : '')}
                                       disabled={!!choice.stock_id}
                                       onChange={(e) => {
