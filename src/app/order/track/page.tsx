@@ -8,6 +8,28 @@ import { CheckCircle2, Circle, QrCode, Clock, RefreshCw, AlertCircle, ChevronLef
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
+function TypewriterText({ text }: { text: string }) {
+  const [displayText, setDisplayText] = useState('');
+  
+  useEffect(() => {
+    setDisplayText('');
+    let i = 0;
+    const interval = setInterval(() => {
+      setDisplayText(text.slice(0, i + 1));
+      i++;
+      if (i >= text.length) clearInterval(interval);
+    }, 120);
+    return () => clearInterval(interval);
+  }, [text]);
+
+  return (
+    <span className="flex items-center">
+      {displayText}
+      <span className="w-[3px] h-[1em] bg-amber-500 ml-1.5 animate-[pulse_1s_ease-in-out_infinite]" />
+    </span>
+  );
+}
+
 export default function OrderTrackingPage() {
   const router = useRouter();
   const [orders, setOrders] = useState<any[]>([]);
@@ -126,10 +148,12 @@ export default function OrderTrackingPage() {
   if (orders.length === 0) {
     return (
       <div className="h-[100dvh] bg-[#0a0a0a] text-white flex flex-col overflow-hidden">
-        <div className="bg-zinc-900/50 border-b border-white/5 px-6 pt-12 pb-6 flex items-center justify-between shrink-0">
-          <div>
-            <h1 className="text-xl font-black mb-1">Status Pesanan</h1>
-            <p className="text-sm font-medium text-zinc-400">Meja/Nama: {session.customerName}</p>
+        <div className="bg-[#0a0a0a]/90 backdrop-blur-xl border-b border-white/5 px-4 pt-6 pb-4 flex items-center justify-between shrink-0 sticky top-0 z-40">
+          <div className="flex flex-col">
+            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-0.5">Samba Cafe</span>
+            <h1 className="text-xl font-black leading-none text-white flex items-center">
+              <TypewriterText text="Belum Ada Pesanan" />
+            </h1>
           </div>
           <button onClick={() => router.push('/order')} className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors">
             <ChevronLeft size={24} />
@@ -194,10 +218,14 @@ export default function OrderTrackingPage() {
   return (
     <div className="h-[100dvh] bg-[#0a0a0a] text-white flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="bg-zinc-900/50 border-b border-white/5 px-6 pt-12 pb-6 flex items-center justify-between shrink-0">
-        <div>
-          <h1 className="text-xl font-black mb-1">Tagihan & Pesanan</h1>
-          <p className="text-sm font-medium text-zinc-400">Meja/Nama: {session.customerName}</p>
+      <div className="bg-[#0a0a0a]/90 backdrop-blur-xl border-b border-white/5 px-4 pt-6 pb-4 flex items-center justify-between shrink-0 sticky top-0 z-40">
+        <div className="flex flex-col">
+          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-0.5">
+            Halo, {session.customerName} ✨
+          </span>
+          <h1 className="text-xl font-black leading-none text-white flex items-center">
+            <TypewriterText text="Pantau Pesanan Anda" />
+          </h1>
         </div>
         <button onClick={() => router.push('/order')} className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors">
           <ChevronLeft size={24} />
