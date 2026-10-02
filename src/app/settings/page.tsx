@@ -403,13 +403,31 @@ export default function SettingsPage() {
       
       if (!error) {
         // Save ingredients
-        const ingredientsToInsert = newIngredients
+        const ingredientsToInsert: any[] = newIngredients
           .filter(ing => ing.stock_id && ing.quantity_required)
           .map(ing => ({
             product_id: product.id,
             stock_id: ing.stock_id,
             quantity_required: parseFloat(ing.quantity_required)
           }));
+
+        if (product.variants) {
+          product.variants.forEach((v: any) => {
+            if (!v.is_required && v.choices) {
+               v.choices.forEach((c: any) => {
+                 if (c.stock_id) {
+                    ingredientsToInsert.push({
+                      product_id: product.id,
+                      stock_id: c.stock_id,
+                      quantity_required: 1, // default topping deducts 1
+                      variant_name: v.name,
+                      choice_name: c.name
+                    });
+                 }
+               });
+            }
+          });
+        }
           
         if (ingredientsToInsert.length > 0) {
            await supabase.from('product_ingredients').insert(ingredientsToInsert);
@@ -465,13 +483,31 @@ export default function SettingsPage() {
       if (!error) {
         // Update ingredients
         await supabase.from('product_ingredients').delete().eq('product_id', updatedItem.id);
-        const ingredientsToInsert = editIngredients
+        const ingredientsToInsert: any[] = editIngredients
           .filter(ing => ing.stock_id && ing.quantity_required)
           .map(ing => ({
             product_id: updatedItem.id,
             stock_id: ing.stock_id,
             quantity_required: parseFloat(ing.quantity_required)
           }));
+
+        if (updatedItem.variants) {
+          updatedItem.variants.forEach((v: any) => {
+            if (!v.is_required && v.choices) {
+               v.choices.forEach((c: any) => {
+                 if (c.stock_id) {
+                    ingredientsToInsert.push({
+                      product_id: updatedItem.id,
+                      stock_id: c.stock_id,
+                      quantity_required: 1, // default topping deducts 1
+                      variant_name: v.name,
+                      choice_name: c.name
+                    });
+                 }
+               });
+            }
+          });
+        }
           
         if (ingredientsToInsert.length > 0) {
            await supabase.from('product_ingredients').insert(ingredientsToInsert);
@@ -1726,41 +1762,64 @@ export default function SettingsPage() {
                           <div className="space-y-2">
                             <label className="text-xs font-semibold text-zinc-400 block mb-2">Pilihan Topping & Harga</label>
                             {variant.choices.map((choice: any, cIdx: number) => (
-                              <div key={cIdx} className="flex gap-2 items-center">
-                                <Input 
-                                  placeholder="Nama Pilihan (cth: Keju Slice)" 
-                                  className="h-10 flex-1 bg-zinc-900/50 border-white/5 text-sm rounded-xl focus-visible:ring-amber-500/50 text-zinc-200 placeholder:text-zinc-600"
-                                  value={choice.name}
-                                  onChange={(e) => {
-                                    const newV = [...editingItem.variants];
-                                    newV[vIdx].choices[cIdx].name = e.target.value;
-                                    setEditingItem({...editingItem, variants: newV});
-                                  }}
-                                />
-                                <div className="relative w-32 shrink-0">
-                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-zinc-500">Rp</span>
-                                  <Input 
-                                    placeholder="0" 
-                                    className="h-10 pl-9 pr-3 bg-zinc-900/50 border-white/5 text-sm rounded-xl focus-visible:ring-amber-500/50 text-zinc-200"
-                                    value={choice.price ? choice.price.toLocaleString('id-ID') : ''}
-                                    onChange={(e) => {
-                                      const raw = e.target.value.replace(/\D/g, '');
-                                      const newV = [...editingItem.variants];
-                                      newV[vIdx].choices[cIdx].price = raw ? parseInt(raw) : 0;
-                                      setEditingItem({...editingItem, variants: newV});
-                                    }}
-                                  />
-                                </div>
+                              <div key={cIdx} className="flex flex-col gap-3 p-3 bg-zinc-950/50 rounded-xl border border-white/5 relative group/choice">
                                 <button 
                                   onClick={() => {
                                     const newV = [...editingItem.variants];
                                     newV[vIdx].choices.splice(cIdx, 1);
                                     setEditingItem({...editingItem, variants: newV});
                                   }}
-                                  className="p-2.5 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
+                                  className="absolute -right-2 -top-2 w-7 h-7 flex items-center justify-center bg-zinc-900 border border-white/10 text-zinc-500 hover:text-red-400 hover:border-red-500/30 rounded-full shadow-lg transition-colors z-10 opacity-0 group-hover/choice:opacity-100"
                                 >
-                                  <X size={16} />
+                                  <X size={14} />
                                 </button>
+                                <div className="grid gap-1.5">
+                                  <label className="text-[10px] uppercase tracking-wider font-semibold text-zinc-500">Pilih Stok Topping (Opsional)</label>
+                                  <select
+                                    className="h-10 w-full bg-zinc-900/80 border-white/10 text-sm rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/50 text-zinc-200"
+                                    value={choice.stock_id || ''}
+                                    onChange={(e) => {
+                                      const newV = [...editingItem.variants];
+                                      newV[vIdx].choices[cIdx].stock_id = e.target.value;
+                                      if (e.target.value && !newV[vIdx].choices[cIdx].name) {
+                                        const stockName = stocks.find(s => s.id === e.target.value)?.name;
+                                        if (stockName) newV[vIdx].choices[cIdx].name = stockName;
+                                      }
+                                      setEditingItem({...editingItem, variants: newV});
+                                    }}
+                                  >
+                                    <option value="">-- Tanpa Potong Stok --</option>
+                                    {stocks.filter(s => s.is_topping).map(s => (
+                                      <option key={s.id} value={s.id}>{s.name} ({s.quantity} {s.unit})</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div className="flex gap-2 items-center">
+                                  <Input 
+                                    placeholder="Nama Tampilan (cth: Keju Extra)" 
+                                    className="h-10 flex-1 bg-zinc-900/50 border-white/5 text-sm rounded-xl focus-visible:ring-amber-500/50 text-zinc-200 placeholder:text-zinc-600"
+                                    value={choice.name}
+                                    onChange={(e) => {
+                                      const newV = [...editingItem.variants];
+                                      newV[vIdx].choices[cIdx].name = e.target.value;
+                                      setEditingItem({...editingItem, variants: newV});
+                                    }}
+                                  />
+                                  <div className="relative w-32 shrink-0">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-zinc-500">Rp</span>
+                                    <Input 
+                                      placeholder="0" 
+                                      className="h-10 pl-9 pr-3 bg-zinc-900/50 border-white/5 text-sm rounded-xl focus-visible:ring-amber-500/50 text-zinc-200"
+                                      value={choice.price ? choice.price.toLocaleString('id-ID') : ''}
+                                      onChange={(e) => {
+                                        const raw = e.target.value.replace(/\D/g, '');
+                                        const newV = [...editingItem.variants];
+                                        newV[vIdx].choices[cIdx].price = raw ? parseInt(raw) : 0;
+                                        setEditingItem({...editingItem, variants: newV});
+                                      }}
+                                    />
+                                  </div>
+                                </div>
                               </div>
                             ))}
                             <Button 
