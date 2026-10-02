@@ -282,7 +282,7 @@ export default function POSPage() {
     const handleRefreshProducts = async () => {
       const [productsRes, stocksRes] = await Promise.all([
         supabase.from('products').select('*').eq('is_available', true),
-        supabase.from('stocks').select('id, quantity')
+        supabase.from('stocks').select('id, quantity, name, sell_price, is_topping')
       ]);
       if (stocksRes.data) setStocksData(stocksRes.data);
       if (productsRes.data) {
