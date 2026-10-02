@@ -200,6 +200,19 @@ export default function CustomerOrderPage() {
     }).filter(item => item.quantity > 0));
   };
 
+  const getProductQuantity = (productId: string) => {
+    return cart.filter(item => item.product.id === productId).reduce((sum, item) => sum + item.quantity, 0);
+  };
+
+  const handleDecreaseProduct = (productId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const items = cart.filter(item => item.product.id === productId);
+    if (items.length > 0) {
+      const lastItem = items[items.length - 1];
+      updateQuantity(lastItem.id, -1);
+    }
+  };
+
   const cartTotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
   const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -413,20 +426,22 @@ export default function CustomerOrderPage() {
 
           {/* Categories */}
           {searchQuery.trim() === '' && (
-            <div className="px-4 py-3 flex gap-3 overflow-x-auto snap-x scrollbar-none pb-3 mb-2">
-              {categories.map(cat => (
-                <button
-                  key={cat.id}
-                  onClick={() => setActiveCategory(cat.id)}
-                  className={`snap-start shrink-0 h-10 px-5 rounded-2xl text-[13px] font-bold transition-all flex items-center justify-center border ${
-                    activeCategory === cat.id 
-                      ? 'bg-amber-500 text-black border-amber-500 shadow-lg shadow-amber-500/20' 
-                      : 'bg-zinc-900/50 text-zinc-400 border-white/5 hover:bg-zinc-800'
-                  }`}
-                >
-                  {cat.name}
-                </button>
-              ))}
+            <div className="px-4 py-3 mb-2">
+              <div className="flex gap-1 overflow-x-auto scrollbar-none bg-zinc-900/60 p-1 rounded-2xl border border-white/5">
+                {categories.map(cat => (
+                  <button
+                    key={cat.id}
+                    onClick={() => setActiveCategory(cat.id)}
+                    className={`shrink-0 h-9 px-4 rounded-xl text-[13px] font-bold transition-all flex items-center justify-center ${
+                      activeCategory === cat.id 
+                        ? 'bg-amber-500 text-black shadow-md' 
+                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5'
+                    }`}
+                  >
+                    {cat.name}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
@@ -475,9 +490,21 @@ export default function CustomerOrderPage() {
                           <div className="flex items-center justify-between mt-1">
                             <span className="font-black text-amber-500 text-base">Rp{product.price.toLocaleString('id-ID')}</span>
                             {product.is_available && (
-                              <button className="w-8 h-8 rounded-full bg-amber-500 text-black flex items-center justify-center font-bold shadow-lg shadow-amber-500/20">
-                                <Plus size={16} />
-                              </button>
+                              getProductQuantity(product.id) > 0 ? (
+                                <div className="flex items-center gap-2 bg-amber-500 rounded-full px-2 py-1 text-black font-bold shadow-lg shadow-amber-500/20" onClick={(e) => e.stopPropagation()}>
+                                  <button onClick={(e) => handleDecreaseProduct(product.id, e)} className="w-6 h-6 rounded-full bg-black/10 flex items-center justify-center">
+                                    <Minus size={14} />
+                                  </button>
+                                  <span className="text-sm px-1">{getProductQuantity(product.id)}</span>
+                                  <button onClick={(e) => { e.stopPropagation(); handleProductClick(product); }} className="w-6 h-6 rounded-full bg-black/10 flex items-center justify-center">
+                                    <Plus size={14} />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button onClick={(e) => { e.stopPropagation(); handleProductClick(product); }} className="w-8 h-8 rounded-full bg-amber-500 text-black flex items-center justify-center font-bold shadow-lg shadow-amber-500/20">
+                                  <Plus size={16} />
+                                </button>
+                              )
                             )}
                           </div>
                         </div>
@@ -519,9 +546,21 @@ export default function CustomerOrderPage() {
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-amber-500 text-sm">Rp{product.price.toLocaleString('id-ID')}</span>
                       {product.is_available && (
-                        <button className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center font-bold">
-                          <Plus size={14} />
-                        </button>
+                        getProductQuantity(product.id) > 0 ? (
+                          <div className="flex items-center gap-1.5 bg-amber-500 rounded-full px-1.5 py-0.5 text-black font-bold" onClick={(e) => e.stopPropagation()}>
+                            <button onClick={(e) => handleDecreaseProduct(product.id, e)} className="w-5 h-5 rounded-full bg-black/10 flex items-center justify-center">
+                              <Minus size={12} />
+                            </button>
+                            <span className="text-xs px-1">{getProductQuantity(product.id)}</span>
+                            <button onClick={(e) => { e.stopPropagation(); handleProductClick(product); }} className="w-5 h-5 rounded-full bg-black/10 flex items-center justify-center">
+                              <Plus size={12} />
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={(e) => { e.stopPropagation(); handleProductClick(product); }} className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center font-bold">
+                            <Plus size={14} />
+                          </button>
+                        )
                       )}
                     </div>
                   </div>
@@ -536,7 +575,7 @@ export default function CustomerOrderPage() {
             <div className="absolute bottom-6 left-0 right-0 px-4 z-50">
               <button
                 onClick={() => setView('cart')}
-                className="w-full h-14 bg-gradient-to-r from-amber-500 to-orange-500 rounded-2xl shadow-xl shadow-amber-500/20 text-black font-bold flex items-center justify-between px-5 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                className="w-full h-14 bg-amber-500/80 backdrop-blur-xl border border-amber-400/50 rounded-2xl shadow-2xl shadow-amber-500/30 text-black font-bold flex items-center justify-between px-5 hover:scale-[1.02] active:scale-[0.98] transition-all"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-black/10 flex items-center justify-center text-sm">
@@ -569,10 +608,10 @@ export default function CustomerOrderPage() {
                     {item.notes && <p className="text-[10px] text-zinc-500 line-clamp-1 mt-0.5">{item.notes}</p>}
                     <p className="font-bold text-amber-500 text-sm mt-1">Rp {item.product.price.toLocaleString('id-ID')}</p>
                   </div>
-                  <div className="flex flex-col items-center gap-1.5 shrink-0 bg-black/40 p-1 rounded-xl">
-                    <button onClick={() => updateQuantity(item.id, 1)} className="w-7 h-7 rounded-lg bg-zinc-800 text-white flex items-center justify-center"><Plus size={14} /></button>
-                    <span className="font-bold text-[13px]">{item.quantity}</span>
+                  <div className="flex flex-row items-center gap-2 shrink-0 bg-black/40 p-1 rounded-xl">
                     <button onClick={() => updateQuantity(item.id, -1)} className="w-7 h-7 rounded-lg bg-zinc-800 text-zinc-400 flex items-center justify-center"><Minus size={14} /></button>
+                    <span className="font-bold text-[13px] w-4 text-center">{item.quantity}</span>
+                    <button onClick={() => updateQuantity(item.id, 1)} className="w-7 h-7 rounded-lg bg-zinc-800 text-white flex items-center justify-center"><Plus size={14} /></button>
                   </div>
                 </div>
               ))}
