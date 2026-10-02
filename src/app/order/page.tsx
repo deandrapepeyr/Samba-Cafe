@@ -72,6 +72,23 @@ export default function CustomerOrderPage() {
   
   // Cart State
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [isCartLoaded, setIsCartLoaded] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('samba_cart');
+      if (saved) setCart(JSON.parse(saved));
+    } catch (e) {
+      console.error('Failed to load cart', e);
+    }
+    setIsCartLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (isCartLoaded) {
+      localStorage.setItem('samba_cart', JSON.stringify(cart));
+    }
+  }, [cart, isCartLoaded]);
   
   // Checkout State
   const [isProcessing, setIsProcessing] = useState(false);
