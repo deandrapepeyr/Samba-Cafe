@@ -353,9 +353,11 @@ export default function CustomerOrderPage() {
       {/* Header */}
       <div className="sticky top-0 z-40 bg-[#0a0a0a]/70 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center justify-between">
         <div className="flex flex-col">
-          <span className="text-xs font-medium text-amber-500">Hi, {session?.customerName} 👋</span>
-          <h1 className="text-lg font-black tracking-tight">
-            {view === 'menu' ? 'Mau pesan apa hari ini?' : view === 'cart' ? 'Keranjang' : 'Checkout'}
+          <span className="text-[11px] font-bold text-amber-500 uppercase tracking-widest mb-0.5">
+            Selamat Datang, {session?.customerName} ✨
+          </span>
+          <h1 className="text-xl font-black tracking-tight leading-none">
+            {view === 'menu' ? 'Eksplorasi Menu Kami' : view === 'cart' ? 'Keranjang Pesanan' : 'Ringkasan Pesanan'}
           </h1>
         </div>
         {view === 'menu' ? (
