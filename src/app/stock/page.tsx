@@ -836,67 +836,64 @@ export default function StockPage() {
 
       {/* Add New Item Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="bg-card border-border sm:max-w-[425px]">
+        <DialogContent className="bg-zinc-950 border-white/10 sm:max-w-[425px] rounded-2xl">
           <DialogHeader>
-            <DialogTitle>{newItem.is_titipan ? 'Tambah Barang Titipan Baru' : 'Tambah Bahan Baku Cafe'}</DialogTitle>
+            <DialogTitle className="text-xl text-zinc-100">{newItem.is_titipan ? 'Tambah Barang Titipan' : 'Tambah Bahan Baku Cafe'}</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-2">
+          <div className="grid gap-5 py-4 max-h-[70vh] overflow-y-auto px-1 scrollbar-thin scrollbar-thumb-white/10">
             
-            <div className="flex gap-4 p-1 bg-muted/50 rounded-lg mb-2">
+            <div className="flex gap-2 p-1 bg-zinc-900/50 border border-white/5 rounded-xl mb-1">
               <Button 
-                variant={!newItem.is_titipan ? 'default' : 'ghost'} 
+                variant="ghost" 
                 onClick={() => setNewItem({...newItem, is_titipan: false})} 
-                className={`flex-1 h-9 text-xs sm:text-sm ${!newItem.is_titipan ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground'}`}
+                className={`flex-1 h-9 text-xs sm:text-sm rounded-lg transition-all ${!newItem.is_titipan ? 'bg-primary text-primary-foreground font-semibold shadow-sm hover:bg-primary/90' : 'text-zinc-500 hover:text-zinc-300'}`}
               >
-                Bahan / Stok (Bisa utk Penitip)
+                Bahan / Stok Cafe
               </Button>
               <Button 
-                variant={newItem.is_titipan ? 'default' : 'ghost'} 
+                variant="ghost" 
                 onClick={() => setNewItem({...newItem, is_titipan: true})} 
-                className={`flex-1 h-9 text-xs sm:text-sm ${newItem.is_titipan ? 'bg-orange-500 text-white shadow-sm hover:bg-orange-600' : 'text-muted-foreground'}`}
+                className={`flex-1 h-9 text-xs sm:text-sm rounded-lg transition-all ${newItem.is_titipan ? 'bg-orange-500 text-white font-semibold shadow-sm hover:bg-orange-600' : 'text-zinc-500 hover:text-zinc-300'}`}
               >
-                Menu Titipan (Siap Jual)
+                Barang Titipan
               </Button>
             </div>
 
             {!newItem.is_titipan && (
-              <div className="grid grid-cols-4 items-center gap-4 mb-2">
-                <div className="col-start-2 col-span-3">
-                  <label className="flex items-center gap-2 cursor-pointer p-2 border border-primary/20 bg-primary/5 rounded-lg w-fit transition-colors hover:bg-primary/10">
-                    <input 
-                      type="checkbox" 
-                      className="w-4 h-4 rounded text-primary focus:ring-primary border-primary/50"
-                      checked={newItem.is_direct_sell}
-                      onChange={e => setNewItem({...newItem, is_direct_sell: e.target.checked})}
-                    />
-                    <span className="text-sm font-semibold text-primary">Jadikan Menu & Jual Langsung</span>
-                  </label>
-                  <p className="text-[10px] text-muted-foreground mt-1 ml-1">Stok otomatis dibuatkan menu dan siap dijual di Kasir</p>
-                </div>
+              <div className="flex flex-col gap-2 p-3 bg-primary/5 border border-primary/10 rounded-xl">
+                <label className="flex items-center gap-3 cursor-pointer w-fit">
+                  <input 
+                    type="checkbox" 
+                    className="w-4 h-4 rounded text-primary focus:ring-primary border-white/10 bg-zinc-900"
+                    checked={newItem.is_direct_sell}
+                    onChange={e => setNewItem({...newItem, is_direct_sell: e.target.checked})}
+                  />
+                  <span className="text-sm font-semibold text-primary">Jual Langsung di Kasir</span>
+                </label>
+                <p className="text-xs text-zinc-400 pl-7 leading-relaxed">Menu otomatis dibuat dan langsung bisa dipesan di halaman POS.</p>
               </div>
             )}
 
             {!newItem.is_titipan && (
-              <div className="grid grid-cols-4 items-center gap-4 overflow-visible">
-                <label className="text-right text-sm font-medium">Bahan Titipan?</label>
-                <div className="col-span-3 overflow-visible relative">
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-zinc-400">Suplier / Penitip (Opsional)</label>
+                <div className="relative">
                   <TitipanAutocomplete 
-                    placeholder="Kosongkan jika milik Cafe, isi nama penitip jika titipan" 
+                    placeholder="Contoh: Bu Karti (Kosongkan jika beli sendiri)" 
                     value={newItem.titipan_name || ''} 
                     onChange={val => setNewItem({...newItem, titipan_name: val})} 
                     options={Array.from(new Set(stocks.filter(s => s.is_titipan && s.titipan_name).map(s => s.titipan_name as string)))}
                   />
-                  <p className="text-[10px] text-muted-foreground mt-1 ml-1">Isi nama penitip jika bahan baku ini disuplai oleh penitip.</p>
                 </div>
               </div>
             )}
 
             {newItem.is_titipan && (
-              <div className="grid grid-cols-4 items-center gap-4 overflow-visible">
-                <label className="text-right text-sm font-medium">Nama Penitip</label>
-                <div className="col-span-3 overflow-visible relative">
+              <div className="grid gap-2">
+                <label className="text-sm font-semibold text-orange-400">Nama Penitip</label>
+                <div className="relative">
                   <TitipanAutocomplete 
-                    placeholder="Cth: Bu Karti" 
+                    placeholder="Contoh: Bu Karti" 
                     value={newItem.titipan_name} 
                     onChange={val => setNewItem({...newItem, titipan_name: val})} 
                     options={Array.from(new Set(stocks.filter(s => s.is_titipan && s.titipan_name).map(s => s.titipan_name as string)))}
@@ -905,19 +902,19 @@ export default function StockPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label className="text-right text-sm font-medium">Nama Barang</label>
-              <Input className="col-span-3 bg-background border-border" placeholder={newItem.is_titipan ? "Cth: Cendol" : "Cth: Biji Kopi, Susu"} value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} />
+            <div className="grid gap-2">
+              <label className="text-sm font-medium text-zinc-400">Nama {newItem.is_titipan ? 'Barang' : 'Bahan'}</label>
+              <Input className="bg-zinc-900/50 border-white/10 h-11 rounded-xl focus-visible:ring-primary text-zinc-100" placeholder={newItem.is_titipan ? "Contoh: Cendol" : "Contoh: Susu Diamond"} value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} />
             </div>
 
             {!newItem.is_titipan && (
-              <div className="grid grid-cols-4 items-center gap-4">
-                <label className="text-right text-sm font-medium">1 Kemasan Beli Isinya Berapa?</label>
-                <div className="col-span-3 flex gap-2">
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-zinc-400">1 Kemasan Beli Isinya Berapa?</label>
+                <div className="flex gap-2">
                   <Input 
                     type="text" 
-                    className="bg-background border-border flex-1" 
-                    placeholder="Angka (cth: 5)" 
+                    className="bg-zinc-900/50 border-white/10 h-11 rounded-xl focus-visible:ring-primary text-zinc-100 flex-1" 
+                    placeholder="Angka (cth: 1)" 
                     value={newItem.unit_value} 
                     onChange={e => {
                       const val = e.target.value.replace(/[^0-9.,]/g, '');
@@ -925,7 +922,7 @@ export default function StockPage() {
                     }} 
                   />
                   <select 
-                    className="flex h-10 w-32 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="h-11 w-32 rounded-xl border border-white/10 bg-zinc-900/50 px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-primary"
                     value={newItem.unit_type}
                     onChange={e => setNewItem({...newItem, unit_type: e.target.value})}
                   >
@@ -942,13 +939,13 @@ export default function StockPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label className="text-right text-sm font-medium">{newItem.is_titipan ? 'Harga Setor (Modal)' : 'Total Harga Beli 1 Kemasan'}</label>
-              <div className="relative col-span-3">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">Rp</span>
+            <div className="grid gap-2">
+              <label className="text-sm font-medium text-zinc-400">{newItem.is_titipan ? 'Harga Setor (Modal Penitip)' : 'Total Harga Beli 1 Kemasan'}</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm font-medium">Rp</span>
                 <Input 
                   type="text" 
-                  className="pl-9 bg-background border-border" 
+                  className="pl-9 bg-zinc-900/50 border-white/10 h-11 rounded-xl focus-visible:ring-primary text-zinc-100" 
                   placeholder="0" 
                   value={newItem.cost_per_unit === '' ? '' : Number(newItem.cost_per_unit).toLocaleString('id-ID')} 
                   onChange={e => {
@@ -960,24 +957,23 @@ export default function StockPage() {
             </div>
 
             {!newItem.is_titipan && (
-              <div className="grid grid-cols-4 items-center gap-4">
-                <label className="text-right text-sm font-medium text-primary">Otomatis: Harga Modal 1 {newItem.unit_type || 'Satuan'}</label>
-                <div className="col-span-3">
-                  <div className="flex h-10 w-full rounded-md border border-input bg-primary/10 px-3 py-2 text-sm text-primary items-center font-bold">
-                    Rp {newItem.unit_value && newItem.cost_per_unit ? Number(parseInt(newItem.cost_per_unit) / parseFloat(newItem.unit_value)).toLocaleString('id-ID', { maximumFractionDigits: 2 }) : '0'}
-                  </div>
-                </div>
+              <div className="flex justify-between items-center px-4 py-3 bg-primary/5 rounded-xl border border-primary/10">
+                <span className="text-sm font-medium text-primary">Harga Modal (Otomatis)</span>
+                <span className="font-bold text-primary">
+                  Rp {newItem.unit_value && newItem.cost_per_unit ? Number(parseInt(newItem.cost_per_unit) / parseFloat(newItem.unit_value)).toLocaleString('id-ID', { maximumFractionDigits: 2 }) : '0'} 
+                  <span className="text-xs font-normal opacity-80 ml-1">/ {newItem.unit_type || 'Satuan'}</span>
+                </span>
               </div>
             )}
 
             {(newItem.is_titipan || newItem.is_direct_sell) && (
-              <div className="grid grid-cols-4 items-center gap-4">
-                <label className="text-right text-sm font-medium">Harga Jual</label>
-                <div className="relative col-span-3">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">Rp</span>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-zinc-400">Harga Jual (Di Kasir)</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm font-medium">Rp</span>
                   <Input 
                     type="text" 
-                    className="pl-9 bg-background border-border" 
+                    className="pl-9 bg-zinc-900/50 border-white/10 h-11 rounded-xl focus-visible:ring-primary text-zinc-100" 
                     placeholder="0" 
                     value={newItem.sell_price === '' ? '' : Number(newItem.sell_price).toLocaleString('id-ID')} 
                     onChange={e => {
@@ -989,64 +985,66 @@ export default function StockPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label className="text-right text-sm font-medium">{newItem.is_titipan ? 'Stok Awal' : 'Beli Berapa Kemasan?'}</label>
-              <div className="col-span-3 relative">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium text-zinc-400">{newItem.is_titipan ? 'Stok Saat Ini' : 'Beli Berapa Kemasan?'}</label>
+              <div className="relative">
                 <Input 
                   type="text" 
-                  className={`bg-background border-border ${!newItem.is_titipan ? 'pr-20' : ''}`}
-                  placeholder={newItem.is_titipan ? "Jumlah stok saat ini" : "Angka (cth: 1)"} 
+                  className={`bg-zinc-900/50 border-white/10 h-11 rounded-xl focus-visible:ring-primary text-zinc-100 ${!newItem.is_titipan ? 'pr-20' : ''}`}
+                  placeholder={newItem.is_titipan ? "Jumlah stok" : "Angka (cth: 1)"} 
                   value={newItem.quantity === '' ? '' : Number(newItem.quantity).toLocaleString('id-ID')} 
                   onChange={e => {
                     const val = e.target.value.replace(/\D/g, '');
                     setNewItem({...newItem, quantity: val === '' ? '' : parseInt(val, 10).toString()});
                   }} 
                 />
-                {!newItem.is_titipan && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-medium">Kemasan</span>}
+                {!newItem.is_titipan && <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 text-xs font-medium">Kemasan</span>}
               </div>
             </div>
 
             {!newItem.is_titipan && (
-              <div className="grid grid-cols-4 items-center gap-4">
-                <label className="text-right text-sm font-medium text-primary">Otomatis: Total Porsi {newItem.unit_type || 'Satuan'}</label>
-                <div className="col-span-3">
-                  <div className="flex h-10 w-full rounded-md border border-input bg-primary/10 px-3 py-2 text-sm text-primary items-center font-bold">
-                    {newItem.quantity && newItem.unit_value ? (parseInt(newItem.quantity) * parseFloat(newItem.unit_value)).toLocaleString('id-ID') : '0'} {newItem.unit_type || 'Satuan'}
-                  </div>
-                </div>
+              <div className="flex justify-between items-center px-4 py-3 bg-zinc-900 rounded-xl border border-white/5">
+                <span className="text-sm font-medium text-zinc-400">Total Masuk (Otomatis)</span>
+                <span className="font-bold text-zinc-100">
+                  {newItem.quantity && newItem.unit_value ? (parseInt(newItem.quantity) * parseFloat(newItem.unit_value)).toLocaleString('id-ID') : '0'} 
+                  <span className="text-xs font-normal text-zinc-500 ml-1">{newItem.unit_type || 'Satuan'}</span>
+                </span>
               </div>
             )}
 
             {!newItem.is_titipan && (
-              <div className="grid grid-cols-4 items-center gap-4">
-                <label className="text-right text-sm font-medium text-destructive">Batas Min</label>
-                <Input 
-                  type="text" 
-                  className="col-span-3 bg-background border-border" 
-                  placeholder="Peringatan jika stok dibawah ini" 
-                  value={newItem.min_stock_alert === '' ? '' : Number(newItem.min_stock_alert).toLocaleString('id-ID')} 
-                  onChange={e => {
-                    const val = e.target.value.replace(/\D/g, '');
-                    setNewItem({...newItem, min_stock_alert: val === '' ? '' : parseInt(val, 10).toString()});
-                  }} 
-                />
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-red-400">Batas Minimum (Peringatan)</label>
+                <div className="relative">
+                  <Input 
+                    type="text" 
+                    className="bg-zinc-900/50 border-white/10 h-11 rounded-xl focus-visible:ring-red-400/50 text-zinc-100 pr-16" 
+                    placeholder="Beri peringatan jika stok di bawah..." 
+                    value={newItem.min_stock_alert === '' ? '' : Number(newItem.min_stock_alert).toLocaleString('id-ID')} 
+                    onChange={e => {
+                      const val = e.target.value.replace(/\D/g, '');
+                      setNewItem({...newItem, min_stock_alert: val === '' ? '' : parseInt(val, 10).toString()});
+                    }} 
+                  />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 text-xs font-medium">{newItem.unit_type || 'Satuan'}</span>
+                </div>
               </div>
             )}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Batal</Button>
-            <Button onClick={handleAddItem} className="bg-primary text-primary-foreground hover:bg-primary/90">Tambah Bahan</Button>
+          <DialogFooter className="pt-2 border-t border-white/5 mt-2">
+            <Button variant="outline" className="border-white/10 hover:bg-white/5 rounded-xl h-11" onClick={() => setIsAddDialogOpen(false)}>Batal</Button>
+            <Button onClick={handleAddItem} className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl h-11 font-semibold">Simpan Data</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Update Quantity Dialog */}
       <Dialog open={isUpdateStockDialogOpen} onOpenChange={setIsUpdateStockDialogOpen}>
-        <DialogContent className="bg-card border-border sm:max-w-[425px]">
+        <DialogContent className="bg-zinc-950 border-white/10 sm:max-w-[425px] rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Update Stok: <span className="text-primary">{selectedStock?.name}</span></DialogTitle>
-            <DialogDescription>
-              Stok tercatat di sistem: <span className="font-bold text-foreground">{selectedStock?.quantity}</span> (Satuan: {selectedStock?.unit})
+            <DialogTitle className="text-xl text-zinc-100">Update Stok: <span className="text-primary">{selectedStock?.name}</span></DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              Stok tercatat di sistem: <span className="font-bold text-zinc-200">{selectedStock?.quantity}</span> (Satuan: {selectedStock?.unit})
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
@@ -1054,7 +1052,7 @@ export default function StockPage() {
               <div className="relative">
                 <Input 
                   type="number" 
-                  className="pr-16 text-sm h-12 bg-background border-border focus-visible:ring-primary" 
+                  className="pr-16 text-sm h-12 bg-zinc-900/50 border-white/10 focus-visible:ring-primary text-zinc-100 rounded-xl" 
                   placeholder="Masukkan sisa stok asli (Update Fisik)..."
                   value={stockUpdateAmount} 
                   onChange={e => {
@@ -1062,41 +1060,41 @@ export default function StockPage() {
                      setStockUpdateAmount(e.target.value);
                   }} 
                 />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-sm">
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 font-medium text-sm">
                   {selectedStock?.unit.replace(/[\d.,\s]/g, '') || 'pcs'}
                 </span>
               </div>
               
-              <div className="flex flex-col gap-1 p-3 bg-muted/30 border border-border rounded-lg">
-                <span className="text-xs font-medium text-muted-foreground">Nanti stok di sistem akan menjadi:</span>
-                <span className="text-xl font-bold text-foreground">
+              <div className="flex flex-col gap-1 p-4 bg-zinc-900/50 border border-white/5 rounded-xl">
+                <span className="text-xs font-medium text-zinc-400">Nanti stok di sistem akan menjadi:</span>
+                <span className="text-2xl font-bold text-primary">
                   {Math.max(0, parseInt(stockUpdateAmount) || 0)}
-                  <span className="text-sm font-normal text-muted-foreground ml-1">{selectedStock?.unit.replace(/[\d.,\s]/g, '') || 'pcs'}</span>
+                  <span className="text-sm font-normal text-zinc-500 ml-1">{selectedStock?.unit.replace(/[\d.,\s]/g, '') || 'pcs'}</span>
                 </span>
               </div>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsUpdateStockDialogOpen(false)}>Batal</Button>
-            <Button onClick={handleUpdateStock} className="bg-primary text-primary-foreground hover:bg-primary/90">Simpan Perubahan</Button>
+          <DialogFooter className="pt-2 border-t border-white/5 mt-2">
+            <Button variant="outline" className="border-white/10 hover:bg-white/5 rounded-xl h-11" onClick={() => setIsUpdateStockDialogOpen(false)}>Batal</Button>
+            <Button onClick={handleUpdateStock} className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl h-11 font-semibold">Simpan Perubahan</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Edit Details Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="bg-card border-border sm:max-w-[425px]">
+        <DialogContent className="bg-zinc-950 border-white/10 sm:max-w-[425px] rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Edit Detail {selectedStock?.is_titipan ? 'Barang Titipan' : 'Bahan'}</DialogTitle>
+            <DialogTitle className="text-xl text-zinc-100">Edit Detail {selectedStock?.is_titipan ? 'Barang Titipan' : 'Bahan'}</DialogTitle>
           </DialogHeader>
           {selectedStock && (
-            <div className="grid gap-4 py-4">
+            <div className="grid gap-5 py-4 max-h-[70vh] overflow-y-auto px-1 scrollbar-thin scrollbar-thumb-white/10">
               {selectedStock.is_titipan && (
-                <div className="grid grid-cols-4 items-center gap-4 overflow-visible">
-                  <label className="text-right text-sm font-medium">Penitip</label>
-                  <div className="col-span-3 overflow-visible relative">
+                <div className="grid gap-2">
+                  <label className="text-sm font-semibold text-orange-400">Nama Penitip</label>
+                  <div className="relative">
                     <TitipanAutocomplete 
-                      placeholder="Cth: Bu Karti" 
+                      placeholder="Contoh: Bu Karti" 
                       value={selectedStock.titipan_name || ''} 
                       onChange={val => setSelectedStock({...selectedStock, titipan_name: val})} 
                       options={Array.from(new Set(stocks.filter(s => s.is_titipan && s.titipan_name).map(s => s.titipan_name as string)))}
@@ -1104,17 +1102,17 @@ export default function StockPage() {
                   </div>
                 </div>
               )}
-              <div className="grid grid-cols-4 items-center gap-4">
-                <label className="text-right text-sm font-medium">Nama {selectedStock.is_titipan ? 'Barang' : 'Bahan'}</label>
-                <Input className="col-span-3 bg-background border-border" value={selectedStock.name} onChange={e => setSelectedStock({...selectedStock, name: e.target.value})} />
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-zinc-400">Nama {selectedStock.is_titipan ? 'Barang' : 'Bahan'}</label>
+                <Input className="bg-zinc-900/50 border-white/10 h-11 rounded-xl focus-visible:ring-primary text-zinc-100" value={selectedStock.name} onChange={e => setSelectedStock({...selectedStock, name: e.target.value})} />
               </div>
               {!selectedStock.is_titipan && (
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <label className="text-right text-xs font-medium leading-tight">1 Kemasan Beli Isinya Berapa?</label>
-                  <div className="col-span-3 flex gap-2">
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium text-zinc-400">1 Kemasan Beli Isinya Berapa?</label>
+                  <div className="flex gap-2">
                     <Input 
                       type="text" 
-                      className="bg-background border-border flex-1" 
+                      className="bg-zinc-900/50 border-white/10 h-11 rounded-xl focus-visible:ring-primary text-zinc-100 flex-1" 
                       placeholder="Angka (cth: 5)" 
                       value={editUnitValue} 
                       onChange={e => {
@@ -1123,7 +1121,7 @@ export default function StockPage() {
                       }} 
                     />
                     <select 
-                      className="flex h-10 w-32 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="h-11 w-32 rounded-xl border border-white/10 bg-zinc-900/50 px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-primary"
                       value={editUnitType}
                       onChange={e => setEditUnitType(e.target.value)}
                     >
@@ -1139,13 +1137,13 @@ export default function StockPage() {
                   </div>
                 </div>
               )}
-              <div className="grid grid-cols-4 items-center gap-4">
-                <label className="text-right text-xs font-medium leading-tight">{selectedStock.is_titipan ? 'Harga Setor' : 'Total Harga Beli 1 Kemasan'}</label>
-                <div className="relative col-span-3">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">Rp</span>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-zinc-400">{selectedStock.is_titipan ? 'Harga Setor (Modal)' : 'Total Harga Beli 1 Kemasan'}</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm font-medium">Rp</span>
                   <Input 
                     type="text" 
-                    className="pl-9 bg-background border-border" 
+                    className="pl-9 bg-zinc-900/50 border-white/10 h-11 rounded-xl focus-visible:ring-primary text-zinc-100" 
                     value={
                       selectedStock.is_titipan 
                         ? (selectedStock.cost_per_unit === '' as any ? '' : Number(selectedStock.cost_per_unit).toLocaleString('id-ID'))
@@ -1163,13 +1161,13 @@ export default function StockPage() {
                 </div>
               </div>
               {selectedStock.is_titipan && (
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <label className="text-right text-xs font-medium leading-tight">Harga Jual</label>
-                  <div className="relative col-span-3">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">Rp</span>
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium text-zinc-400">Harga Jual (Di Kasir)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm font-medium">Rp</span>
                     <Input 
                       type="text" 
-                      className="pl-9 bg-background border-border" 
+                      className="pl-9 bg-zinc-900/50 border-white/10 h-11 rounded-xl focus-visible:ring-primary text-zinc-100" 
                       value={(selectedStock as any).price === '' || (selectedStock as any).price === undefined ? '' : Number((selectedStock as any).price).toLocaleString('id-ID')} 
                       onChange={e => {
                         const val = e.target.value.replace(/\D/g, '');
@@ -1181,36 +1179,35 @@ export default function StockPage() {
               )}
               {!selectedStock.is_titipan && (
                 <>
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <label className="text-right text-xs font-medium leading-tight text-primary">Otomatis: Harga Modal 1 {editUnitType || 'Satuan'}</label>
-                    <div className="col-span-3">
-                      <div className="flex h-10 w-full rounded-md border border-input bg-primary/10 px-3 py-2 text-sm text-primary items-center font-bold">
-                        Rp {editUnitValue && editPackPrice ? Number(parseInt(editPackPrice) / parseFloat(editUnitValue)).toLocaleString('id-ID', { maximumFractionDigits: 2 }) : '0'}
-                      </div>
-                    </div>
+                  <div className="flex justify-between items-center px-4 py-3 bg-primary/5 rounded-xl border border-primary/10">
+                    <span className="text-sm font-medium text-primary">Harga Modal (Otomatis)</span>
+                    <span className="font-bold text-primary">
+                      Rp {editUnitValue && editPackPrice ? Number(parseInt(editPackPrice) / parseFloat(editUnitValue)).toLocaleString('id-ID', { maximumFractionDigits: 2 }) : '0'} 
+                      <span className="text-xs font-normal opacity-80 ml-1">/ {editUnitType || 'Satuan'}</span>
+                    </span>
                   </div>
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <label className="text-right text-xs font-medium leading-tight text-destructive">Peringatan Stok Tipis (Batas Min)</label>
-                    <div className="relative col-span-3">
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium text-red-400">Batas Minimum (Peringatan)</label>
+                    <div className="relative">
                       <Input 
                         type="text" 
-                        className="bg-background border-border pr-12" 
+                        className="bg-zinc-900/50 border-white/10 h-11 rounded-xl focus-visible:ring-red-400/50 text-zinc-100 pr-16" 
                         value={selectedStock.min_stock_alert === '' as any ? '' : Number(selectedStock.min_stock_alert).toLocaleString('id-ID')} 
                         onChange={e => {
                           const val = e.target.value.replace(/\D/g, '');
                           setSelectedStock({...selectedStock, min_stock_alert: val === '' ? '' as any : parseInt(val, 10)});
                         }} 
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-medium">{editUnitType}</span>
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 text-xs font-medium">{editUnitType}</span>
                     </div>
                   </div>
                 </>
               )}
             </div>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Batal</Button>
-            <Button onClick={handleEditSave} className="bg-primary text-primary-foreground hover:bg-primary/90">Simpan Edit</Button>
+          <DialogFooter className="pt-2 border-t border-white/5 mt-2">
+            <Button variant="outline" className="border-white/10 hover:bg-white/5 rounded-xl h-11" onClick={() => setIsEditDialogOpen(false)}>Batal</Button>
+            <Button onClick={handleEditSave} className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl h-11 font-semibold">Simpan Edit</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
