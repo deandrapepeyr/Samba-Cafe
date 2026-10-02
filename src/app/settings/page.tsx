@@ -1804,7 +1804,7 @@ export default function SettingsPage() {
                                   <Input 
                                     placeholder="Nama Tampilan (cth: Keju Extra)" 
                                     className={`h-10 flex-1 bg-zinc-900/50 border-white/5 text-sm rounded-xl focus-visible:ring-amber-500/50 text-zinc-200 placeholder:text-zinc-600 ${choice.stock_id ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                    value={choice.name}
+                                    value={choice.stock_id ? (stocks.find(s => s.id === choice.stock_id)?.name || choice.name) : choice.name}
                                     disabled={!!choice.stock_id}
                                     onChange={(e) => {
                                       const newV = [...editingItem.variants];
@@ -1817,7 +1817,9 @@ export default function SettingsPage() {
                                     <Input 
                                       placeholder="0" 
                                       className={`h-10 pl-9 pr-3 bg-zinc-900/50 border-white/5 text-sm rounded-xl focus-visible:ring-amber-500/50 text-zinc-200 ${choice.stock_id ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                      value={choice.price ? choice.price.toLocaleString('id-ID') : ''}
+                                      value={choice.stock_id 
+                                        ? (stocks.find(s => s.id === choice.stock_id)?.sell_price || 0).toLocaleString('id-ID')
+                                        : (choice.price ? choice.price.toLocaleString('id-ID') : '')}
                                       disabled={!!choice.stock_id}
                                       onChange={(e) => {
                                         const raw = e.target.value.replace(/\D/g, '');
