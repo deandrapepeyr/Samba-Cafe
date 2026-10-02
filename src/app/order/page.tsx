@@ -394,6 +394,15 @@ export default function CustomerOrderPage() {
 
       {view === 'menu' && (
         <div className="flex-1 overflow-y-auto">
+          {/* Hero Section */}
+          <div className="relative w-full h-[220px] bg-cover bg-center bg-no-repeat overflow-hidden shrink-0 shadow-[0_10px_30px_rgba(0,0,0,0.5)] mb-4 rounded-b-3xl" style={{ backgroundImage: "url('/cafe_hero_bg.png')" }}>
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/20 to-transparent" />
+            <div className="absolute inset-0 flex items-center justify-center flex-col px-4 text-center z-10 mt-4">
+               <h1 className="text-4xl md:text-5xl font-black text-white drop-shadow-xl tracking-tight">Samba Cafe</h1>
+               <p className="text-zinc-200 text-sm font-medium drop-shadow-lg mt-2 max-w-[280px] leading-relaxed">Rasakan Kopi Premium & Suasana Nyaman Tanpa Antre</p>
+            </div>
+          </div>
           {hasReadyOrder && (
             <div className="px-4 pt-4 pb-2">
               <div 
@@ -429,15 +438,15 @@ export default function CustomerOrderPage() {
           {/* Categories */}
           {searchQuery.trim() === '' && (
             <div className="px-4 py-3 mb-2">
-              <div className="flex gap-1 overflow-x-auto scrollbar-none bg-zinc-900/60 p-1 rounded-2xl border border-white/5">
+              <div className="flex gap-1 overflow-x-auto scrollbar-none bg-black/20 backdrop-blur-md p-1.5 rounded-2xl border border-white/5 shadow-inner">
                 {categories.map(cat => (
                   <button
                     key={cat.id}
                     onClick={() => setActiveCategory(cat.id)}
-                    className={`shrink-0 h-9 px-4 rounded-xl text-[13px] font-bold transition-all flex items-center justify-center ${
+                    className={`shrink-0 h-10 px-5 rounded-xl text-[13px] font-bold transition-all flex items-center justify-center backdrop-blur-md border ${
                       activeCategory === cat.id 
-                        ? 'bg-amber-500 text-black shadow-md' 
-                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5'
+                        ? 'bg-amber-500/80 border-amber-400/50 text-white shadow-[0_4px_15px_rgba(245,158,11,0.3)]' 
+                        : 'bg-white/5 border-white/10 text-zinc-300 hover:bg-white/10'
                     }`}
                   >
                     {cat.name}
@@ -493,17 +502,17 @@ export default function CustomerOrderPage() {
                             <span className="font-black text-amber-500 text-base">Rp{product.price.toLocaleString('id-ID')}</span>
                             {product.is_available && (
                               getProductQuantity(product.id) > 0 ? (
-                                <div className="flex items-center gap-2 bg-amber-500 rounded-full px-2 py-1 text-black font-bold shadow-lg shadow-amber-500/20" onClick={(e) => e.stopPropagation()}>
-                                  <button onClick={(e) => handleDecreaseProduct(product.id, e)} className="w-6 h-6 rounded-full bg-black/10 flex items-center justify-center">
+                                <div className="flex items-center gap-2 bg-amber-500/80 backdrop-blur-md border border-amber-400/50 rounded-full px-2 py-1 text-white font-bold shadow-[0_4px_15px_rgba(245,158,11,0.3)]" onClick={(e) => e.stopPropagation()}>
+                                  <button onClick={(e) => handleDecreaseProduct(product.id, e)} className="w-6 h-6 rounded-full bg-black/20 flex items-center justify-center hover:bg-black/40 transition-colors">
                                     <Minus size={14} />
                                   </button>
                                   <span className="text-sm px-1">{getProductQuantity(product.id)}</span>
-                                  <button onClick={(e) => { e.stopPropagation(); handleProductClick(product); }} className="w-6 h-6 rounded-full bg-black/10 flex items-center justify-center">
+                                  <button onClick={(e) => { e.stopPropagation(); handleProductClick(product); }} className="w-6 h-6 rounded-full bg-black/20 flex items-center justify-center hover:bg-black/40 transition-colors">
                                     <Plus size={14} />
                                   </button>
                                 </div>
                               ) : (
-                                <button onClick={(e) => { e.stopPropagation(); handleProductClick(product); }} className="w-8 h-8 rounded-full bg-amber-500 text-black flex items-center justify-center font-bold shadow-lg shadow-amber-500/20">
+                                <button onClick={(e) => { e.stopPropagation(); handleProductClick(product); }} className="w-8 h-8 rounded-full bg-amber-500/80 backdrop-blur-md border border-amber-400/50 text-white flex items-center justify-center font-bold shadow-[0_4px_15px_rgba(245,158,11,0.3)] hover:bg-amber-500/90 transition-colors">
                                   <Plus size={16} />
                                 </button>
                               )
@@ -549,17 +558,17 @@ export default function CustomerOrderPage() {
                       <span className="font-bold text-amber-500 text-sm">Rp{product.price.toLocaleString('id-ID')}</span>
                       {product.is_available && (
                         getProductQuantity(product.id) > 0 ? (
-                          <div className="flex items-center gap-1.5 bg-amber-500 rounded-full px-1.5 py-0.5 text-black font-bold" onClick={(e) => e.stopPropagation()}>
-                            <button onClick={(e) => handleDecreaseProduct(product.id, e)} className="w-5 h-5 rounded-full bg-black/10 flex items-center justify-center">
+                          <div className="flex items-center gap-1.5 bg-amber-500/80 backdrop-blur-md border border-amber-400/50 rounded-full px-1.5 py-0.5 text-white font-bold shadow-[0_4px_15px_rgba(245,158,11,0.3)]" onClick={(e) => e.stopPropagation()}>
+                            <button onClick={(e) => handleDecreaseProduct(product.id, e)} className="w-5 h-5 rounded-full bg-black/20 flex items-center justify-center hover:bg-black/40 transition-colors">
                               <Minus size={12} />
                             </button>
                             <span className="text-xs px-1">{getProductQuantity(product.id)}</span>
-                            <button onClick={(e) => { e.stopPropagation(); handleProductClick(product); }} className="w-5 h-5 rounded-full bg-black/10 flex items-center justify-center">
+                            <button onClick={(e) => { e.stopPropagation(); handleProductClick(product); }} className="w-5 h-5 rounded-full bg-black/20 flex items-center justify-center hover:bg-black/40 transition-colors">
                               <Plus size={12} />
                             </button>
                           </div>
                         ) : (
-                          <button onClick={(e) => { e.stopPropagation(); handleProductClick(product); }} className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center font-bold">
+                          <button onClick={(e) => { e.stopPropagation(); handleProductClick(product); }} className="w-6 h-6 rounded-full bg-amber-500/80 backdrop-blur-md border border-amber-400/50 text-white flex items-center justify-center font-bold shadow-[0_4px_15px_rgba(245,158,11,0.3)] hover:bg-amber-500/90 transition-colors">
                             <Plus size={14} />
                           </button>
                         )
@@ -637,7 +646,7 @@ export default function CustomerOrderPage() {
               </div>
               <Button
                 onClick={() => setView('checkout')}
-                className="w-full h-14 rounded-2xl text-base font-bold bg-amber-500 hover:bg-amber-400 text-black shadow-lg shadow-amber-500/20"
+                className="w-full h-14 rounded-2xl text-base font-black bg-amber-500/80 backdrop-blur-md border border-amber-400/50 hover:bg-amber-500/90 text-white shadow-[0_4px_15px_rgba(245,158,11,0.3)] transition-all hover:scale-[1.02] active:scale-[0.98]"
               >
                 Lanjutkan Pesanan
               </Button>
@@ -676,7 +685,7 @@ export default function CustomerOrderPage() {
           <Button
             onClick={submitOrder}
             disabled={isProcessing}
-            className="w-full h-14 rounded-2xl text-base font-bold bg-amber-500 hover:bg-amber-400 text-black shadow-lg shadow-amber-500/20 disabled:opacity-50 mt-8"
+            className="w-full h-14 rounded-2xl text-base font-black bg-amber-500/80 backdrop-blur-md border border-amber-400/50 hover:bg-amber-500/90 text-white shadow-[0_4px_15px_rgba(245,158,11,0.3)] disabled:opacity-50 mt-8 transition-all hover:scale-[1.02] active:scale-[0.98]"
           >
             {isProcessing ? 'Memproses...' : 'Buat Pesanan Sekarang'}
           </Button>
@@ -751,7 +760,7 @@ export default function CustomerOrderPage() {
                     const notes = notesArr.join(', ');
                     addToCart(selectedProductForOptions, notes, addonPrice, selectedVariantChoices);
                   }}
-                  className="w-full h-12 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl"
+                  className="w-full h-12 bg-amber-500/80 backdrop-blur-md border border-amber-400/50 hover:bg-amber-500/90 text-white font-black rounded-xl shadow-[0_4px_15px_rgba(245,158,11,0.3)] transition-all hover:scale-[1.02] active:scale-[0.98]"
                 >
                   Tambahkan ke Keranjang
                 </Button>
