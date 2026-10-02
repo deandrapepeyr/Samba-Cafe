@@ -19,24 +19,35 @@ type CartItem = {
   variantChoices?: Record<string, string[]>;
 };
 
-function TypewriterText({ text }: { text: string }) {
+function TypewriterText({ text, delay = 0, speed = 80 }: { text: string, delay?: number, speed?: number }) {
   const [displayText, setDisplayText] = useState('');
+  const [started, setStarted] = useState(delay === 0);
   
   useEffect(() => {
     setDisplayText('');
-    let i = 0;
-    const interval = setInterval(() => {
-      setDisplayText(text.slice(0, i + 1));
-      i++;
-      if (i >= text.length) clearInterval(interval);
-    }, 120);
-    return () => clearInterval(interval);
-  }, [text]);
+    setStarted(delay === 0);
+    
+    let interval: NodeJS.Timeout;
+    const timeout = setTimeout(() => {
+      setStarted(true);
+      let i = 0;
+      interval = setInterval(() => {
+        setDisplayText(text.slice(0, i + 1));
+        i++;
+        if (i >= text.length) clearInterval(interval);
+      }, speed);
+    }, delay);
+    
+    return () => {
+      clearTimeout(timeout);
+      if (interval) clearInterval(interval);
+    };
+  }, [text, delay, speed]);
 
   return (
-    <span className="flex items-center">
+    <span className="inline">
       {displayText}
-      <span className="w-[3px] h-[1em] bg-amber-500 ml-1.5 animate-[pulse_1s_ease-in-out_infinite]" />
+      <span className={`inline-block w-[3px] h-[0.9em] align-middle bg-amber-500 ml-1 animate-[pulse_1s_ease-in-out_infinite] ${!started ? 'opacity-0' : ''}`} />
     </span>
   );
 }
@@ -378,10 +389,8 @@ export default function CustomerOrderPage() {
           <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-0.5">
             {view === 'menu' ? 'Samba Cafe' : 'Pesanan Anda'}
           </span>
-          <h1 className="text-xl font-black tracking-tight leading-none">
-            {view === 'menu' ? (
-              <TypewriterText text={`Halo, ${session?.customerName}`} />
-            ) : view === 'cart' ? 'Keranjang Pesanan' : 'Ringkasan Pesanan'}
+          <h1 className="text-xl font-black tracking-tight leading-none text-white">
+            <TypewriterText text={view === 'menu' ? `Halo, ${session?.customerName}` : view === 'cart' ? 'Keranjang Pesanan' : 'Ringkasan Pesanan'} speed={60} />
           </h1>
         </div>
         {view === 'menu' ? (
@@ -429,8 +438,12 @@ export default function CustomerOrderPage() {
             <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
             <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/20 to-transparent" />
             <div className="absolute inset-0 flex items-center justify-center flex-col px-4 text-center z-10 mt-2">
-               <h1 className="text-4xl md:text-5xl font-black text-white drop-shadow-2xl tracking-tight">Samba Cafe</h1>
-               <p className="text-zinc-200 text-sm font-medium drop-shadow-xl mt-2 max-w-[280px] leading-relaxed">Rasakan Kopi Premium & Suasana Nyaman Tanpa Antre</p>
+               <h1 className="text-4xl md:text-5xl font-black text-white drop-shadow-2xl tracking-tight min-h-[48px]">
+                 <TypewriterText text="Samba Cafe" delay={1200} speed={60} />
+               </h1>
+               <p className="text-zinc-200 text-sm font-medium drop-shadow-xl mt-2 max-w-[280px] leading-relaxed min-h-[40px]">
+                 <TypewriterText text="Pilih hidangan favoritmu di bawah ini dan pesan langsung dari mejamu 👇" delay={2000} speed={40} />
+               </p>
             </div>
           </div>
           
