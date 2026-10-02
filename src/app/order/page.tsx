@@ -47,7 +47,6 @@ function TypewriterText({ text, delay = 0, speed = 80 }: { text: string, delay?:
   return (
     <span className="inline">
       {displayText}
-      <span className={`inline-block w-[3px] h-[0.9em] align-middle bg-amber-500 ml-1 animate-[pulse_1s_ease-in-out_infinite] ${!started ? 'opacity-0' : ''}`} />
     </span>
   );
 }

@@ -25,7 +25,6 @@ function TypewriterText({ text }: { text: string }) {
   return (
     <span className="flex items-center">
       {displayText}
-      <span className="w-[3px] h-[1em] bg-amber-500 ml-1.5 animate-[pulse_1s_ease-in-out_infinite]" />
     </span>
   );
 }
