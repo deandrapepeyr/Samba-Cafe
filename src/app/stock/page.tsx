@@ -68,6 +68,7 @@ type StockItem = {
   cost_per_unit: number;
   min_stock_alert: number;
   last_updated: string;
+  is_titipan?: boolean;
   titipan_name?: string | null;
   is_topping?: boolean;
 };
