@@ -397,7 +397,7 @@ export default function CustomerOrderPage() {
         <div className="flex-1 overflow-y-auto scroll-smooth relative">
           {/* Hero Section */}
           <div 
-            className="sticky top-0 w-full h-[260px] bg-cover bg-center bg-no-repeat overflow-hidden shrink-0 -z-10" 
+            className="relative w-full h-[240px] bg-cover bg-center bg-no-repeat overflow-hidden shrink-0" 
             style={{ backgroundImage: "url('/cafe_hero_bg.png')" }}
           >
             <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
@@ -441,17 +441,17 @@ export default function CustomerOrderPage() {
             </div>
           </div>
 
-          {/* Categories */}
+          {/* Categories (Sticky on scroll) */}
           {searchQuery.trim() === '' && (
-            <div className="px-4 py-3 mb-2">
-              <div className="flex gap-1 overflow-x-auto scrollbar-none bg-black/20 backdrop-blur-md p-1.5 rounded-2xl border border-white/5 shadow-inner">
+            <div className="sticky top-0 z-30 pt-3 pb-3 px-0 mb-4 bg-[#0a0a0a]/90 backdrop-blur-2xl border-b border-white/5 shadow-[0_10px_30px_rgba(0,0,0,0.5)] transition-all">
+              <div className="flex gap-2 overflow-x-auto scrollbar-none px-4">
                 {categories.map(cat => (
                   <button
                     key={cat.id}
                     onClick={() => setActiveCategory(cat.id)}
-                    className={`shrink-0 h-10 px-5 rounded-xl text-[13px] font-bold transition-all flex items-center justify-center backdrop-blur-md border ${
+                    className={`shrink-0 h-10 px-5 rounded-2xl text-[13px] font-bold transition-all flex items-center justify-center backdrop-blur-md border ${
                       activeCategory === cat.id 
-                        ? 'bg-amber-500/80 border-amber-400/50 text-white shadow-[0_4px_15px_rgba(245,158,11,0.3)]' 
+                        ? 'bg-amber-500/90 border-amber-400/50 text-white shadow-[0_4px_15px_rgba(245,158,11,0.4)] scale-105' 
                         : 'bg-white/5 border-white/10 text-zinc-300 hover:bg-white/10'
                     }`}
                   >
