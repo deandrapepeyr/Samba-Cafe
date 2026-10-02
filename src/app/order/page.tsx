@@ -36,6 +36,7 @@ export default function CustomerOrderPage() {
   // Menu State
   const [activeCategory, setActiveCategory] = useState('1');
   const [searchQuery, setSearchQuery] = useState('');
+  const [scrollY, setScrollY] = useState(0);
   
   // Cart State
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -350,7 +351,10 @@ export default function CustomerOrderPage() {
   return (
     <div className="h-[100dvh] bg-[#0a0a0a] text-white flex flex-col relative overflow-hidden">
       {/* Header */}
-      <div className="sticky top-0 z-40 bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center justify-between">
+      <div 
+        className="sticky top-0 z-40 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center justify-between transition-all duration-300"
+        style={{ backgroundColor: `rgba(10, 10, 10, ${Math.min(0.95, 0.5 + scrollY / 200)})` }}
+      >
         <div className="flex flex-col">
           <span className="text-xs font-medium text-amber-500">Hi, {session?.customerName} 👋</span>
           <h1 className="text-lg font-black tracking-tight">
@@ -393,14 +397,24 @@ export default function CustomerOrderPage() {
       </div>
 
       {view === 'menu' && (
-        <div className="flex-1 overflow-y-auto">
+        <div 
+          className="flex-1 overflow-y-auto scroll-smooth perspective-1000"
+          onScroll={(e) => setScrollY(e.currentTarget.scrollTop)}
+        >
           {/* Hero Section */}
-          <div className="relative w-full h-[220px] bg-cover bg-center bg-no-repeat overflow-hidden shrink-0 shadow-[0_10px_30px_rgba(0,0,0,0.5)] mb-4 rounded-b-3xl" style={{ backgroundImage: "url('/cafe_hero_bg.png')" }}>
+          <div 
+            className="relative w-full h-[220px] bg-cover bg-center bg-no-repeat overflow-hidden shrink-0 shadow-[0_10px_30px_rgba(0,0,0,0.5)] mb-4 rounded-b-3xl origin-top transition-transform duration-75" 
+            style={{ 
+              backgroundImage: "url('/cafe_hero_bg.png')",
+              transform: `translateY(${scrollY * 0.4}px)`,
+              opacity: Math.max(0, 1 - (scrollY / 300))
+            }}
+          >
             <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
             <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/20 to-transparent" />
             <div className="absolute inset-0 flex items-center justify-center flex-col px-4 text-center z-10 mt-4">
-               <h1 className="text-4xl md:text-5xl font-black text-white drop-shadow-xl tracking-tight">Samba Cafe</h1>
-               <p className="text-zinc-200 text-sm font-medium drop-shadow-lg mt-2 max-w-[280px] leading-relaxed">Rasakan Kopi Premium & Suasana Nyaman Tanpa Antre</p>
+               <h1 className="text-4xl md:text-5xl font-black text-white drop-shadow-xl tracking-tight" style={{ transform: `translateY(${scrollY * 0.2}px)` }}>Samba Cafe</h1>
+               <p className="text-zinc-200 text-sm font-medium drop-shadow-lg mt-2 max-w-[280px] leading-relaxed" style={{ transform: `translateY(${scrollY * 0.15}px)` }}>Rasakan Kopi Premium & Suasana Nyaman Tanpa Antre</p>
             </div>
           </div>
           {hasReadyOrder && (
@@ -470,14 +484,25 @@ export default function CustomerOrderPage() {
                     </h2>
                   </div>
                   <div className="px-4 flex gap-4 overflow-x-auto snap-x scrollbar-none pb-4">
-                    {topProducts.map(product => (
+                    {topProducts.map((product, index) => (
                       <div 
                         key={`top-${product.id}`}
                         onClick={() => handleProductClick(product)}
-                        className={`snap-center shrink-0 w-[240px] bg-zinc-900/40 border border-white/5 rounded-3xl overflow-hidden flex flex-col transition-all ${
+                        className={`snap-center shrink-0 w-[240px] bg-zinc-900/40 border border-white/5 rounded-3xl overflow-hidden flex flex-col transition-all duration-300 ease-out hover:shadow-[0_10px_20px_rgba(0,0,0,0.3)] ${
                           product.is_available ? 'active:scale-95 cursor-pointer hover:border-amber-500/30' : 'opacity-50 grayscale cursor-not-allowed'
                         }`}
+                        style={{
+                          animation: `fadeInRight 0.6s ease-out forwards`,
+                          animationDelay: `${index * 100}ms`,
+                          opacity: 0,
+                          transform: 'translateX(20px)'
+                        }}
                       >
+                        <style jsx>{`
+                          @keyframes fadeInRight {
+                            to { opacity: 1; transform: translateX(0); }
+                          }
+                        `}</style>
                         <div className="h-[160px] bg-zinc-800/50 relative overflow-hidden flex items-center justify-center">
                           {product.image_url ? (
                             <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" loading="lazy" />
@@ -530,14 +555,25 @@ export default function CustomerOrderPage() {
                 <h2 className="text-lg font-black text-white">Semua Menu</h2>
               </div>
               <div className="grid grid-cols-2 gap-3 px-4 pt-2">
-              {filteredProducts.map(product => (
+              {filteredProducts.map((product, index) => (
                 <div 
                   key={product.id}
                   onClick={() => handleProductClick(product)}
-                  className={`bg-zinc-900/40 border border-white/5 rounded-2xl overflow-hidden flex flex-col transition-all ${
-                    product.is_available ? 'active:scale-95 cursor-pointer' : 'opacity-50 grayscale cursor-not-allowed'
+                  className={`bg-zinc-900/40 border border-white/5 rounded-3xl overflow-hidden flex flex-col transition-all duration-300 ease-out hover:shadow-[0_10px_20px_rgba(0,0,0,0.3)] ${
+                    product.is_available ? 'active:scale-95 cursor-pointer hover:border-amber-500/30' : 'opacity-50 grayscale cursor-not-allowed'
                   }`}
+                  style={{
+                    animation: `fadeInUp 0.6s ease-out forwards`,
+                    animationDelay: `${index * 50}ms`,
+                    opacity: 0,
+                    transform: 'translateY(20px)'
+                  }}
                 >
+                  <style jsx>{`
+                    @keyframes fadeInUp {
+                      to { opacity: 1; transform: translateY(0); }
+                    }
+                  `}</style>
                   <div className="aspect-square bg-zinc-800/50 relative overflow-hidden flex items-center justify-center">
                     {product.image_url ? (
                       <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" loading="lazy" />
