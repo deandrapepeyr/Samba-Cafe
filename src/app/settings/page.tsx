@@ -859,6 +859,21 @@ export default function SettingsPage() {
                         </div>
                       ) : (
                         <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-500 p-2">
+                          <div className="flex overflow-x-auto pb-2 gap-2 scrollbar-none">
+                            {categories.map(cat => (
+                              <button
+                                key={cat.id}
+                                onClick={() => setSelectedCategoryId(cat.id)}
+                                className={`px-5 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-300 border ${
+                                  selectedCategoryId === cat.id 
+                                    ? 'bg-primary text-primary-foreground border-primary/50 shadow-lg shadow-primary/20' 
+                                    : 'bg-zinc-900/40 text-zinc-400 hover:text-zinc-200 hover:bg-white/10 border-white/5'
+                                }`}
+                              >
+                                {cat.name}
+                              </button>
+                            ))}
+                          </div>
                           {(() => {
                             const titipanNames = Array.from(new Set(filteredProducts.filter(p => p.is_titipan).map(p => (p.titipan_name as string) || 'Lainnya')));
                             
