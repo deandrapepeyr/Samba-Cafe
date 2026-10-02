@@ -512,12 +512,13 @@ export default function StockPage() {
           unit: `${editUnitValue} ${editUnitType}`.trim(), 
           cost_per_unit: editUnitValue && editPackPrice ? Math.round(parseInt(editPackPrice) / parseFloat(editUnitValue)) : selectedStock.cost_per_unit, 
           min_stock_alert: selectedStock.min_stock_alert,
-          is_topping: selectedStock.is_topping
+          is_topping: selectedStock.is_topping,
+          sell_price: selectedStock.is_topping ? (selectedStock.sell_price || 0) : 0
         })
         .eq('id', selectedStock.id);
 
       if (!error) {
-        setStocks(stocks.map(s => s.id === selectedStock.id ? { ...selectedStock, name: selectedStock.name.trim(), original_name: packedName, is_titipan: !!selectedStock.titipan_name, unit: `${editUnitValue} ${editUnitType}`.trim() } : s));
+        setStocks(stocks.map(s => s.id === selectedStock.id ? { ...selectedStock, name: selectedStock.name.trim(), original_name: packedName, is_titipan: !!selectedStock.titipan_name, unit: `${editUnitValue} ${editUnitType}`.trim(), sell_price: selectedStock.sell_price } : s));
         setIsEditDialogOpen(false);
       } else {
         alert("Failed to edit stock.");
@@ -823,8 +824,8 @@ export default function StockPage() {
                             </td>
                             <td className="py-3 px-4 text-zinc-500 text-xs">{item.min_stock_alert} pcs</td>
                             <td className="py-3 px-4 text-right tabular-nums text-zinc-500 text-xs">Rp {item.cost_per_unit.toLocaleString('id-ID')}</td>
-                            <td className="py-3 px-4 text-right tabular-nums text-zinc-200 font-semibold">Rp {((item as any).price || item.cost_per_unit).toLocaleString('id-ID')}</td>
-                            <td className="py-3 px-4 text-right tabular-nums font-semibold text-primary">Rp {(((item as any).price || item.cost_per_unit) - item.cost_per_unit).toLocaleString('id-ID')}</td>
+                            <td className="py-3 px-4 text-right tabular-nums text-zinc-200 font-semibold">Rp {(item.is_topping ? (item.sell_price || 0) : ((item as any).price || item.cost_per_unit)).toLocaleString('id-ID')}</td>
+                            <td className="py-3 px-4 text-right tabular-nums font-semibold text-primary">Rp {(item.is_topping ? ((item.sell_price || 0) - item.cost_per_unit) : (((item as any).price || item.cost_per_unit) - item.cost_per_unit)).toLocaleString('id-ID')}</td>
                           </>
                         )}
                       </tr>
