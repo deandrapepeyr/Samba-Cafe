@@ -71,6 +71,7 @@ type StockItem = {
   is_titipan?: boolean;
   titipan_name?: string | null;
   is_topping?: boolean;
+  sell_price?: number;
 };
 
 export default function StockPage() {
@@ -206,9 +207,9 @@ export default function StockPage() {
             return acc;
           }
           // Orphan titipan stock (missing from products)
-          acc.push({ ...s, name: match[1], is_titipan: true, titipan_name: match[2], original_name: s.name, is_topping: s.is_topping });
+          acc.push({ ...s, name: match[1], is_titipan: true, titipan_name: match[2], original_name: s.name, is_topping: s.is_topping, sell_price: s.sell_price });
         } else {
-          acc.push({ ...s, is_titipan: false, original_name: s.name, is_topping: s.is_topping });
+          acc.push({ ...s, is_titipan: false, original_name: s.name, is_topping: s.is_topping, sell_price: s.sell_price });
         }
         return acc;
       }, []);
@@ -321,7 +322,8 @@ export default function StockPage() {
           cost_per_unit: computedCostPerUnit,
           min_stock_alert: parseInt(newItem.min_stock_alert) || 0,
           quantity: computedQuantity,
-          is_topping: newItem.is_topping
+          is_topping: newItem.is_topping,
+          sell_price: newItem.is_topping ? (parseInt(newItem.sell_price) || 0) : 0
         }]).select();
     
         if (data && !error) {
@@ -967,14 +969,16 @@ export default function StockPage() {
               </div>
             )}
 
-            {(newItem.is_titipan || newItem.is_direct_sell) && (
+            {(newItem.is_titipan || newItem.is_direct_sell || newItem.is_topping) && (
               <div className="grid gap-2">
-                <label className="text-sm font-medium text-zinc-400">Harga Jual (Di Kasir)</label>
+                <label className={`text-sm font-medium ${newItem.is_topping ? 'text-amber-500' : 'text-zinc-400'}`}>
+                  Harga Jual (Di Kasir) {newItem.is_topping ? 'Topping' : ''}
+                </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm font-medium">Rp</span>
                   <Input 
                     type="text" 
-                    className="pl-9 bg-zinc-900/50 border-white/10 h-11 rounded-xl focus-visible:ring-primary text-zinc-100" 
+                    className={`pl-9 bg-zinc-900/50 h-11 rounded-xl text-zinc-100 ${newItem.is_topping ? 'border-amber-500/30 focus-visible:ring-amber-500' : 'border-white/10 focus-visible:ring-primary'}`} 
                     placeholder="0" 
                     value={newItem.sell_price === '' ? '' : Number(newItem.sell_price).toLocaleString('id-ID')} 
                     onChange={e => {
@@ -1173,6 +1177,23 @@ export default function StockPage() {
                       onChange={e => {
                         const val = e.target.value.replace(/\D/g, '');
                         setSelectedStock({...selectedStock, price: val === '' ? '' : parseInt(val, 10)} as any);
+                      }} 
+                    />
+                  </div>
+                </div>
+              )}
+              {selectedStock.is_topping && (
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium text-amber-500">Harga Jual Topping (Di Kasir)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm font-medium">Rp</span>
+                    <Input 
+                      type="text" 
+                      className="pl-9 bg-zinc-900/50 border-amber-500/30 h-11 rounded-xl focus-visible:ring-amber-500 text-zinc-100" 
+                      value={selectedStock.sell_price === '' as any ? '' : Number(selectedStock.sell_price || 0).toLocaleString('id-ID')} 
+                      onChange={e => {
+                        const val = e.target.value.replace(/\D/g, '');
+                        setSelectedStock({...selectedStock, sell_price: val === '' ? '' as any : parseInt(val, 10)});
                       }} 
                     />
                   </div>

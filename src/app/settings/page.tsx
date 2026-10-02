@@ -1781,9 +1781,15 @@ export default function SettingsPage() {
                                     onChange={(e) => {
                                       const newV = [...editingItem.variants];
                                       newV[vIdx].choices[cIdx].stock_id = e.target.value;
-                                      if (e.target.value && !newV[vIdx].choices[cIdx].name) {
-                                        const stockName = stocks.find(s => s.id === e.target.value)?.name;
-                                        if (stockName) newV[vIdx].choices[cIdx].name = stockName;
+                                      if (e.target.value) {
+                                        const stock = stocks.find(s => s.id === e.target.value);
+                                        if (stock) {
+                                          newV[vIdx].choices[cIdx].name = stock.name;
+                                          newV[vIdx].choices[cIdx].price = stock.sell_price || 0;
+                                        }
+                                      } else {
+                                        newV[vIdx].choices[cIdx].price = 0;
+                                        newV[vIdx].choices[cIdx].name = '';
                                       }
                                       setEditingItem({...editingItem, variants: newV});
                                     }}
@@ -1797,8 +1803,9 @@ export default function SettingsPage() {
                                 <div className="flex gap-2 items-center">
                                   <Input 
                                     placeholder="Nama Tampilan (cth: Keju Extra)" 
-                                    className="h-10 flex-1 bg-zinc-900/50 border-white/5 text-sm rounded-xl focus-visible:ring-amber-500/50 text-zinc-200 placeholder:text-zinc-600"
+                                    className={`h-10 flex-1 bg-zinc-900/50 border-white/5 text-sm rounded-xl focus-visible:ring-amber-500/50 text-zinc-200 placeholder:text-zinc-600 ${choice.stock_id ? 'opacity-50 cursor-not-allowed' : ''}`}
                                     value={choice.name}
+                                    disabled={!!choice.stock_id}
                                     onChange={(e) => {
                                       const newV = [...editingItem.variants];
                                       newV[vIdx].choices[cIdx].name = e.target.value;
@@ -1809,8 +1816,9 @@ export default function SettingsPage() {
                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-zinc-500">Rp</span>
                                     <Input 
                                       placeholder="0" 
-                                      className="h-10 pl-9 pr-3 bg-zinc-900/50 border-white/5 text-sm rounded-xl focus-visible:ring-amber-500/50 text-zinc-200"
+                                      className={`h-10 pl-9 pr-3 bg-zinc-900/50 border-white/5 text-sm rounded-xl focus-visible:ring-amber-500/50 text-zinc-200 ${choice.stock_id ? 'opacity-50 cursor-not-allowed' : ''}`}
                                       value={choice.price ? choice.price.toLocaleString('id-ID') : ''}
+                                      disabled={!!choice.stock_id}
                                       onChange={(e) => {
                                         const raw = e.target.value.replace(/\D/g, '');
                                         const newV = [...editingItem.variants];
