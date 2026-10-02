@@ -18,6 +18,7 @@ import { useAuth, Role } from '@/lib/AuthContext';
 export type ProductVariantChoice = {
   name: string;
   price: number;
+  stock_id?: string;
 };
 
 export type ProductVariant = {
@@ -66,7 +67,7 @@ export default function POSPage() {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [stocksData, setStocksData] = useState<{id: string, quantity: number}[]>([]);
+  const [stocksData, setStocksData] = useState<{id: string, quantity: number, name: string, sell_price: number, is_topping: boolean}[]>([]);
   const [recipesData, setRecipesData] = useState<{product_id: string, stock_id: string, quantity_required: number}[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
 
@@ -209,7 +210,7 @@ export default function POSPage() {
       const [categoriesRes, productsRes, stocksRes, recipesRes] = await Promise.all([
         supabase.from('categories').select('*'),
         supabase.from('products').select('*').eq('is_available', true),
-        supabase.from('stocks').select('id, quantity'),
+        supabase.from('stocks').select('id, quantity, name, sell_price, is_topping'),
         supabase.from('product_ingredients').select('product_id, stock_id, quantity_required, variant_name, choice_name')
       ]);
 
@@ -545,7 +546,10 @@ export default function POSPage() {
       const initialChoices: Record<string, string[]> = {};
       product.variants.forEach(v => {
         if (v.is_required && v.choices.length > 0) {
-          initialChoices[v.name] = [v.choices[0].name];
+          const firstChoice = v.choices[0];
+          const stock = firstChoice.stock_id ? stocksData.find(s => s.id === firstChoice.stock_id) : null;
+          const displayName = stock ? (stock.name || firstChoice.name) : firstChoice.name;
+          initialChoices[v.name] = [displayName];
         } else {
           initialChoices[v.name] = [];
         }
@@ -1413,7 +1417,10 @@ export default function POSPage() {
                   
                   <div className={`grid gap-3 ${variant.choices.length > 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                     {variant.choices.map((choice, cIdx) => {
-                      const isSelected = selectedVariantChoices[variant.name]?.includes(choice.name);
+                      const stock = choice.stock_id ? stocksData.find(s => s.id === choice.stock_id) : null;
+                      const displayPrice = stock ? (stock.sell_price || 0) : (choice.price || 0);
+                      const displayName = stock ? (stock.name || choice.name) : choice.name;
+                      const isSelected = selectedVariantChoices[variant.name]?.includes(displayName);
                       return (
                         <div 
                           key={cIdx} 
@@ -1422,17 +1429,17 @@ export default function POSPage() {
                               const current = prev[variant.name] || [];
                               if (variant.is_required || !variant.is_multiple) {
                                 // Single Select (Required OR Optional but not multi)
-                                if (!variant.is_required && current.includes(choice.name)) {
+                                if (!variant.is_required && current.includes(displayName)) {
                                   // Deselect if optional and already selected
                                   return { ...prev, [variant.name]: [] };
                                 }
-                                return { ...prev, [variant.name]: [choice.name] };
+                                return { ...prev, [variant.name]: [displayName] };
                               } else {
                                 // Multi Select (Optional & is_multiple=true)
-                                if (current.includes(choice.name)) {
-                                  return { ...prev, [variant.name]: current.filter(c => c !== choice.name) };
+                                if (current.includes(displayName)) {
+                                  return { ...prev, [variant.name]: current.filter(c => c !== displayName) };
                                 } else {
-                                  return { ...prev, [variant.name]: [...current, choice.name] };
+                                  return { ...prev, [variant.name]: [...current, displayName] };
                                 }
                               }
                             });
@@ -1455,7 +1462,7 @@ export default function POSPage() {
                           
                           <div className="flex items-start justify-between gap-2 z-10">
                             <span className={`font-bold leading-tight ${isSelected ? (isRequired ? 'text-primary' : 'text-amber-500') : 'text-zinc-200 group-hover:text-white'}`}>
-                              {choice.name}
+                              {displayName}
                             </span>
                             
                             {/* Checkbox / Radio Visual */}
@@ -1472,9 +1479,9 @@ export default function POSPage() {
                             </div>
                           </div>
                           
-                          {choice.price > 0 && (
+                          {displayPrice > 0 && (
                             <div className={`text-sm font-bold mt-2 z-10 ${isSelected ? (isRequired ? 'text-primary/80' : 'text-amber-500/80') : 'text-zinc-500'}`}>
-                              +Rp {choice.price.toLocaleString('id-ID')}
+                              +Rp {displayPrice.toLocaleString('id-ID')}
                             </div>
                           )}
                         </div>
@@ -1511,8 +1518,16 @@ export default function POSPage() {
                     notesArr.push(`${v.name}: ${choices.join(', ')}`);
                     selectedChoices[v.name] = choices;
                     choices.forEach(cName => {
-                      const cObj = v.choices.find(c => c.name === cName);
-                      if (cObj) addonPrice += cObj.price;
+                      const cObj = v.choices.find(c => {
+                        const stock = c.stock_id ? stocksData.find(s => s.id === c.stock_id) : null;
+                        const displayName = stock ? (stock.name || c.name) : c.name;
+                        return displayName === cName;
+                      });
+                      if (cObj) {
+                        const stock = cObj.stock_id ? stocksData.find(s => s.id === cObj.stock_id) : null;
+                        const displayPrice = stock ? (stock.sell_price || 0) : (cObj.price || 0);
+                        addonPrice += displayPrice;
+                      }
                     });
                   }
                 });
