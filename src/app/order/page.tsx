@@ -19,6 +19,28 @@ type CartItem = {
   variantChoices?: Record<string, string[]>;
 };
 
+function TypewriterText({ text }: { text: string }) {
+  const [displayText, setDisplayText] = useState('');
+  
+  useEffect(() => {
+    setDisplayText('');
+    let i = 0;
+    const interval = setInterval(() => {
+      setDisplayText(text.slice(0, i + 1));
+      i++;
+      if (i >= text.length) clearInterval(interval);
+    }, 120);
+    return () => clearInterval(interval);
+  }, [text]);
+
+  return (
+    <span className="flex items-center">
+      {displayText}
+      <span className="w-[3px] h-[1em] bg-amber-500 ml-1.5 animate-[pulse_1s_ease-in-out_infinite]" />
+    </span>
+  );
+}
+
 export default function CustomerOrderPage() {
   const router = useRouter();
   
@@ -353,11 +375,13 @@ export default function CustomerOrderPage() {
       {/* Header */}
       <div className="sticky top-0 z-40 bg-[#0a0a0a]/70 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center justify-between">
         <div className="flex flex-col">
-          <span className="text-[11px] font-bold text-amber-500 uppercase tracking-widest mb-0.5">
-            Selamat Datang, {session?.customerName} ✨
+          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-0.5">
+            {view === 'menu' ? 'Samba Cafe' : 'Pesanan Anda'}
           </span>
           <h1 className="text-xl font-black tracking-tight leading-none">
-            {view === 'menu' ? 'Eksplorasi Menu Kami' : view === 'cart' ? 'Keranjang Pesanan' : 'Ringkasan Pesanan'}
+            {view === 'menu' ? (
+              <TypewriterText text={`Halo, ${session?.customerName}`} />
+            ) : view === 'cart' ? 'Keranjang Pesanan' : 'Ringkasan Pesanan'}
           </h1>
         </div>
         {view === 'menu' ? (
