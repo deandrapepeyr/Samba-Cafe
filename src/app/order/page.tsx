@@ -296,24 +296,26 @@ export default function CustomerOrderPage() {
 
   if (view === 'welcome') {
     return (
-      <div className="h-[100dvh] bg-black text-white flex flex-col justify-center px-6 py-12 relative overflow-hidden">
-        {/* Abstract Background Elements */}
-        <div className="absolute top-[-20%] left-[-10%] w-[70vw] h-[70vw] bg-amber-500/10 rounded-full blur-[100px] pointer-events-none" />
-        <div className="absolute bottom-[-10%] right-[-20%] w-[80vw] h-[80vw] bg-orange-600/10 rounded-full blur-[120px] pointer-events-none" />
+      <div 
+        className="h-[100dvh] text-white flex flex-col justify-center px-6 py-12 relative overflow-hidden bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: "url('/cafe_hero_bg.png')" }}
+      >
+        {/* Dark overlay for better text readability */}
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" />
 
-        <div className="relative z-10 w-full max-w-md mx-auto space-y-8">
-          <div className="space-y-3 text-center">
-            <h1 className="text-4xl md:text-5xl font-black tracking-tight bg-gradient-to-br from-white to-white/60 bg-clip-text text-transparent">
+        <div className="relative z-10 w-full max-w-md mx-auto space-y-8 mt-auto mb-10">
+          <div className="space-y-3 text-center drop-shadow-lg">
+            <h1 className="text-5xl md:text-6xl font-black tracking-tight bg-gradient-to-br from-white via-white/90 to-amber-200/50 bg-clip-text text-transparent">
               Samba Cafe
             </h1>
-            <p className="text-zinc-400 text-sm md:text-base font-medium">
+            <p className="text-zinc-200 text-base md:text-lg font-medium drop-shadow-md">
               Pesan langsung dari mejamu, tanpa antre.
             </p>
           </div>
 
-          <form onSubmit={handleStartOrdering} className="bg-zinc-900/50 p-6 md:p-8 rounded-3xl border border-white/5 shadow-2xl backdrop-blur-xl space-y-6">
+          <form onSubmit={handleStartOrdering} className="bg-black/40 p-6 md:p-8 rounded-3xl border border-white/10 shadow-2xl backdrop-blur-md space-y-6">
             <div className="space-y-2">
-              <label htmlFor="name" className="text-sm font-semibold text-zinc-300 ml-1">
+              <label htmlFor="name" className="text-sm font-bold text-white ml-1 drop-shadow-sm">
                 Siapa namamu?
               </label>
               <Input
@@ -322,14 +324,14 @@ export default function CustomerOrderPage() {
                 placeholder="Misal: Andi"
                 value={nameInput}
                 onChange={(e) => setNameInput(e.target.value)}
-                className="h-14 text-lg bg-black/50 border-white/10 focus:border-amber-500/50 focus:ring-amber-500/20 rounded-2xl px-5"
+                className="h-14 text-lg bg-black/60 text-white placeholder:text-zinc-400 border-white/20 focus:border-amber-500 focus:ring-amber-500/30 rounded-2xl px-5 transition-all"
                 maxLength={30}
               />
             </div>
             <Button
               type="submit"
               disabled={!nameInput.trim()}
-              className="w-full h-14 rounded-2xl text-base font-bold bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black shadow-lg shadow-amber-500/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+              className="w-full h-14 rounded-2xl text-base font-black bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100"
             >
               Mulai Pesan <ArrowRight className="ml-2" size={20} />
             </Button>
@@ -575,10 +577,10 @@ export default function CustomerOrderPage() {
             <div className="absolute bottom-6 left-0 right-0 px-4 z-50">
               <button
                 onClick={() => setView('cart')}
-                className="w-full h-14 bg-amber-500/80 backdrop-blur-xl border border-amber-400/50 rounded-2xl shadow-2xl shadow-amber-500/30 text-black font-bold flex items-center justify-between px-5 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                className="w-full h-14 bg-amber-500/60 backdrop-blur-2xl border border-amber-200/40 rounded-2xl shadow-[0_8px_32px_rgba(245,158,11,0.4)] text-white font-black flex items-center justify-between px-5 hover:scale-[1.02] active:scale-[0.98] transition-all"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-black/10 flex items-center justify-center text-sm">
+                  <div className="w-8 h-8 rounded-full bg-black/20 flex items-center justify-center text-sm backdrop-blur-md border border-white/10">
                     {cartItemCount}
                   </div>
                   <span>Lihat Keranjang</span>

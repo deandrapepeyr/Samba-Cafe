@@ -17,8 +17,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     setMounted(true);
-    router.replace('/pos');
-  }, [router]);
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
