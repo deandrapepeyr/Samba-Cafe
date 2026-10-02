@@ -443,8 +443,8 @@ export default function CustomerOrderPage() {
 
           {/* Categories (Sticky on scroll) */}
           {searchQuery.trim() === '' && (
-            <div className="sticky top-0 z-30 pt-3 pb-3 px-0 mb-4 bg-[#0a0a0a]/90 backdrop-blur-2xl border-b border-white/5 shadow-[0_10px_30px_rgba(0,0,0,0.5)] transition-all">
-              <div className="flex gap-2 overflow-x-auto scrollbar-none px-4">
+            <div className="sticky top-0 z-30 pt-3 pb-3 px-0 mb-4 bg-[#0a0a0a]/90 backdrop-blur-2xl border-b border-white/5 shadow-[0_10px_30px_rgba(0,0,0,0.5)] transition-all select-none">
+              <div className="flex gap-2 overflow-x-auto scrollbar-none px-4 touch-pan-x">
                 {categories.map(cat => (
                   <button
                     key={cat.id}
