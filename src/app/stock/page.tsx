@@ -68,8 +68,8 @@ type StockItem = {
   cost_per_unit: number;
   min_stock_alert: number;
   last_updated: string;
-  is_titipan?: boolean;
   titipan_name?: string | null;
+  is_topping?: boolean;
 };
 
 export default function StockPage() {
@@ -81,7 +81,7 @@ export default function StockPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'semua' | 'aman' | 'tipis' | 'habis'>('semua');
   const [penitipFilter, setPenitipFilter] = useState<string>('semua');
-  const [activeTab, setActiveTab] = useState<'cafe' | 'titipan'>('cafe');
+  const [activeTab, setActiveTab] = useState<'cafe' | 'topping' | 'titipan'>('cafe');
 
   // Dialogs
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -102,7 +102,8 @@ export default function StockPage() {
     is_titipan: false,
     titipan_name: '',
     sell_price: '',
-    is_direct_sell: false
+    is_direct_sell: false,
+    is_topping: false
   });
 
   const [editUnitValue, setEditUnitValue] = useState('');
@@ -204,9 +205,9 @@ export default function StockPage() {
             return acc;
           }
           // Orphan titipan stock (missing from products)
-          acc.push({ ...s, name: match[1], is_titipan: true, titipan_name: match[2], original_name: s.name });
+          acc.push({ ...s, name: match[1], is_titipan: true, titipan_name: match[2], original_name: s.name, is_topping: s.is_topping });
         } else {
-          acc.push({ ...s, is_titipan: false, original_name: s.name });
+          acc.push({ ...s, is_titipan: false, original_name: s.name, is_topping: s.is_topping });
         }
         return acc;
       }, []);
@@ -318,7 +319,8 @@ export default function StockPage() {
           unit: `${newItem.unit_value} ${newItem.unit_type}`.trim(),
           cost_per_unit: computedCostPerUnit,
           min_stock_alert: parseInt(newItem.min_stock_alert) || 0,
-          quantity: computedQuantity
+          quantity: computedQuantity,
+          is_topping: newItem.is_topping
         }]).select();
     
         if (data && !error) {
@@ -355,14 +357,15 @@ export default function StockPage() {
             name: newItem.name.trim(),
             original_name: packedName,
             is_titipan: !!newItem.titipan_name,
-            titipan_name: newItem.titipan_name || undefined
+            titipan_name: newItem.titipan_name || undefined,
+            is_topping: newItem.is_topping
           };
 
           setStocks([...stocks, parsedStock].sort((a, b) => a.name.localeCompare(b.name)));
           setIsAddDialogOpen(false);
-          setNewItem({ ...newItem, name: '', cost_per_unit: '', min_stock_alert: '', quantity: '', sell_price: '' });
+          setNewItem({ ...newItem, name: '', cost_per_unit: '', min_stock_alert: '', quantity: '', sell_price: '', is_topping: false });
         } else {
-          alert("Failed to add stock item.");
+          alert("Failed to add stock item: " + error?.message);
         }
     }
   };
@@ -505,7 +508,8 @@ export default function StockPage() {
           name: packedName, 
           unit: `${editUnitValue} ${editUnitType}`.trim(), 
           cost_per_unit: editUnitValue && editPackPrice ? Math.round(parseInt(editPackPrice) / parseFloat(editUnitValue)) : selectedStock.cost_per_unit, 
-          min_stock_alert: selectedStock.min_stock_alert 
+          min_stock_alert: selectedStock.min_stock_alert,
+          is_topping: selectedStock.is_topping
         })
         .eq('id', selectedStock.id);
 
@@ -558,8 +562,9 @@ export default function StockPage() {
   if (role !== 'manager') return null;
 
   const tabStocks = stocks.filter(s => {
-    if (activeTab === 'cafe' && s.is_titipan) return false;
-    if (activeTab === 'titipan' && !s.is_titipan) return false;
+    if (activeTab === 'cafe') return !s.is_titipan && !s.is_topping;
+    if (activeTab === 'topping') return s.is_topping && !s.is_titipan;
+    if (activeTab === 'titipan') return s.is_titipan;
     return true;
   });
 
@@ -601,6 +606,12 @@ export default function StockPage() {
                   Bahan Baku Cafe
                 </button>
                 <button 
+                  onClick={() => setActiveTab('topping')}
+                  className={`px-6 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'topping' ? 'bg-primary/20 text-primary font-semibold' : 'text-zinc-400 hover:text-white'}`}
+                >
+                  Topping
+                </button>
+                <button 
                   onClick={() => setActiveTab('titipan')}
                   className={`px-6 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'titipan' ? 'bg-primary/20 text-primary font-semibold' : 'text-zinc-400 hover:text-white'}`}
                 >
@@ -608,10 +619,10 @@ export default function StockPage() {
                 </button>
               </div>
               <button 
-                onClick={() => { setNewItem({...newItem, is_titipan: activeTab === 'titipan'}); setIsAddDialogOpen(true); }}
+                onClick={() => { setNewItem({...newItem, is_titipan: activeTab === 'titipan', is_topping: activeTab === 'topping'}); setIsAddDialogOpen(true); }}
                 className="px-5 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors whitespace-nowrap"
               >
-                + Tambah {activeTab === 'cafe' ? 'Bahan' : 'Titipan'}
+                + Tambah {activeTab === 'cafe' ? 'Bahan' : activeTab === 'topping' ? 'Topping' : 'Titipan'}
               </button>
             </div>
           </div>
