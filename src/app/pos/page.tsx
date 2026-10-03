@@ -630,30 +630,10 @@ export default function POSPage() {
     const actualMethod = methodOverride !== undefined ? methodOverride : paymentMethod;
     const finalCashReceived = cashOverride !== undefined ? cashOverride : (cashReceived ? parseInt(cashReceived.replace(/\./g, '')) : null);
     const changeAmount = (actualMethod === 'Cash' && finalCashReceived) ? finalCashReceived - total : 0;
-
-    // Instant UI Update
-    setCheckoutStep('none');
-    setIsQRISModalOpen(false);
-    setIsProcessingCheckout(false);
     
-    if (changeAmount > 0) {
-      setToastMessage({
-        title: `Kembalian: Rp ${changeAmount.toLocaleString('id-ID')}`,
-        desc: `Order #${orderNumber} lunas. Berikan kembalian!`,
-        variant: 'alert'
-      });
-      setTimeout(() => setToastMessage(null), 8000); // stay longer for change
-    } else {
-      setToastMessage({
-        title: 'Pembayaran Berhasil! ✅',
-        desc: `Order #${orderNumber} (${actualMethod}) telah dicatat.`,
-        variant: 'success'
-      });
-      setTimeout(() => setToastMessage(null), 3000);
-    }
+    setIsProcessingCheckout(true);
     
     const transactionId = orderNumber;
-    completeAndNewOrder(); // clear cart instantly
 
     const transaction = {
       id: transactionId,
@@ -674,187 +654,146 @@ export default function POSPage() {
       supplier_price: item.product.supplier_price || 0
     }));
 
-    const executeDB = async () => {
-      try {
-        // If offline, skip direct to local storage catch block
-        if (!navigator.onLine) {
-          if (isEditMode) {
-            console.warn("⚠️ Tidak bisa mengedit pesanan dalam Offline Mode. Harap tunggu koneksi kembali.");
-            return;
-          }
-          throw new Error("Offline Mode");
+    const titipanDeductions: { id: string; amount: number }[] = [];
+    if (isEditMode) {
+      const titipanDelta: Record<string, number> = {};
+      for (const cartItem of cart.filter(i => i.product.is_titipan)) {
+        titipanDelta[cartItem.product.id] = (titipanDelta[cartItem.product.id] || 0) + cartItem.quantity;
+      }
+      for (const oldItem of oldCartItems) {
+        const p = products.find(prod => prod.name === oldItem.product_name);
+        if (p?.is_titipan) {
+          titipanDelta[p.id] = (titipanDelta[p.id] || 0) - oldItem.quantity;
         }
+      }
+      for (const id of Object.keys(titipanDelta)) {
+        if (titipanDelta[id] !== 0) titipanDeductions.push({ id, amount: titipanDelta[id] });
+      }
+    } else {
+      const titipanItems = cart.filter(item => item.product.is_titipan);
+      for (const cartItem of titipanItems) {
+        titipanDeductions.push({ id: cartItem.product.id, amount: cartItem.quantity });
+      }
+    }
 
-        const dbOperations = async () => {
-          if (isEditMode) {
-            const { error: txError } = await supabase.from('transactions').update({
-              method: actualMethod,
-              total: total,
-              status: (actualMethod === 'Bayar Nanti') ? 'preparing' : (isAllQuickFood ? 'completed' : 'preparing'),
-              cash_received: actualMethod === 'Cash' && cashReceived ? parseInt(cashReceived.replace(/\./g, '')) : null,
-              customer_name: customerName || null
-            }).eq('id', transactionId);
-            if (txError) throw txError;
-
-            await supabase.from('transaction_items').delete().eq('transaction_id', transactionId);
-            const { error: itemsError } = await supabase.from('transaction_items').insert(itemsToInsert);
-            if (itemsError) throw itemsError;
-
-            // Stock adjustment for Titipan items
-            const titipanDelta: Record<string, number> = {};
-            for (const cartItem of cart.filter(i => i.product.is_titipan)) {
-              titipanDelta[cartItem.product.id] = (titipanDelta[cartItem.product.id] || 0) + cartItem.quantity;
-            }
-            for (const oldItem of oldCartItems) {
-              const p = products.find(prod => prod.name === oldItem.product_name);
-              if (p?.is_titipan) {
-                titipanDelta[p.id] = (titipanDelta[p.id] || 0) - oldItem.quantity;
-              }
-            }
-            for (const id of Object.keys(titipanDelta)) {
-              const delta = titipanDelta[id];
-              if (delta) {
-                const p = products.find(prod => prod.id === id);
-                if (p) {
-                  const newStock = Math.max(0, (p.stock || 0) - delta);
-                  await supabase.from('products').update({ stock: newStock }).eq('id', id);
-                }
-              }
-            }
-
-            // Stock adjustment (Delta) for ALL items via recipes (Titipan menus might use Cafe ingredients)
-            const allProductIds = Array.from(new Set([
-              ...cart.map(i => i.product.id),
-              ...oldCartItems.map(i => products.find(p => p.name === i.product_name)?.id).filter(Boolean)
-            ]));
-            
-            const { data: recipes } = await supabase.from('product_ingredients').select('*').in('product_id', allProductIds as string[]);
-            
-            if (recipes && recipes.length > 0) {
-              const stockDelta: Record<string, number> = {};
-              
-              for (const cartItem of cart) {
-                const itemRecipes = recipes.filter(r => r.product_id === cartItem.product.id);
-                for (const recipe of itemRecipes) {
-                  const isBaseRecipe = !recipe.variant_name;
-                  let matchesVariant = false;
-                  if (!isBaseRecipe && cartItem.variantChoices) {
-                    const selectedOptions = cartItem.variantChoices[recipe.variant_name] || [];
-                    if (selectedOptions.includes(recipe.choice_name)) {
-                      matchesVariant = true;
-                    }
-                  }
-                  
-                  if (isBaseRecipe || matchesVariant) {
-                    if (!stockDelta[recipe.stock_id]) stockDelta[recipe.stock_id] = 0;
-                    stockDelta[recipe.stock_id] += (recipe.quantity_required * cartItem.quantity);
-                  }
-                }
-              }
-              
-              for (const oldItem of oldCartItems) {
-                const productId = products.find(p => p.name === oldItem.product_name)?.id;
-                const itemRecipes = recipes.filter(r => r.product_id === productId);
-                for (const recipe of itemRecipes) {
-                  const isBaseRecipe = !recipe.variant_name;
-                  const noteMatches = !isBaseRecipe && oldItem.notes && recipe.choice_name && oldItem.notes.includes(recipe.choice_name);
-                  
-                  if (isBaseRecipe || noteMatches) {
-                    if (!stockDelta[recipe.stock_id]) stockDelta[recipe.stock_id] = 0;
-                    stockDelta[recipe.stock_id] -= (recipe.quantity_required * oldItem.quantity);
-                  }
-                }
-              }
-
-              const stockIds = Object.keys(stockDelta).filter(id => stockDelta[id] !== 0);
-              if (stockIds.length > 0) {
-                const { data: currentStocks } = await supabase.from('stocks').select('id, quantity').in('id', stockIds);
-                if (currentStocks) {
-                  for (const stock of currentStocks) {
-                    const delta = stockDelta[stock.id];
-                    if (delta) {
-                      const newQuantity = Math.max(0, stock.quantity - delta);
-                      await supabase.from('stocks').update({ quantity: newQuantity, last_updated: new Date().toISOString() }).eq('id', stock.id);
-                    }
-                  }
-                }
-              }
-            }
-          } else {
-            const { error: txError } = await supabase.from('transactions').insert([transaction]);
-            if (txError) throw txError;
-
-            const { error: itemsError } = await supabase.from('transaction_items').insert(itemsToInsert);
-            if (itemsError) throw itemsError;
-
-            // Deduct stock directly for titipan items
-            const titipanItems = cart.filter(item => item.product.is_titipan);
-            for (const cartItem of titipanItems) {
-               const newStock = Math.max(0, (cartItem.product.stock || 0) - cartItem.quantity);
-               await supabase.from('products').update({ stock: newStock }).eq('id', cartItem.product.id);
-            }
-
-            // Deduct stock based on recipe for ALL items (Titipan menus might use Cafe ingredients)
-            const productIds = cart.map(item => item.product.id);
-            const { data: recipes } = await supabase.from('product_ingredients').select('*').in('product_id', productIds);
-            
-            if (recipes && recipes.length > 0) {
-              const stockDeductions: Record<string, number> = {};
-              for (const cartItem of cart) {
-                const itemRecipes = recipes.filter(r => r.product_id === cartItem.product.id);
-                for (const recipe of itemRecipes) {
-                  const isBaseRecipe = !recipe.variant_name;
-                  let matchesVariant = false;
-                  if (!isBaseRecipe && cartItem.variantChoices) {
-                    const selectedOptions = cartItem.variantChoices[recipe.variant_name] || [];
-                    if (selectedOptions.includes(recipe.choice_name)) {
-                      matchesVariant = true;
-                    }
-                  }
-                  
-                  if (isBaseRecipe || matchesVariant) {
-                    if (!stockDeductions[recipe.stock_id]) stockDeductions[recipe.stock_id] = 0;
-                    stockDeductions[recipe.stock_id] += (recipe.quantity_required * cartItem.quantity);
-                  }
-                }
-              }
-
-              const stockIds = Object.keys(stockDeductions);
-              const { data: currentStocks } = await supabase.from('stocks').select('id, quantity').in('id', stockIds);
-              
-              if (currentStocks) {
-                for (const stock of currentStocks) {
-                  const amountToDeduct = stockDeductions[stock.id];
-                  if (amountToDeduct) {
-                    const newQuantity = Math.max(0, stock.quantity - amountToDeduct);
-                    await supabase.from('stocks').update({ quantity: newQuantity, last_updated: new Date().toISOString() }).eq('id', stock.id);
-                  }
-                }
-              }
+    const stockDeductions: { id: string; amount: number }[] = [];
+    const allProductIds = Array.from(new Set([
+      ...cart.map(i => i.product.id),
+      ...(isEditMode ? oldCartItems.map(i => products.find(p => p.name === i.product_name)?.id).filter(Boolean) : [])
+    ]));
+    
+    const { data: recipes } = await supabase.from('product_ingredients').select('*').in('product_id', allProductIds as string[]);
+    
+    if (recipes && recipes.length > 0) {
+      const stockDelta: Record<string, number> = {};
+      
+      for (const cartItem of cart) {
+        const itemRecipes = recipes.filter(r => r.product_id === cartItem.product.id);
+        for (const recipe of itemRecipes) {
+          const isBaseRecipe = !recipe.variant_name;
+          let matchesVariant = false;
+          if (!isBaseRecipe && cartItem.variantChoices) {
+            const selectedOptions = cartItem.variantChoices[recipe.variant_name] || [];
+            if (selectedOptions.includes(recipe.choice_name)) {
+              matchesVariant = true;
             }
           }
-        };
+          
+          if (isBaseRecipe || matchesVariant) {
+            if (!stockDelta[recipe.stock_id]) stockDelta[recipe.stock_id] = 0;
+            stockDelta[recipe.stock_id] += (recipe.quantity_required * cartItem.quantity);
+          }
+        }
+      }
+      
+      if (isEditMode) {
+        for (const oldItem of oldCartItems) {
+          const productId = products.find(p => p.name === oldItem.product_name)?.id;
+          const itemRecipes = recipes.filter(r => r.product_id === productId);
+          for (const recipe of itemRecipes) {
+            const isBaseRecipe = !recipe.variant_name;
+            const noteMatches = !isBaseRecipe && oldItem.notes && recipe.choice_name && oldItem.notes.includes(recipe.choice_name);
+            
+            if (isBaseRecipe || noteMatches) {
+              if (!stockDelta[recipe.stock_id]) stockDelta[recipe.stock_id] = 0;
+              stockDelta[recipe.stock_id] -= (recipe.quantity_required * oldItem.quantity);
+            }
+          }
+        }
+      }
 
-        // Wrap in 5-second timeout to prevent UI freezing on bad network
-        await Promise.race([
-          dbOperations(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout: Jaringan lambat")), 5000))
-        ]);
+      for (const id of Object.keys(stockDelta)) {
+        if (stockDelta[id] !== 0) {
+          stockDeductions.push({ id, amount: stockDelta[id] });
+        }
+      }
+    }
 
-      } catch (error: any) {
-        console.warn("Failed to sync to Supabase, saving to offline queue:", error);
-        // Offline Queueing Logic
+    try {
+      if (navigator.onLine) {
+        const rpcPromise = supabase.rpc('process_checkout_v2', {
+          p_is_edit: isEditMode,
+          p_transaction: transaction,
+          p_transaction_items: itemsToInsert,
+          p_titipan_deductions: titipanDeductions,
+          p_stock_deductions: stockDeductions
+        });
+
+        const { data, error } = await Promise.race([
+          rpcPromise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout: Jaringan lambat")), 8000))
+        ]) as any;
+
+        if (error) throw error;
+      } else {
+        if (isEditMode) {
+          throw new Error("⚠️ Tidak bisa mengedit pesanan dalam Offline Mode. Harap tunggu koneksi kembali.");
+        }
+        throw new Error("Offline Mode");
+      }
+    } catch (error: any) {
+      console.warn("Checkout Failed:", error);
+      setIsProcessingCheckout(false);
+      
+      const errMsg = error.message || '';
+      if (errMsg.includes('INSUFFICIENT_STOCK')) {
+        const cleanMsg = errMsg.split('INSUFFICIENT_STOCK:')[1] || "Stok tidak mencukupi untuk memproses pesanan ini.";
+        alert(`⚠️ GAGAL DIPROSES:\n\n${cleanMsg.trim()}\n\nPesanan ini dibatalkan secara otomatis (Stok belum terpotong).`);
+        return; // Henti, jangan hapus cart
+      }
+
+      if (errMsg.includes('Offline') || errMsg.includes('Failed to fetch') || errMsg.includes('Timeout')) {
         const offlineQueue = JSON.parse(localStorage.getItem('offline_transactions') || '[]');
-        offlineQueue.push({ transaction, itemsToInsert });
+        offlineQueue.push({ transaction, itemsToInsert, titipanDeductions, stockDeductions });
         localStorage.setItem('offline_transactions', JSON.stringify(offlineQueue));
+        alert("⚠️ Mode Offline / Gangguan Jaringan: Transaksi disimpan secara lokal dan akan disinkronisasi ketika koneksi kembali.");
+      } else {
+        alert("⚠️ Terjadi kesalahan sistem: " + errMsg);
+        return;
       }
+    }
 
-      if (!isBackground) {
-        setIsProcessingCheckout(false);
-      }
-    };
-
-    executeDB(); // Selalu jalankan di background
+    setCheckoutStep('none');
+    setIsQRISModalOpen(false);
+    setIsProcessingCheckout(false);
+    
+    if (changeAmount > 0) {
+      setToastMessage({
+        title: `Kembalian: Rp ${changeAmount.toLocaleString('id-ID')}`,
+        desc: `Order #${orderNumber} lunas. Berikan kembalian!`,
+        variant: 'alert'
+      });
+      setTimeout(() => setToastMessage(null), 8000);
+    } else {
+      setToastMessage({
+        title: 'Pembayaran Berhasil! ✅',
+        desc: `Order #${orderNumber} (${actualMethod}) telah dicatat.`,
+        variant: 'success'
+      });
+      setTimeout(() => setToastMessage(null), 3000);
+    }
+    
+    completeAndNewOrder();
   };
 
   const completeAndNewOrder = async () => {

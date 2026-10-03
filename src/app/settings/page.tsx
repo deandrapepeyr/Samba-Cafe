@@ -1810,9 +1810,17 @@ export default function SettingsPage() {
                                     }}
                                   >
                                     <option value="">-- Tanpa Potong Stok --</option>
-                                    {stocks.filter(s => s.is_topping).map(s => (
-                                      <option key={s.id} value={s.id}>{s.name} - Tersisa: {s.quantity} {s.unit.replace(/[\d.,\s]/g, '') || 'pcs'}</option>
-                                    ))}
+                                    {(() => {
+                                      let baseFiltered = stocks.filter(s => s.is_topping);
+                                      if (editingItem.is_titipan) {
+                                        baseFiltered = baseFiltered.filter(s => s.is_titipan && s.titipan_name?.trim().toLowerCase() === editingItem.titipan_name?.trim().toLowerCase());
+                                      } else {
+                                        baseFiltered = baseFiltered.filter(s => !s.is_titipan);
+                                      }
+                                      return baseFiltered.map(s => (
+                                        <option key={s.id} value={s.id}>{s.name} {s.is_titipan ? `[Titipan: ${s.titipan_name}]` : ''} - Tersisa: {s.quantity} {s.unit.replace(/[\d.,\s]/g, '') || 'pcs'}</option>
+                                      ));
+                                    })()}
                                   </select>
                                 </div>
                                 <div className="flex gap-2 items-center">

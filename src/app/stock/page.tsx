@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Package, Search, Plus, AlertTriangle, ArrowDownUp, Edit, Loader2, Trash2, MoreVertical, Filter } from 'lucide-react';
+import { Package, Search, Plus, AlertTriangle, ArrowDownUp, Edit, Loader2, Trash2, MoreVertical, Filter, History } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -11,6 +11,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 
 function TitipanAutocomplete({ id, value, onChange, options, placeholder }: { id?: string, value: string, onChange: (val: string) => void, options: string[], placeholder?: string }) {
@@ -72,6 +73,12 @@ type StockItem = {
   titipan_name?: string | null;
   is_topping?: boolean;
   sell_price?: number;
+  item_type?: string;
+  tracking_method?: 'EXACT' | 'CHECKPOINT';
+  checkpoint_usage?: number | null;
+  usage_since_restock?: number;
+  restock_qty_default?: number | null;
+  restock_price_default?: number | null;
 };
 
 export default function StockPage() {
@@ -83,7 +90,7 @@ export default function StockPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'semua' | 'aman' | 'tipis' | 'habis'>('semua');
   const [penitipFilter, setPenitipFilter] = useState<string>('semua');
-  const [activeTab, setActiveTab] = useState<'cafe' | 'topping' | 'titipan'>('cafe');
+  const [activeTab, setActiveTab] = useState<'cafe' | 'topping_cafe' | 'topping_titipan' | 'titipan'>('cafe');
 
   // Dialogs
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -91,6 +98,8 @@ export default function StockPage() {
   const [isUpdateStockDialogOpen, setIsUpdateStockDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
+  const [isRestockDialogOpen, setIsRestockDialogOpen] = useState(false);
+  const [isQuickRestockOpen, setIsQuickRestockOpen] = useState(false);
 
   const [selectedStock, setSelectedStock] = useState<StockItem | null>(null);
 
@@ -105,7 +114,9 @@ export default function StockPage() {
     titipan_name: '',
     sell_price: '',
     is_direct_sell: false,
-    is_topping: false
+    is_topping: false,
+    tracking_method: 'EXACT',
+    checkpoint_usage: ''
   });
 
   const [editUnitValue, setEditUnitValue] = useState('');
@@ -118,10 +129,32 @@ export default function StockPage() {
   const [restockPackContent, setRestockPackContent] = useState('');
   const [restockTotalPrice, setRestockTotalPrice] = useState('');
 
+  const [restockData, setRestockData] = useState({ quantity: '', price: '', saveAsDefault: true });
+
   const [inlineEditId, setInlineEditId] = useState<string | null>(null);
   const [inlineEditValue, setInlineEditValue] = useState('');
 
   const [linkedPrice, setLinkedPrice] = useState<number | null>(null);
+  const [checkpointRecommendation, setCheckpointRecommendation] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (isDetailDialogOpen && selectedStock?.tracking_method === 'CHECKPOINT') {
+      const fetchRec = async () => {
+        const { data, error } = await supabase.from('inventory_consumption_cycles')
+          .select('actual_usage_count')
+          .eq('stock_id', selectedStock.id);
+        if (!error && data && data.length > 0) {
+          const sum = data.reduce((a, b) => a + (b.actual_usage_count || 0), 0);
+          setCheckpointRecommendation(Math.round(sum / data.length));
+        } else {
+          setCheckpointRecommendation(null);
+        }
+      };
+      fetchRec();
+    } else {
+      setCheckpointRecommendation(null);
+    }
+  }, [isDetailDialogOpen, selectedStock?.id]);
 
   useEffect(() => {
     if (isDetailDialogOpen && selectedStock) {
@@ -190,7 +223,9 @@ export default function StockPage() {
         last_updated: p.created_at || new Date().toISOString(),
         is_titipan: true,
         titipan_name: p.titipan_name,
-        price: p.price || 0
+        price: p.price || 0,
+        tracking_method: 'EXACT',
+        item_type: 'INGREDIENT'
       }));
     }
 
@@ -204,6 +239,11 @@ export default function StockPage() {
           const withPenitip = normalize(`${match[1]} (${match[2]})`);
           // Skip if we already loaded this from products table
           if (titipanProductNames.has(baseName) || titipanProductNames.has(withPenitip)) {
+            const targetIndex = titipanStocks.findIndex(p => normalize(p.name) === baseName || normalize(p.name) === withPenitip);
+            if (targetIndex !== -1) {
+              titipanStocks[targetIndex].is_topping = s.is_topping;
+              titipanStocks[targetIndex].sell_price = s.sell_price;
+            }
             return acc;
           }
           // Orphan titipan stock (missing from products)
@@ -271,8 +311,10 @@ export default function StockPage() {
                quantity: newProduct.stock,
                unit: 'pcs',
                cost_per_unit: newProduct.supplier_price,
-               min_stock_alert: 0
-           }]).select();
+                min_stock_alert: 0,
+                is_topping: newItem.is_topping,
+                sell_price: newItem.is_topping ? (parseInt(newItem.sell_price) || 0) : 0
+            }]).select();
 
            if (stockData && stockData[0]) {
                await supabase.from('product_ingredients').insert([{
@@ -292,7 +334,9 @@ export default function StockPage() {
               min_stock_alert: 0,
               last_updated: new Date().toISOString(),
               is_titipan: true,
-              titipan_name: newProduct.titipan_name
+              titipan_name: newProduct.titipan_name,
+              is_topping: newItem.is_topping,
+              sell_price: newItem.is_topping ? (parseInt(newItem.sell_price) || 0) : 0
            };
            setStocks([...stocks, newStockEntry].sort((a, b) => a.name.localeCompare(b.name)));
            setIsAddDialogOpen(false);
@@ -310,8 +354,8 @@ export default function StockPage() {
             return;
         }
 
-        const computedCostPerUnit = Math.round(parseInt(newItem.cost_per_unit) / parseFloat(newItem.unit_value)) || 0;
-        const computedQuantity = (parseInt(newItem.quantity) || 0) * (parseFloat(newItem.unit_value) || 1);
+        const computedCostPerUnit = Math.round(parseInt(newItem.cost_per_unit) / parseFloat(newItem.unit_value.replace(/,/g, '.'))) || 0;
+        const computedQuantity = (parseInt(newItem.quantity) || 0) * (parseFloat(newItem.unit_value.replace(/,/g, '.')) || 1);
         
         // Use name hack to store titipan info for cafe stocks
         const packedName = newItem.titipan_name ? `${newItem.name.trim()} |titipan:${newItem.titipan_name.trim()}|` : newItem.name.trim();
@@ -320,10 +364,19 @@ export default function StockPage() {
           name: packedName,
           unit: `${newItem.unit_value} ${newItem.unit_type}`.trim(),
           cost_per_unit: computedCostPerUnit,
-          min_stock_alert: parseInt(newItem.min_stock_alert) || 0,
-          quantity: computedQuantity,
+          min_stock_alert: newItem.tracking_method === 'EXACT' ? (parseInt(newItem.min_stock_alert) || 0) : 0,
+          quantity: newItem.tracking_method === 'EXACT' ? computedQuantity : 0,
           is_topping: newItem.is_topping,
-          sell_price: newItem.is_topping ? (parseInt(newItem.sell_price) || 0) : 0
+          sell_price: newItem.is_topping ? (parseInt(newItem.sell_price) || 0) : 0,
+          item_type: newItem.is_topping ? 'TOPPING' : 'INGREDIENT',
+          tracking_method: newItem.tracking_method,
+          checkpoint_usage: newItem.tracking_method === 'CHECKPOINT' && newItem.checkpoint_usage !== '' ? parseInt(newItem.checkpoint_usage) : null,
+          usage_since_restock: 0,
+          // Initial purchase becomes the default for one-click restock
+          ...(newItem.tracking_method === 'EXACT' && computedQuantity > 0 ? {
+            restock_qty_default: computedQuantity,
+            restock_price_default: (parseInt(newItem.cost_per_unit) || 0) * (parseInt(newItem.quantity) || 0)
+          } : {})
         }]).select();
     
         if (data && !error) {
@@ -366,10 +419,172 @@ export default function StockPage() {
 
           setStocks([...stocks, parsedStock].sort((a, b) => a.name.localeCompare(b.name)));
           setIsAddDialogOpen(false);
-          setNewItem({ ...newItem, name: '', cost_per_unit: '', min_stock_alert: '', quantity: '', sell_price: '', is_topping: false });
+          setNewItem({ ...newItem, name: '', cost_per_unit: '', min_stock_alert: '', quantity: '', sell_price: '', is_topping: false, tracking_method: 'EXACT', checkpoint_usage: '' });
         } else {
           alert("Failed to add stock item: " + error?.message);
         }
+    }
+  };
+
+  // Saved restock default, or fall back to the initial pack ("Total Beli Awal" x Harga/Satuan)
+  const getRestockDefault = (s: any) => {
+    if (!s) return null;
+    if (s.restock_qty_default) return { qty: Number(s.restock_qty_default), price: Number(s.restock_price_default || 0) };
+    const packQty = parseFloat(String(s.unit || '').replace(/,/g, '.'));
+    if (/^\d/.test(s.unit || '') && packQty > 0) return { qty: packQty, price: Math.round(packQty * (s.cost_per_unit || 0)) };
+    return null;
+  };
+
+  const openRestockDialog = () => {
+    const def = getRestockDefault(selectedStock);
+    setRestockData({
+      quantity: def ? String(def.qty) : '',
+      price: def ? String(def.price) : '',
+      saveAsDefault: true
+    });
+    setIsDetailDialogOpen(false);
+    setTimeout(() => setIsRestockDialogOpen(true), 150);
+  };
+
+  // override = one-click restock using the saved default qty/price
+  const handleRestock = async (override?: { quantity: string; price: string }) => {
+    const data = override ? { ...override, saveAsDefault: false } : restockData;
+    if (!selectedStock || !data.quantity || !data.price) return;
+
+    const rQty = parseFloat(data.quantity);
+    const rPrice = parseInt(data.price);
+    if (isNaN(rQty) || isNaN(rPrice) || rQty <= 0) {
+        alert("Kuantitas dan Harga harus valid.");
+        return;
+    }
+
+    const newUnitCost = Math.round(rPrice / rQty);
+    let finalCostPerUnit = newUnitCost;
+    let finalQuantity = selectedStock.quantity;
+    
+    if (selectedStock.tracking_method === 'EXACT') {
+      finalQuantity = selectedStock.quantity + rQty;
+    }
+
+    try {
+      const stockUpdatePayload: any = {
+        cost_per_unit: finalCostPerUnit
+      };
+
+      if (selectedStock.tracking_method === 'EXACT') {
+        stockUpdatePayload.quantity = finalQuantity;
+      } else {
+        stockUpdatePayload.usage_since_restock = 0; // reset checkpoint
+      }
+
+      if (data.saveAsDefault) {
+        stockUpdatePayload.restock_qty_default = rQty;
+        stockUpdatePayload.restock_price_default = rPrice;
+      }
+
+      const { error: stockError } = await supabase
+        .from('stocks')
+        .update(stockUpdatePayload)
+        .eq('id', selectedStock.id);
+
+      if (stockError) throw stockError;
+
+      const { data: restockInserted, error: restockError } = await supabase
+        .from('restocks')
+        .insert([{
+          stock_id: selectedStock.id,
+          quantity: rQty,
+          price: rPrice,
+          unit_cost: newUnitCost,
+          unit: selectedStock.unit
+        }])
+        .select()
+        .single();
+
+      if (restockError) throw restockError;
+
+      const { error: movementError } = await supabase
+        .from('inventory_movements')
+        .insert([{
+          stock_id: selectedStock.id,
+          movement_type: 'RESTOCK',
+          quantity_delta: rQty,
+          usage_delta: 0,
+          reference_type: 'restock_id',
+          reference_id: restockInserted.id
+        }]);
+
+      if (movementError) throw movementError;
+
+      const updatedStocks = stocks.map(s => {
+        if (s.id === selectedStock.id) {
+          return {
+            ...s,
+            cost_per_unit: finalCostPerUnit,
+            quantity: selectedStock.tracking_method === 'EXACT' ? finalQuantity : s.quantity,
+            usage_since_restock: selectedStock.tracking_method === 'CHECKPOINT' ? 0 : s.usage_since_restock,
+            restock_qty_default: data.saveAsDefault ? rQty : s.restock_qty_default,
+            restock_price_default: data.saveAsDefault ? rPrice : s.restock_price_default
+          };
+        }
+        return s;
+      });
+      setStocks(updatedStocks);
+      setIsRestockDialogOpen(false);
+      setIsDetailDialogOpen(false);
+    } catch (e: any) {
+      alert("Error saat restock: " + e.message);
+    }
+  };
+
+  const handleMarkEmpty = async () => {
+    if (!selectedStock || selectedStock.tracking_method !== 'CHECKPOINT') return;
+    
+    // Check if there are unrecorded cycles (usage > 0)
+    if (selectedStock.usage_since_restock === 0) {
+      const proceed = confirm("Pemakaian masih 0. Apakah Anda yakin bahan ini sudah habis tanpa pemakaian tercatat?");
+      if (!proceed) return;
+    }
+
+    try {
+      // Create cycle
+      const { data: cycle, error: cycleError } = await supabase.from('inventory_consumption_cycles').insert({
+        stock_id: selectedStock.id,
+        actual_usage_count: selectedStock.usage_since_restock
+      }).select().single();
+      if (cycleError) throw cycleError;
+
+      // Log movement (Audit only, cycle is the source of truth)
+      const { error: movError } = await supabase.from('inventory_movements').insert({
+        stock_id: selectedStock.id,
+        movement_type: 'MARK_EMPTY',
+        quantity_delta: 0,
+        usage_delta: 0,
+        reference_type: 'cycle_id',
+        reference_id: cycle.id
+      });
+      if (movError) console.error("Gagal mencatat log pergerakan (MARK_EMPTY):", movError);
+
+      setIsDetailDialogOpen(false);
+      alert("Barang berhasil ditandai habis. Siklus konsumsi telah direkam.");
+    } catch(e: any) {
+      alert("Gagal tandai habis: " + e.message);
+    }
+  };
+
+  const handleApplyRecommendation = async () => {
+    if (!selectedStock || !checkpointRecommendation) return;
+    try {
+      const { error } = await supabase.from('stocks').update({
+        checkpoint_usage: checkpointRecommendation
+      }).eq('id', selectedStock.id);
+      if (error) throw error;
+      setStocks(stocks.map(s => s.id === selectedStock.id ? { ...s, checkpoint_usage: checkpointRecommendation } : s));
+      setSelectedStock({ ...selectedStock, checkpoint_usage: checkpointRecommendation });
+      setCheckpointRecommendation(null);
+      alert("Saran checkpoint berhasil diterapkan.");
+    } catch(e: any) {
+      alert("Gagal menerapkan rekomendasi: " + e.message);
     }
   };
 
@@ -510,15 +725,25 @@ export default function StockPage() {
         .update({ 
           name: packedName, 
           unit: `${editUnitValue} ${editUnitType}`.trim(), 
-          cost_per_unit: editUnitValue && editPackPrice ? Math.round(parseInt(editPackPrice) / parseFloat(editUnitValue)) : selectedStock.cost_per_unit, 
+          cost_per_unit: editUnitValue && editPackPrice ? Math.round(parseInt(editPackPrice) / parseFloat(editUnitValue.replace(/,/g, '.'))) : selectedStock.cost_per_unit, 
           min_stock_alert: selectedStock.min_stock_alert,
+          checkpoint_usage: selectedStock.checkpoint_usage,
           is_topping: selectedStock.is_topping,
           sell_price: selectedStock.is_topping ? (selectedStock.sell_price || 0) : 0
         })
         .eq('id', selectedStock.id);
 
       if (!error) {
-        setStocks(stocks.map(s => s.id === selectedStock.id ? { ...selectedStock, name: selectedStock.name.trim(), original_name: packedName, is_titipan: !!selectedStock.titipan_name, unit: `${editUnitValue} ${editUnitType}`.trim(), sell_price: selectedStock.sell_price } : s));
+        const newCostPerUnit = editUnitValue && editPackPrice ? Math.round(parseInt(editPackPrice) / parseFloat(editUnitValue.replace(/,/g, '.'))) : selectedStock.cost_per_unit;
+        setStocks(stocks.map(s => s.id === selectedStock.id ? { 
+            ...selectedStock, 
+            name: selectedStock.name.trim(), 
+            original_name: packedName, 
+            is_titipan: !!selectedStock.titipan_name, 
+            unit: `${editUnitValue} ${editUnitType}`.trim(), 
+            sell_price: selectedStock.sell_price,
+            cost_per_unit: newCostPerUnit
+        } : s));
         setIsEditDialogOpen(false);
       } else {
         alert("Failed to edit stock.");
@@ -567,8 +792,9 @@ export default function StockPage() {
 
   const tabStocks = stocks.filter(s => {
     if (activeTab === 'cafe') return !s.is_titipan && !s.is_topping;
-    if (activeTab === 'topping') return s.is_topping && !s.is_titipan;
-    if (activeTab === 'titipan') return s.is_titipan;
+    if (activeTab === 'topping_cafe') return s.is_topping && !s.is_titipan;
+    if (activeTab === 'topping_titipan') return s.is_topping && s.is_titipan;
+    if (activeTab === 'titipan') return s.is_titipan && !s.is_topping;
     return true;
   });
 
@@ -576,7 +802,7 @@ export default function StockPage() {
     const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase());
     if (!matchesSearch) return false;
     
-    if (activeTab === 'titipan' && penitipFilter !== 'semua' && s.titipan_name !== penitipFilter) return false;
+    if ((activeTab === 'titipan' || activeTab === 'topping_titipan') && penitipFilter !== 'semua' && s.titipan_name !== penitipFilter) return false;
 
     if (statusFilter === 'semua') return true;
     if (statusFilter === 'habis') return s.quantity === 0;
@@ -610,10 +836,16 @@ export default function StockPage() {
                   Bahan Baku Cafe
                 </button>
                 <button 
-                  onClick={() => setActiveTab('topping')}
-                  className={`px-6 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'topping' ? 'bg-primary/20 text-primary font-semibold' : 'text-zinc-400 hover:text-white'}`}
+                  onClick={() => setActiveTab('topping_cafe')}
+                  className={`px-6 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'topping_cafe' ? 'bg-primary/20 text-primary font-semibold' : 'text-zinc-400 hover:text-white'}`}
                 >
-                  Topping
+                  Topping Cafe
+                </button>
+                <button 
+                  onClick={() => setActiveTab('topping_titipan')}
+                  className={`px-6 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'topping_titipan' ? 'bg-primary/20 text-primary font-semibold' : 'text-zinc-400 hover:text-white'}`}
+                >
+                  Topping Titipan
                 </button>
                 <button 
                   onClick={() => setActiveTab('titipan')}
@@ -622,11 +854,16 @@ export default function StockPage() {
                   Barang Titipan
                 </button>
               </div>
+              <Link href="/stock/history">
+                <button className="px-5 py-2.5 bg-zinc-800 text-zinc-100 rounded-xl text-sm font-semibold hover:bg-zinc-700 transition-colors whitespace-nowrap flex items-center gap-2 border border-white/5">
+                  <History size={16} /> Riwayat
+                </button>
+              </Link>
               <button 
-                onClick={() => { setNewItem({...newItem, is_titipan: activeTab === 'titipan', is_topping: activeTab === 'topping'}); setIsAddDialogOpen(true); }}
+                onClick={() => { setNewItem({...newItem, is_titipan: activeTab === 'titipan' || activeTab === 'topping_titipan', is_topping: activeTab === 'topping_cafe' || activeTab === 'topping_titipan'}); setIsAddDialogOpen(true); }}
                 className="px-5 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors whitespace-nowrap"
               >
-                + Tambah {activeTab === 'cafe' ? 'Bahan' : activeTab === 'topping' ? 'Topping' : 'Titipan'}
+                + Tambah {(activeTab === 'topping_cafe' || activeTab === 'topping_titipan') ? 'Topping' : activeTab === 'titipan' ? 'Titipan' : 'Bahan'}
               </button>
             </div>
           </div>
@@ -636,7 +873,7 @@ export default function StockPage() {
               <div className="text-zinc-500 text-xs mb-2">{activeTab === 'titipan' ? 'Total Setoran (Modal)' : 'Total Nilai Stok'}</div>
               <div className="font-serif text-2xl font-semibold text-zinc-100">Rp {totalModal.toLocaleString('id-ID')}</div>
             </div>
-            {activeTab === 'titipan' && (
+            {(activeTab === 'titipan' || activeTab === 'topping_titipan') && (
               <div className="flex-1 min-w-[180px] bg-zinc-900 border border-white/5 rounded-2xl p-5">
                 <div className="text-zinc-500 text-xs mb-2">Estimasi Keuntungan Cafe</div>
                 <div className="font-serif text-2xl font-semibold text-primary">Rp {totalProfit.toLocaleString('id-ID')}</div>
@@ -661,12 +898,12 @@ export default function StockPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
               <input 
                 className="w-full pl-9 pr-4 py-2.5 bg-zinc-900 border border-white/10 rounded-xl text-sm text-zinc-100 focus:outline-none focus:border-primary"
-                placeholder={activeTab === 'cafe' ? "Cari bahan baku..." : "Cari barang titipan..."}
+                placeholder={activeTab === 'cafe' ? "Cari bahan baku..." : "Cari barang..."}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            {activeTab === 'titipan' && titipanNames.length > 0 && (
+            {(activeTab === 'titipan' || activeTab === 'topping_titipan') && titipanNames.length > 0 && (
               <select 
                 className="bg-zinc-900 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-zinc-200 focus:outline-none focus:border-primary"
                 value={penitipFilter}
@@ -697,9 +934,9 @@ export default function StockPage() {
                   <tr>
                     <th className="font-medium py-3 px-4">Nama Item</th>
                     <th className="font-medium py-3 px-4">Status</th>
-                    <th className="font-medium py-3 px-4 w-40">Stok Tersedia</th>
+                    <th className="font-medium py-3 px-4 w-40">Stok / Pemakaian</th>
                     <th className="font-medium py-3 px-4">Total Beli Awal</th>
-                    <th className="font-medium py-3 px-4">Batas Minimum</th>
+                    <th className="font-medium py-3 px-4">Batas / Checkpoint</th>
                     <th className="font-medium py-3 px-4 text-right">Harga/Satuan</th>
                     <th className="font-medium py-3 px-4 text-right">Total Modal Stok</th>
                     <th className="font-medium py-3 px-4">Pembaruan</th>
@@ -715,12 +952,23 @@ export default function StockPage() {
                     <th className="font-medium py-3 px-4 text-right">Harga Jual</th>
                     <th className="font-medium py-3 px-4 text-right">Untung/pcs</th>
                   </tr>
+                ) : activeTab === 'topping_titipan' ? (
+                  <tr>
+                    <th className="font-medium py-3 px-4">Nama Topping</th>
+                    <th className="font-medium py-3 px-4">Penitip</th>
+                    <th className="font-medium py-3 px-4">Status</th>
+                    <th className="font-medium py-3 px-4 w-40">Stok Tersedia</th>
+                    <th className="font-medium py-3 px-4">Batas Minimum</th>
+                    <th className="font-medium py-3 px-4 text-right">Harga Setor (Modal)</th>
+                    <th className="font-medium py-3 px-4 text-right">Harga Jual</th>
+                    <th className="font-medium py-3 px-4 text-right">Untung/pcs</th>
+                  </tr>
                 ) : (
                   <tr>
                     <th className="font-medium py-3 px-4">Nama Topping</th>
                     <th className="font-medium py-3 px-4">Status</th>
-                    <th className="font-medium py-3 px-4 w-40">Stok Tersedia</th>
-                    <th className="font-medium py-3 px-4">Batas Minimum</th>
+                    <th className="font-medium py-3 px-4 w-40">Stok / Pemakaian</th>
+                    <th className="font-medium py-3 px-4">Batas / Checkpoint</th>
                     <th className="font-medium py-3 px-4 text-right">Harga Modal</th>
                     <th className="font-medium py-3 px-4 text-right">Harga Jual</th>
                     <th className="font-medium py-3 px-4 text-right">Untung/pcs</th>
@@ -743,18 +991,43 @@ export default function StockPage() {
                   </tr>
                 ) : (
                   filteredStocks.map((item) => {
-                    const isLow = item.quantity > 0 && item.quantity <= item.min_stock_alert;
-                    const isEmpty = item.quantity === 0;
+                    const isCheckpoint = item.tracking_method === 'CHECKPOINT';
                     
-                    let maxStock = item.min_stock_alert > 0 ? item.min_stock_alert * 2 : Math.max(item.quantity, 100);
-                    if (activeTab === 'cafe') {
-                      const unitMatch = item.unit.match(/^([\d.,]+)/);
-                      if (unitMatch) {
-                        const parsed = parseFloat(unitMatch[1].replace(/,/g, '.'));
-                        if (parsed > 0) maxStock = Math.max(parsed, item.quantity); // Ensures bar doesn't break if quantity > maxStock
+                    let isLow = false;
+                    let isEmpty = false;
+                    let ratio = 0;
+                    
+                    if (isCheckpoint) {
+                      if (item.checkpoint_usage !== null && item.checkpoint_usage !== undefined) {
+                        isLow = item.usage_since_restock! >= item.checkpoint_usage;
+                        ratio = Math.min((item.usage_since_restock! / item.checkpoint_usage) * 100, 100);
                       }
+                    } else {
+                      isLow = item.quantity > 0 && item.quantity <= item.min_stock_alert;
+                      isEmpty = item.quantity === 0;
+                      
+                      let maxStock = item.min_stock_alert > 0 ? item.min_stock_alert * 2 : Math.max(item.quantity, 100);
+                      if (activeTab === 'cafe') {
+                        const unitMatch = item.unit.match(/^([\d.,]+)/);
+                        if (unitMatch) {
+                          const parsed = parseFloat(unitMatch[1].replace(/,/g, '.'));
+                          if (parsed > 0) maxStock = Math.max(parsed, item.quantity);
+                        }
+                      }
+                      ratio = Math.min((item.quantity / maxStock) * 100, 100);
                     }
-                    const ratio = Math.min((item.quantity / maxStock) * 100, 100);
+                    
+                    const statusText = isCheckpoint 
+                      ? (item.checkpoint_usage === null ? 'Belum diketahui' : (isLow ? 'Perlu Dicek' : 'Aman')) 
+                      : (isEmpty ? 'Habis' : isLow ? 'Menipis' : 'Aman');
+                      
+                    const statusBadgeClass = isCheckpoint 
+                      ? (item.checkpoint_usage === null ? 'bg-zinc-500/10 text-zinc-400' : (isLow ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'))
+                      : (isEmpty ? 'bg-red-500/10 text-red-500' : isLow ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500');
+                      
+                    const statusDotClass = isCheckpoint
+                      ? (item.checkpoint_usage === null ? 'bg-zinc-500' : (isLow ? 'bg-amber-500' : 'bg-emerald-500'))
+                      : (isEmpty ? 'bg-red-500' : isLow ? 'bg-amber-500' : 'bg-emerald-500');
                     
                     return (
                       <tr 
@@ -769,13 +1042,13 @@ export default function StockPage() {
                           <>
                             <td className="py-3 px-4 font-serif font-medium text-zinc-100">{item.name}</td>
                             <td className="py-3 px-4">
-                              <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${isEmpty ? 'bg-red-500/10 text-red-500' : isLow ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
-                                <div className={`w-1.5 h-1.5 rounded-full ${isEmpty ? 'bg-red-500' : isLow ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-                                {isEmpty ? 'Habis' : isLow ? 'Menipis' : 'Aman'}
+                              <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${statusBadgeClass}`}>
+                                <div className={`w-1.5 h-1.5 rounded-full ${statusDotClass}`} />
+                                {statusText}
                               </span>
                             </td>
-                            <td className="py-3 px-4" onClick={(e) => { e.stopPropagation(); setInlineEditId(item.id); setInlineEditValue(item.quantity.toString()); }}>
-                              {inlineEditId === item.id ? (
+                            <td className="py-3 px-4" onClick={(e) => { if (isCheckpoint) return; e.stopPropagation(); setInlineEditId(item.id); setInlineEditValue(item.quantity.toString()); }}>
+                              {inlineEditId === item.id && !isCheckpoint ? (
                                 <div className="flex flex-col gap-1.5">
                                   <input 
                                     autoFocus
@@ -787,16 +1060,19 @@ export default function StockPage() {
                                   />
                                 </div>
                               ) : (
-                                <div className="flex flex-col gap-1.5 group/edit relative" title="Klik untuk edit cepat">
-                                  <span className="font-semibold text-zinc-200 group-hover/edit:text-primary transition-colors cursor-text">{item.quantity} <span className="text-zinc-500 font-normal text-xs ml-0.5">{item.unit.replace(/[\d.,\s]/g, '') || 'pcs'}</span></span>
+                                <div className="flex flex-col gap-1.5 group/edit relative" title={isCheckpoint ? "" : "Klik untuk edit cepat"}>
+                                  <span className={`font-semibold text-zinc-200 transition-colors ${!isCheckpoint && 'group-hover/edit:text-primary cursor-text'}`}>
+                                    {isCheckpoint ? `${item.usage_since_restock} pemakaian` : item.quantity} 
+                                    {!isCheckpoint && <span className="text-zinc-500 font-normal text-xs ml-0.5">{item.unit.replace(/[\d.,\s]/g, '') || 'pcs'}</span>}
+                                  </span>
                                   <div className="h-1 rounded-full bg-black/50 overflow-hidden">
-                                    <div className={`h-full rounded-full ${isEmpty ? 'bg-red-500' : isLow ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${ratio}%` }} />
+                                    <div className={`h-full rounded-full ${statusDotClass}`} style={{ width: `${ratio}%` }} />
                                   </div>
                                 </div>
                               )}
                             </td>
                             <td className="py-3 px-4 text-zinc-500 text-xs">{/^\d/.test(item.unit) ? item.unit : '-'}</td>
-                            <td className="py-3 px-4 text-zinc-500 text-xs">{item.min_stock_alert} {item.unit.replace(/[\d.,\s]/g, '') || 'pcs'}</td>
+                            <td className="py-3 px-4 text-zinc-500 text-xs">{isCheckpoint ? (item.checkpoint_usage !== null ? `${item.checkpoint_usage} pemakaian` : 'Belum diketahui') : `${item.min_stock_alert} ${item.unit.replace(/[\d.,\s]/g, '') || 'pcs'}`}</td>
                             <td className="py-3 px-4 text-right tabular-nums text-zinc-200">Rp {item.cost_per_unit.toLocaleString('id-ID')}</td>
                             <td className="py-3 px-4 text-right tabular-nums font-semibold text-primary">Rp {(item.quantity * item.cost_per_unit).toLocaleString('id-ID')}</td>
                             <td className="py-3 px-4 text-zinc-500 text-xs">{formatDate(item.last_updated)}</td>
@@ -825,21 +1101,22 @@ export default function StockPage() {
                                 </div>
                               ) : (
                                 <div className="flex flex-col gap-1.5 group/edit relative" title="Klik untuk edit cepat">
-                                  <span className="font-semibold text-zinc-200 group-hover/edit:text-primary transition-colors cursor-text">{item.quantity} <span className="text-zinc-500 font-normal text-xs ml-0.5">pcs</span></span>
+                                  <span className="font-semibold text-zinc-200 group-hover/edit:text-primary transition-colors cursor-text">{item.quantity} <span className="text-zinc-500 font-normal text-xs ml-0.5">{item.unit.replace(/[\d.,\s]/g, '') || 'pcs'}</span></span>
                                   <div className="h-1 rounded-full bg-black/50 overflow-hidden">
                                     <div className={`h-full rounded-full ${isEmpty ? 'bg-red-500' : isLow ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${ratio}%` }} />
                                   </div>
                                 </div>
                               )}
                             </td>
-                            <td className="py-3 px-4 text-zinc-500 text-xs">{item.min_stock_alert} pcs</td>
+                            <td className="py-3 px-4 text-zinc-500 text-xs">{item.min_stock_alert} {item.unit.replace(/[\d.,\s]/g, '') || 'pcs'}</td>
                             <td className="py-3 px-4 text-right tabular-nums text-zinc-500 text-xs">Rp {item.cost_per_unit.toLocaleString('id-ID')}</td>
                             <td className="py-3 px-4 text-right tabular-nums text-zinc-200 font-semibold">Rp {((item as any).price || item.cost_per_unit).toLocaleString('id-ID')}</td>
                             <td className="py-3 px-4 text-right tabular-nums font-semibold text-primary">Rp {(((item as any).price || item.cost_per_unit) - item.cost_per_unit).toLocaleString('id-ID')}</td>
                           </>
-                        ) : (
+                        ) : activeTab === 'topping_titipan' ? (
                           <>
                             <td className="py-3 px-4 font-serif font-medium text-zinc-100">{item.name}</td>
+                            <td className="py-3 px-4 text-zinc-500 text-xs">{item.titipan_name || '-'}</td>
                             <td className="py-3 px-4">
                               <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${isEmpty ? 'bg-red-500/10 text-red-500' : isLow ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
                                 <div className={`w-1.5 h-1.5 rounded-full ${isEmpty ? 'bg-red-500' : isLow ? 'bg-amber-500' : 'bg-emerald-500'}`} />
@@ -860,14 +1137,52 @@ export default function StockPage() {
                                 </div>
                               ) : (
                                 <div className="flex flex-col gap-1.5 group/edit relative" title="Klik untuk edit cepat">
-                                  <span className="font-semibold text-zinc-200 group-hover/edit:text-primary transition-colors cursor-text">{item.quantity} <span className="text-zinc-500 font-normal text-xs ml-0.5">pcs</span></span>
+                                  <span className="font-semibold text-zinc-200 group-hover/edit:text-primary transition-colors cursor-text">{item.quantity} <span className="text-zinc-500 font-normal text-xs ml-0.5">{item.unit.replace(/[\d.,\s]/g, '') || 'pcs'}</span></span>
                                   <div className="h-1 rounded-full bg-black/50 overflow-hidden">
                                     <div className={`h-full rounded-full ${isEmpty ? 'bg-red-500' : isLow ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${ratio}%` }} />
                                   </div>
                                 </div>
                               )}
                             </td>
-                            <td className="py-3 px-4 text-zinc-500 text-xs">{item.min_stock_alert} pcs</td>
+                            <td className="py-3 px-4 text-zinc-500 text-xs">{item.min_stock_alert} {item.unit.replace(/[\d.,\s]/g, '') || 'pcs'}</td>
+                            <td className="py-3 px-4 text-right tabular-nums text-zinc-500 text-xs">Rp {item.cost_per_unit.toLocaleString('id-ID')}</td>
+                            <td className="py-3 px-4 text-right tabular-nums text-zinc-200 font-semibold">Rp {(item.sell_price || 0).toLocaleString('id-ID')}</td>
+                            <td className="py-3 px-4 text-right tabular-nums font-semibold text-primary">Rp {((item.sell_price || 0) - item.cost_per_unit).toLocaleString('id-ID')}</td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="py-3 px-4 font-serif font-medium text-zinc-100">{item.name}</td>
+                            <td className="py-3 px-4">
+                              <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${statusBadgeClass}`}>
+                                <div className={`w-1.5 h-1.5 rounded-full ${statusDotClass}`} />
+                                {statusText}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4" onClick={(e) => { if (isCheckpoint) return; e.stopPropagation(); setInlineEditId(item.id); setInlineEditValue(item.quantity.toString()); }}>
+                              {inlineEditId === item.id && !isCheckpoint ? (
+                                <div className="flex flex-col gap-1.5">
+                                  <input 
+                                    autoFocus
+                                    className="w-20 bg-background border border-primary/50 rounded px-2 py-1 text-sm font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                                    value={inlineEditValue}
+                                    onChange={e => setInlineEditValue(e.target.value.replace(/\D/g, ''))}
+                                    onBlur={() => handleInlineEditSave(item)}
+                                    onKeyDown={e => { if (e.key === 'Enter') handleInlineEditSave(item); else if (e.key === 'Escape') setInlineEditId(null); }}
+                                  />
+                                </div>
+                              ) : (
+                                <div className="flex flex-col gap-1.5 group/edit relative" title={isCheckpoint ? "" : "Klik untuk edit cepat"}>
+                                  <span className={`font-semibold text-zinc-200 transition-colors ${!isCheckpoint && 'group-hover/edit:text-primary cursor-text'}`}>
+                                    {isCheckpoint ? `${item.usage_since_restock} pemakaian` : item.quantity} 
+                                    {!isCheckpoint && <span className="text-zinc-500 font-normal text-xs ml-0.5">{item.unit.replace(/[\d.,\s]/g, '') || 'pcs'}</span>}
+                                  </span>
+                                  <div className="h-1 rounded-full bg-black/50 overflow-hidden">
+                                    <div className={`h-full rounded-full ${statusDotClass}`} style={{ width: `${ratio}%` }} />
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-zinc-500 text-xs">{isCheckpoint ? (item.checkpoint_usage !== null ? `${item.checkpoint_usage} pemakaian` : 'Belum diketahui') : `${item.min_stock_alert} ${item.unit.replace(/[\d.,\s]/g, '') || 'pcs'}`}</td>
                             <td className="py-3 px-4 text-right tabular-nums text-zinc-500 text-xs">Rp {item.cost_per_unit.toLocaleString('id-ID')}</td>
                             <td className="py-3 px-4 text-right tabular-nums text-zinc-200 font-semibold">Rp {(item.sell_price || 0).toLocaleString('id-ID')}</td>
                             <td className="py-3 px-4 text-right tabular-nums font-semibold text-primary">Rp {((item.sell_price || 0) - item.cost_per_unit).toLocaleString('id-ID')}</td>
@@ -907,6 +1222,28 @@ export default function StockPage() {
                 Barang Titipan
               </Button>
             </div>
+
+            {!newItem.is_titipan && (
+              <div className="grid gap-2 p-3 bg-zinc-900/50 border border-white/5 rounded-xl mb-2">
+                <label className="text-sm font-medium text-zinc-400">Metode Tracking</label>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => setNewItem({...newItem, tracking_method: 'EXACT'})} 
+                    className={`flex-1 h-9 text-xs sm:text-sm rounded-lg transition-all ${newItem.tracking_method === 'EXACT' ? 'bg-primary/20 text-primary font-semibold border border-primary/30' : 'text-zinc-500 hover:text-zinc-300 border border-transparent'}`}
+                  >
+                    Jumlah Pasti (EXACT)
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => setNewItem({...newItem, tracking_method: 'CHECKPOINT'})} 
+                    className={`flex-1 h-9 text-xs sm:text-sm rounded-lg transition-all ${newItem.tracking_method === 'CHECKPOINT' ? 'bg-primary/20 text-primary font-semibold border border-primary/30' : 'text-zinc-500 hover:text-zinc-300 border border-transparent'}`}
+                  >
+                    Berdasarkan Pemakaian
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {!newItem.is_titipan && (
               <div className="flex flex-col gap-2 p-3 bg-primary/5 border border-primary/10 rounded-xl">
@@ -958,7 +1295,7 @@ export default function StockPage() {
 
             {!newItem.is_titipan && (
               <div className="grid gap-2">
-                <label className="text-sm font-medium text-zinc-400">1 Kemasan Beli Isinya Berapa?</label>
+                <label className="text-sm font-medium text-zinc-400">Isi / Berat Beli (Contoh: Beli 10 Pcs, 5 Kg)</label>
                 <div className="flex gap-2">
                   <Input 
                     type="text" 
@@ -975,21 +1312,21 @@ export default function StockPage() {
                     value={newItem.unit_type}
                     onChange={e => setNewItem({...newItem, unit_type: e.target.value})}
                   >
-                    <option value="pcs">Pcs</option>
-                    <option value="kg">Kg</option>
-                    <option value="gram">Gram</option>
-                    <option value="liter">Liter</option>
-                    <option value="ml">Ml</option>
-                    <option value="pack">Pack</option>
-                    <option value="botol">Botol</option>
-                    <option value="box">Box</option>
+                    <option className="bg-zinc-900 text-zinc-100" value="pcs">Pcs</option>
+                    <option className="bg-zinc-900 text-zinc-100" value="kg">Kg</option>
+                    <option className="bg-zinc-900 text-zinc-100" value="gram">Gram</option>
+                    <option className="bg-zinc-900 text-zinc-100" value="liter">Liter</option>
+                    <option className="bg-zinc-900 text-zinc-100" value="ml">Ml</option>
+                    <option className="bg-zinc-900 text-zinc-100" value="pack">Pack</option>
+                    <option className="bg-zinc-900 text-zinc-100" value="botol">Botol</option>
+                    <option className="bg-zinc-900 text-zinc-100" value="box">Box</option>
                   </select>
                 </div>
               </div>
             )}
 
             <div className="grid gap-2">
-              <label className="text-sm font-medium text-zinc-400">{newItem.is_titipan ? 'Harga Setor (Modal Penitip)' : 'Total Harga Beli 1 Kemasan'}</label>
+              <label className="text-sm font-medium text-zinc-400">{newItem.is_titipan ? 'Harga Setor (Modal Penitip)' : 'Total Harga Beli (Untuk Isi di Atas)'}</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm font-medium">Rp</span>
                 <Input 
@@ -1007,7 +1344,7 @@ export default function StockPage() {
 
             {!newItem.is_titipan && (
               <div className="flex justify-between items-center px-4 py-3 bg-primary/5 rounded-xl border border-primary/10">
-                <span className="text-sm font-medium text-primary">Harga Modal (Otomatis)</span>
+                <span className="text-sm font-medium text-primary">Harga Modal Per Satuan (Otomatis)</span>
                 <span className="font-bold text-primary">
                   Rp {newItem.unit_value && newItem.cost_per_unit ? Number(parseInt(newItem.cost_per_unit) / parseFloat(newItem.unit_value)).toLocaleString('id-ID', { maximumFractionDigits: 2 }) : '0'} 
                   <span className="text-xs font-normal opacity-80 ml-1">/ {newItem.unit_type || 'Satuan'}</span>
@@ -1036,24 +1373,26 @@ export default function StockPage() {
               </div>
             )}
 
-            <div className="grid gap-2">
-              <label className="text-sm font-medium text-zinc-400">{newItem.is_titipan ? 'Stok Saat Ini' : 'Beli Berapa Kemasan?'}</label>
-              <div className="relative">
-                <Input 
-                  type="text" 
-                  className={`bg-zinc-900/50 border-white/10 h-11 rounded-xl focus-visible:ring-primary text-zinc-100 ${!newItem.is_titipan ? 'pr-20' : ''}`}
-                  placeholder={newItem.is_titipan ? "Jumlah stok" : "Angka (cth: 1)"} 
-                  value={newItem.quantity === '' ? '' : Number(newItem.quantity).toLocaleString('id-ID')} 
-                  onChange={e => {
-                    const val = e.target.value.replace(/\D/g, '');
-                    setNewItem({...newItem, quantity: val === '' ? '' : parseInt(val, 10).toString()});
-                  }} 
-                />
-                {!newItem.is_titipan && <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 text-xs font-medium">Kemasan</span>}
+            {newItem.tracking_method !== 'CHECKPOINT' && (
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-zinc-400">{newItem.is_titipan ? 'Stok Saat Ini' : 'Stok Awal yang Dimasukkan'}</label>
+                <div className="relative">
+                  <Input 
+                    type="text" 
+                    className={`bg-zinc-900/50 border-white/10 h-11 rounded-xl focus-visible:ring-primary text-zinc-100 ${!newItem.is_titipan ? 'pr-20' : ''}`}
+                    placeholder={newItem.is_titipan ? "Jumlah stok" : "Angka (cth: 1)"} 
+                    value={newItem.quantity === '' ? '' : Number(newItem.quantity).toLocaleString('id-ID')} 
+                    onChange={e => {
+                      const val = e.target.value.replace(/\D/g, '');
+                      setNewItem({...newItem, quantity: val === '' ? '' : parseInt(val, 10).toString()});
+                    }} 
+                  />
+                  {!newItem.is_titipan && <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 text-xs font-medium">X (Kali)</span>}
+                </div>
               </div>
-            </div>
+            )}
 
-            {!newItem.is_titipan && (
+            {!newItem.is_titipan && newItem.tracking_method !== 'CHECKPOINT' && (
               <div className="flex justify-between items-center px-4 py-3 bg-zinc-900 rounded-xl border border-white/5">
                 <span className="text-sm font-medium text-zinc-400">Total Masuk (Otomatis)</span>
                 <span className="font-bold text-zinc-100">
@@ -1063,7 +1402,7 @@ export default function StockPage() {
               </div>
             )}
 
-            {!newItem.is_titipan && (
+            {!newItem.is_titipan && newItem.tracking_method !== 'CHECKPOINT' && (
               <div className="grid gap-2">
                 <label className="text-sm font-medium text-red-400">Batas Minimum (Peringatan)</label>
                 <div className="relative">
@@ -1079,6 +1418,26 @@ export default function StockPage() {
                   />
                   <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 text-xs font-medium">{newItem.unit_type || 'Satuan'}</span>
                 </div>
+              </div>
+            )}
+            
+            {!newItem.is_titipan && newItem.tracking_method === 'CHECKPOINT' && (
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-amber-400">Estimasi Pemakaian (Opsional)</label>
+                <div className="relative">
+                  <Input 
+                    type="text" 
+                    className="bg-zinc-900/50 border-white/10 h-11 rounded-xl focus-visible:ring-amber-400/50 text-zinc-100 pr-24" 
+                    placeholder="Berapa kali pemakaian sampai habis?" 
+                    value={newItem.checkpoint_usage === '' ? '' : Number(newItem.checkpoint_usage).toLocaleString('id-ID')} 
+                    onChange={e => {
+                      const val = e.target.value.replace(/\D/g, '');
+                      setNewItem({...newItem, checkpoint_usage: val === '' ? '' : parseInt(val, 10).toString()});
+                    }} 
+                  />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 text-xs font-medium">Pemakaian</span>
+                </div>
+                <p className="text-xs text-zinc-500">Kosongkan jika belum tahu, sistem akan menghitung rata-rata nantinya.</p>
               </div>
             )}
           </div>
@@ -1132,6 +1491,128 @@ export default function StockPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Quick Restock Confirm Dialog */}
+      <Dialog open={isQuickRestockOpen} onOpenChange={setIsQuickRestockOpen}>
+        <DialogContent className="sm:max-w-[400px] bg-zinc-950/95 backdrop-blur-xl border-white/10 rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl text-zinc-100">Restock Cepat</DialogTitle>
+            <DialogDescription className="text-zinc-400">Tambah stok sesuai pembelian sebelumnya.</DialogDescription>
+          </DialogHeader>
+          {(() => {
+            const def = getRestockDefault(selectedStock);
+            if (!def || !selectedStock) return null;
+            const unitLabel = selectedStock.unit?.replace(/[\d.,\s]/g, '') || 'pcs';
+            return (
+              <div className="space-y-3 py-2">
+                <div className="flex justify-between rounded-xl bg-white/5 px-4 py-3">
+                  <span className="text-zinc-400">Bahan</span>
+                  <span className="font-semibold text-primary">{selectedStock.name}</span>
+                </div>
+                <div className="flex justify-between rounded-xl bg-white/5 px-4 py-3">
+                  <span className="text-zinc-400">Jumlah</span>
+                  <span className="font-semibold text-zinc-100">+{def.qty} {unitLabel}</span>
+                </div>
+                <div className="flex justify-between rounded-xl bg-white/5 px-4 py-3">
+                  <span className="text-zinc-400">Total Harga</span>
+                  <span className="font-semibold text-zinc-100">Rp {def.price.toLocaleString('id-ID')}</span>
+                </div>
+                <div className="flex justify-between rounded-xl bg-emerald-500/10 px-4 py-3">
+                  <span className="text-emerald-400">Stok setelah restock</span>
+                  <span className="font-bold text-emerald-400">
+                    {selectedStock.tracking_method === 'CHECKPOINT' ? 'Pemakaian direset ke 0' : `${Number(selectedStock.quantity) + def.qty} ${unitLabel}`}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
+          <DialogFooter className="pt-2 border-t border-white/5 mt-2">
+            <Button variant="outline" className="border-white/10 hover:bg-white/5 rounded-xl h-11" onClick={() => setIsQuickRestockOpen(false)}>Batal</Button>
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-11 font-semibold"
+              onClick={async () => {
+                const def = getRestockDefault(selectedStock);
+                setIsQuickRestockOpen(false);
+                if (def) await handleRestock({ quantity: String(def.qty), price: String(def.price) });
+              }}
+            >
+              Ya, Restock
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Restock Dialog */}
+      <Dialog open={isRestockDialogOpen} onOpenChange={setIsRestockDialogOpen}>
+        <DialogContent className="bg-zinc-950 border-white/10 sm:max-w-[425px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl text-zinc-100">Restock: <span className="text-primary">{selectedStock?.name}</span></DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              Masukkan jumlah pembelian barang dan total harga yang dibayarkan.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium text-zinc-400">Jumlah Beli Baru</label>
+              <div className="relative">
+                <Input 
+                  type="text" 
+                  className="bg-zinc-900/50 border-white/10 h-11 rounded-xl focus-visible:ring-primary text-zinc-100 pr-16" 
+                  placeholder="Berapa banyak?"
+                  value={restockData.quantity} 
+                  onChange={e => setRestockData({...restockData, quantity: e.target.value.replace(/[^0-9.,]/g, '')})} 
+                />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 font-medium text-sm">
+                  {selectedStock?.unit.replace(/[\d.,\s]/g, '') || 'pcs'}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium text-zinc-400">Total Pembayaran (Harga Beli)</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm font-medium">Rp</span>
+                <Input 
+                  type="text" 
+                  className="pl-9 bg-zinc-900/50 border-white/10 h-11 rounded-xl focus-visible:ring-primary text-zinc-100" 
+                  placeholder="0" 
+                  value={restockData.price === '' ? '' : Number(restockData.price).toLocaleString('id-ID')} 
+                  onChange={e => setRestockData({...restockData, price: e.target.value.replace(/\D/g, '')})} 
+                />
+              </div>
+            </div>
+
+            {restockData.quantity && restockData.price && (
+              <div className="flex justify-between items-center px-4 py-3 bg-primary/5 rounded-xl border border-primary/10 mt-2">
+                <span className="text-sm font-medium text-primary">Modal Per Satuan Baru</span>
+                <span className="font-bold text-primary">
+                  Rp {Math.round(parseInt(restockData.price) / parseFloat(restockData.quantity)).toLocaleString('id-ID')}
+                </span>
+              </div>
+            )}
+
+            <label className="flex items-center gap-3 cursor-pointer w-fit mt-4">
+              <input 
+                type="checkbox" 
+                className="w-4 h-4 rounded border-white/10 bg-zinc-900/50 text-primary focus:ring-primary accent-primary"
+                checked={restockData.saveAsDefault}
+                onChange={e => setRestockData({...restockData, saveAsDefault: e.target.checked})}
+              />
+              <span className="text-sm font-medium text-zinc-300 select-none">Simpan sebagai default restock (Autofill berikutnya)</span>
+            </label>
+            
+            {selectedStock?.tracking_method === 'CHECKPOINT' && (
+              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl mt-2">
+                <p className="text-xs text-amber-500 font-medium">Note: Restock akan me-reset jumlah pemakaian kembali ke 0.</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="pt-2 border-t border-white/5 mt-2">
+            <Button variant="outline" className="border-white/10 hover:bg-white/5 rounded-xl h-11" onClick={() => setIsRestockDialogOpen(false)}>Batal</Button>
+            <Button onClick={() => handleRestock()} className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl h-11 font-semibold">Simpan Restock</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Edit Details Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="bg-zinc-950 border-white/10 sm:max-w-[425px] rounded-2xl">
@@ -1159,7 +1640,7 @@ export default function StockPage() {
               </div>
               {!selectedStock.is_titipan && (
                 <div className="grid gap-2">
-                  <label className="text-sm font-medium text-zinc-400">1 Kemasan Beli Isinya Berapa?</label>
+                  <label className="text-sm font-medium text-zinc-400">Isi / Berat Beli (Contoh: Beli 10 Pcs, 5 Kg)</label>
                   <div className="flex gap-2">
                     <Input 
                       type="text" 
@@ -1176,20 +1657,20 @@ export default function StockPage() {
                       value={editUnitType}
                       onChange={e => setEditUnitType(e.target.value)}
                     >
-                      <option value="pcs">Pcs</option>
-                      <option value="kg">Kg</option>
-                      <option value="gram">Gram</option>
-                      <option value="liter">Liter</option>
-                      <option value="ml">Ml</option>
-                      <option value="pack">Pack</option>
-                      <option value="botol">Botol</option>
-                      <option value="box">Box</option>
+                      <option className="bg-zinc-900 text-zinc-100" value="pcs">Pcs</option>
+                      <option className="bg-zinc-900 text-zinc-100" value="kg">Kg</option>
+                      <option className="bg-zinc-900 text-zinc-100" value="gram">Gram</option>
+                      <option className="bg-zinc-900 text-zinc-100" value="liter">Liter</option>
+                      <option className="bg-zinc-900 text-zinc-100" value="ml">Ml</option>
+                      <option className="bg-zinc-900 text-zinc-100" value="pack">Pack</option>
+                      <option className="bg-zinc-900 text-zinc-100" value="botol">Botol</option>
+                      <option className="bg-zinc-900 text-zinc-100" value="box">Box</option>
                     </select>
                   </div>
                 </div>
               )}
               <div className="grid gap-2">
-                <label className="text-sm font-medium text-zinc-400">{selectedStock.is_titipan ? 'Harga Setor (Modal)' : 'Total Harga Beli 1 Kemasan'}</label>
+                <label className="text-sm font-medium text-zinc-400">{selectedStock.is_titipan ? 'Harga Setor (Modal)' : 'Total Harga Beli (Untuk Isi di Atas)'}</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm font-medium">Rp</span>
                   <Input 
@@ -1248,27 +1729,46 @@ export default function StockPage() {
               {!selectedStock.is_titipan && (
                 <>
                   <div className="flex justify-between items-center px-4 py-3 bg-primary/5 rounded-xl border border-primary/10">
-                    <span className="text-sm font-medium text-primary">Harga Modal (Otomatis)</span>
+                    <span className="text-sm font-medium text-primary">Harga Modal Per Satuan (Otomatis)</span>
                     <span className="font-bold text-primary">
-                      Rp {editUnitValue && editPackPrice ? Number(parseInt(editPackPrice) / parseFloat(editUnitValue)).toLocaleString('id-ID', { maximumFractionDigits: 2 }) : '0'} 
+                      Rp {editUnitValue && editPackPrice ? Number(parseInt(editPackPrice) / parseFloat(editUnitValue.replace(/,/g, '.'))).toLocaleString('id-ID', { maximumFractionDigits: 2 }) : '0'} 
                       <span className="text-xs font-normal opacity-80 ml-1">/ {editUnitType || 'Satuan'}</span>
                     </span>
                   </div>
-                  <div className="grid gap-2">
-                    <label className="text-sm font-medium text-red-400">Batas Minimum (Peringatan)</label>
-                    <div className="relative">
-                      <Input 
-                        type="text" 
-                        className="bg-zinc-900/50 border-white/10 h-11 rounded-xl focus-visible:ring-red-400/50 text-zinc-100 pr-16" 
-                        value={selectedStock.min_stock_alert === '' as any ? '' : Number(selectedStock.min_stock_alert).toLocaleString('id-ID')} 
-                        onChange={e => {
-                          const val = e.target.value.replace(/\D/g, '');
-                          setSelectedStock({...selectedStock, min_stock_alert: val === '' ? '' as any : parseInt(val, 10)});
-                        }} 
-                      />
-                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 text-xs font-medium">{editUnitType}</span>
+                  {selectedStock.tracking_method === 'EXACT' ? (
+                    <div className="grid gap-2">
+                      <label className="text-sm font-medium text-red-400">Batas Minimum (Peringatan)</label>
+                      <div className="relative">
+                        <Input 
+                          type="text" 
+                          className="bg-zinc-900/50 border-white/10 h-11 rounded-xl focus-visible:ring-red-400/50 text-zinc-100 pr-16" 
+                          value={selectedStock.min_stock_alert === '' as any ? '' : Number(selectedStock.min_stock_alert).toLocaleString('id-ID')} 
+                          onChange={e => {
+                            const val = e.target.value.replace(/\D/g, '');
+                            setSelectedStock({...selectedStock, min_stock_alert: val === '' ? '' as any : parseInt(val, 10)});
+                          }} 
+                        />
+                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 text-xs font-medium">{editUnitType}</span>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="grid gap-2">
+                      <label className="text-sm font-medium text-blue-400">Target Pemakaian (Checkpoint)</label>
+                      <div className="relative">
+                        <Input 
+                          type="text" 
+                          className="bg-zinc-900/50 border-white/10 h-11 rounded-xl focus-visible:ring-blue-400/50 text-zinc-100 pr-16" 
+                          value={selectedStock.checkpoint_usage === null || selectedStock.checkpoint_usage === undefined || selectedStock.checkpoint_usage === '' as any ? '' : Number(selectedStock.checkpoint_usage).toLocaleString('id-ID')} 
+                          onChange={e => {
+                            const val = e.target.value.replace(/\D/g, '');
+                            setSelectedStock({...selectedStock, checkpoint_usage: val === '' ? null : parseInt(val, 10)});
+                          }} 
+                          placeholder="Kosong = Belum diketahui"
+                        />
+                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 text-xs font-medium">Kali pakai</span>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -1316,8 +1816,12 @@ export default function StockPage() {
                 {/* Highlight Cards */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-muted/30 p-4 rounded-xl border border-border flex flex-col items-center justify-center text-center">
-                    <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mb-1">Sisa Stok</p>
-                    <p className="text-2xl font-black text-foreground">{selectedStock.quantity} <span className="text-sm font-medium text-muted-foreground">{/^\d/.test(selectedStock.unit) ? `(${selectedStock.unit})` : selectedStock.unit}</span></p>
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mb-1">{selectedStock.tracking_method === 'CHECKPOINT' ? 'Telah Terpakai' : 'Sisa Stok'}</p>
+                    {selectedStock.tracking_method === 'CHECKPOINT' ? (
+                      <p className="text-2xl font-black text-amber-500">{selectedStock.usage_since_restock} <span className="text-sm font-medium text-muted-foreground">x</span></p>
+                    ) : (
+                      <p className="text-2xl font-black text-foreground">{selectedStock.quantity} <span className="text-sm font-medium text-muted-foreground">{/^\d/.test(selectedStock.unit) ? `(${selectedStock.unit})` : selectedStock.unit}</span></p>
+                    )}
                   </div>
                   <div className="bg-primary/5 p-4 rounded-xl border border-primary/20 flex flex-col items-center justify-center text-center">
                     <p className="text-[10px] text-primary/80 uppercase font-bold tracking-wider mb-1">Total Modal Stok</p>
@@ -1340,19 +1844,42 @@ export default function StockPage() {
                   <div className="flex justify-between items-center border-b border-border/50 pb-2">
                     <span className="text-muted-foreground font-medium">Status</span>
                     <span>
-                      {selectedStock.quantity === 0 ? (
-                        <span className="text-destructive font-bold bg-destructive/10 px-2 py-0.5 rounded-md text-xs">Habis</span>
-                      ) : selectedStock.quantity <= selectedStock.min_stock_alert ? (
-                        <span className="text-amber-500 font-bold bg-amber-500/10 px-2 py-0.5 rounded-md text-xs">Stok Tipis</span>
+                      {selectedStock.tracking_method === 'CHECKPOINT' ? (
+                         selectedStock.checkpoint_usage === null || selectedStock.checkpoint_usage === undefined ? (
+                            <span className="text-zinc-400 font-bold bg-zinc-500/10 px-2 py-0.5 rounded-md text-xs">Belum diketahui</span>
+                         ) : (selectedStock.usage_since_restock! >= selectedStock.checkpoint_usage!) ? (
+                            <span className="text-amber-500 font-bold bg-amber-500/10 px-2 py-0.5 rounded-md text-xs">Perlu Dicek</span>
+                         ) : (
+                            <span className="text-green-500 font-bold bg-green-500/10 px-2 py-0.5 rounded-md text-xs">Aman</span>
+                         )
                       ) : (
-                        <span className="text-green-500 font-bold bg-green-500/10 px-2 py-0.5 rounded-md text-xs">Aman</span>
+                        selectedStock.quantity === 0 ? (
+                          <span className="text-destructive font-bold bg-destructive/10 px-2 py-0.5 rounded-md text-xs">Habis</span>
+                        ) : selectedStock.quantity <= selectedStock.min_stock_alert ? (
+                          <span className="text-amber-500 font-bold bg-amber-500/10 px-2 py-0.5 rounded-md text-xs">Stok Tipis</span>
+                        ) : (
+                          <span className="text-green-500 font-bold bg-green-500/10 px-2 py-0.5 rounded-md text-xs">Aman</span>
+                        )
                       )}
                     </span>
                   </div>
                   {!selectedStock.is_titipan && (
-                    <div className="flex justify-between items-center border-b border-border/50 pb-2">
-                      <span className="text-muted-foreground font-medium">Batas Minimum</span>
-                      <span className="font-medium text-foreground">{selectedStock.min_stock_alert} {/^\d/.test(selectedStock.unit) ? `(${selectedStock.unit})` : selectedStock.unit}</span>
+                    <div className="flex flex-col border-b border-border/50 pb-2 gap-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground font-medium">{selectedStock.tracking_method === 'CHECKPOINT' ? 'Checkpoint Pemakaian' : 'Batas Minimum'}</span>
+                        <span className="font-medium text-foreground">
+                          {selectedStock.tracking_method === 'CHECKPOINT' 
+                            ? (selectedStock.checkpoint_usage !== null ? `${selectedStock.checkpoint_usage} kali pakai` : 'Belum diketahui') 
+                            : `${selectedStock.min_stock_alert} ${/^\d/.test(selectedStock.unit) ? `(${selectedStock.unit})` : selectedStock.unit}`
+                          }
+                        </span>
+                      </div>
+                      {selectedStock.tracking_method === 'CHECKPOINT' && checkpointRecommendation !== null && checkpointRecommendation !== selectedStock.checkpoint_usage && (
+                        <div className="flex justify-between items-center bg-blue-500/10 p-2 rounded-lg border border-blue-500/20">
+                          <span className="text-xs text-blue-400 font-medium">Saran berdasar riwayat: {checkpointRecommendation}</span>
+                          <Button onClick={handleApplyRecommendation} size="sm" className="h-6 text-[10px] bg-blue-500 hover:bg-blue-600 text-white px-2 rounded-md">Gunakan</Button>
+                        </div>
+                      )}
                     </div>
                   )}
                   {(() => {
@@ -1368,12 +1895,12 @@ export default function StockPage() {
                     return (
                       <>
                         <div className="flex justify-between items-center border-b border-border/50 pb-2">
-                          <span className="text-muted-foreground font-medium">{selectedStock.is_titipan ? 'Harga Setor' : `Harga Beli (per 1 ${baseUnit})`}</span>
+                          <span className="text-muted-foreground font-medium">{selectedStock.is_titipan ? 'Harga Setor' : `Harga Beli`}</span>
                           <span className="font-medium text-foreground">Rp {Number(selectedStock.cost_per_unit).toLocaleString('id-ID')} / 1 {baseUnit}</span>
                         </div>
                         {packMultiplier > 1 && (
                           <div className="flex justify-between items-center border-b border-border/50 pb-2">
-                            <span className="text-muted-foreground font-medium">Harga Modal Kemasan ({packMultiplier} {baseUnit})</span>
+                            <span className="text-muted-foreground font-medium">Harga Modal Total ({packMultiplier} {baseUnit})</span>
                             <span className="font-medium text-amber-500">Rp {Number(selectedStock.cost_per_unit * packMultiplier).toLocaleString('id-ID')}</span>
                           </div>
                         )}
@@ -1401,15 +1928,51 @@ export default function StockPage() {
             )}
 
             <div className="flex flex-col gap-3 pt-6">
-              <Button 
-                  onClick={() => {
-                    setIsDetailDialogOpen(false);
-                    setTimeout(() => setIsUpdateStockDialogOpen(true), 150);
-                  }} 
-                  className="w-full h-12 bg-primary text-primary-foreground hover:bg-primary/90 font-bold rounded-xl shadow-lg shadow-primary/20"
-              >
-                  <Plus size={18} className="mr-2" /> Update Stok
-              </Button>
+              {!selectedStock?.is_titipan && getRestockDefault(selectedStock) ? (
+                <Button
+                    onClick={() => setIsQuickRestockOpen(true)}
+                    className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20"
+                >
+                    Restock Cepat: +{getRestockDefault(selectedStock)!.qty} (Rp {getRestockDefault(selectedStock)!.price.toLocaleString('id-ID')})
+                </Button>
+              ) : null}
+              {selectedStock?.tracking_method === 'CHECKPOINT' ? (
+                <div className="flex gap-3">
+                  <Button 
+                      onClick={handleMarkEmpty} 
+                      className="flex-1 h-12 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow-lg shadow-amber-500/20"
+                  >
+                      Tandai Habis
+                  </Button>
+                  <Button 
+                      onClick={openRestockDialog} 
+                      className="flex-1 h-12 bg-primary text-primary-foreground hover:bg-primary/90 font-bold rounded-xl shadow-lg shadow-primary/20"
+                  >
+                      Restock
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex gap-3">
+                  <Button 
+                      variant={selectedStock?.is_titipan ? 'default' : 'outline'}
+                      onClick={() => {
+                        setIsDetailDialogOpen(false);
+                        setTimeout(() => setIsUpdateStockDialogOpen(true), 150);
+                      }} 
+                      className="flex-1 h-12 font-bold rounded-xl"
+                  >
+                      <Plus size={18} className="mr-2" /> Update Stok
+                  </Button>
+                  {!selectedStock?.is_titipan && (
+                    <Button 
+                        onClick={openRestockDialog} 
+                        className="flex-1 h-12 bg-primary text-primary-foreground hover:bg-primary/90 font-bold rounded-xl shadow-lg shadow-primary/20"
+                    >
+                        Restock
+                    </Button>
+                  )}
+                </div>
+              )}
 
               <div className="flex gap-3">
                 <Button 

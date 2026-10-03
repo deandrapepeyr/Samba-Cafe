@@ -187,130 +187,145 @@ export default function QuickPOSPage() {
   const handlePayment = async (method: 'QRIS' | 'Cash') => {
     if (cart.length === 0) return;
 
-    // Langsung tampilkan success tanpa loading
-    setCheckoutState('success');
+    setCheckoutState('processing');
     
-    // Capture state saat ini untuk background task
     const currentCart = [...cart];
     const currentTotal = total;
 
-    // Optimistically update local stock state so it decreases instantly
-    setProducts(prevProducts => prevProducts.map(p => {
-      const cartItem = currentCart.find(c => c.product.id === p.id);
-      if (cartItem && p.is_titipan && p.stock !== undefined && p.stock !== null) {
-        return { ...p, stock: Math.max(0, p.stock - cartItem.quantity) };
-      }
-      return p;
-    }));
+    const orderId = await generateOrderId();
 
-    setStocksData(prevStocks => prevStocks.map(s => {
-      let totalDeduction = 0;
-      currentCart.forEach(cartItem => {
-        const itemRecipes = recipesData.filter(r => r.product_id === cartItem.product.id);
-        const recipe = itemRecipes.find(r => r.stock_id === s.id);
-        if (recipe) {
-          totalDeduction += recipe.quantity_required * cartItem.quantity;
-        }
-      });
-      if (totalDeduction > 0) {
-        return { ...s, quantity: Math.max(0, s.quantity - totalDeduction) };
-      }
-      return s;
-    }));
-    
-    // Auto reset after 1 second biar lebih cepat lagi
-    setTimeout(() => {
-      setCheckoutState(prev => {
-        if (prev === 'success') {
-          setCart([]);
-          setSuccessOrderId('');
-          return 'idle';
-        }
-        return prev;
-      });
-    }, 1000);
-
-    // Proses DB secara asynchronous di background
-    const processDB = async () => {
-      const orderId = await generateOrderId();
-
-      const transaction = {
-        id: orderId,
-        method,
-        total: currentTotal,
-        cashier_name: userName || 'MAMA MODE',
-        status: `completed|${new Date().toISOString()}`,
-        cash_received: method === 'Cash' ? currentTotal : null,
-        customer_name: null
-      };
-
-      const itemsToInsert = currentCart.map(item => ({
-        transaction_id: orderId,
-        product_name: item.product.name,
-        price: item.product.price,
-        quantity: item.quantity,
-        notes: null,
-        supplier_price: item.product.supplier_price || 0
-      }));
-
-      try {
-        if (!navigator.onLine) throw new Error('Offline');
-
-        const dbOps = async () => {
-          const { error: txErr } = await supabase.from('transactions').insert([transaction]);
-          if (txErr) throw txErr;
-          const { error: itemsErr } = await supabase.from('transaction_items').insert(itemsToInsert);
-          if (itemsErr) throw itemsErr;
-
-          // Deduct titipan stock
-          for (const cartItem of currentCart.filter(i => i.product.is_titipan)) {
-            const newStock = Math.max(0, (cartItem.product.stock || 0) - cartItem.quantity);
-            await supabase.from('products').update({ stock: newStock }).eq('id', cartItem.product.id);
-          }
-
-          // Deduct recipe-based stock
-          const productIds = currentCart.map(i => i.product.id);
-          const { data: recipes } = await supabase.from('product_ingredients').select('*').in('product_id', productIds);
-          if (recipes && recipes.length > 0) {
-            const stockDeductions: Record<string, number> = {};
-            for (const cartItem of currentCart) {
-              const itemRecipes = recipes.filter(r => r.product_id === cartItem.product.id && !r.variant_name);
-              for (const recipe of itemRecipes) {
-                if (!stockDeductions[recipe.stock_id]) stockDeductions[recipe.stock_id] = 0;
-                stockDeductions[recipe.stock_id] += recipe.quantity_required * cartItem.quantity;
-              }
-            }
-            const stockIds = Object.keys(stockDeductions);
-            if (stockIds.length > 0) {
-              const { data: currentStocks } = await supabase.from('stocks').select('id, quantity').in('id', stockIds);
-              if (currentStocks) {
-                for (const stock of currentStocks) {
-                  const amount = stockDeductions[stock.id];
-                  if (amount) {
-                    await supabase.from('stocks').update({ quantity: Math.max(0, stock.quantity - amount), last_updated: new Date().toISOString() }).eq('id', stock.id);
-                  }
-                }
-              }
-            }
-          }
-        };
-
-        await Promise.race([
-          dbOps(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
-        ]);
-        
-        setSuccessOrderId(orderId);
-      } catch (err) {
-        console.warn('Quick POS offline fallback:', err);
-        const queue = JSON.parse(localStorage.getItem('offline_transactions') || '[]');
-        queue.push({ transaction, itemsToInsert });
-        localStorage.setItem('offline_transactions', JSON.stringify(queue));
-      }
+    const transaction = {
+      id: orderId,
+      method,
+      total: currentTotal,
+      cashier_name: userName || 'MAMA MODE',
+      status: `completed|${new Date().toISOString()}`,
+      cash_received: method === 'Cash' ? currentTotal : null,
+      customer_name: null
     };
 
-    // Jalankan tanpa di-await
-    processDB();
+    const itemsToInsert = currentCart.map(item => ({
+      transaction_id: orderId,
+      product_name: item.product.name,
+      price: item.product.price,
+      quantity: item.quantity,
+      notes: null,
+      supplier_price: item.product.supplier_price || 0
+    }));
+
+    const titipanDeductions: { id: string; amount: number }[] = [];
+    for (const cartItem of currentCart.filter(i => i.product.is_titipan)) {
+      titipanDeductions.push({ id: cartItem.product.id, amount: cartItem.quantity });
+    }
+
+    const stockDeductions: { id: string; amount: number }[] = [];
+    const productIds = currentCart.map(i => i.product.id);
+    const { data: recipes } = await supabase.from('product_ingredients').select('*').in('product_id', productIds);
+    if (recipes && recipes.length > 0) {
+      const stockDelta: Record<string, number> = {};
+      for (const cartItem of currentCart) {
+        const itemRecipes = recipes.filter(r => r.product_id === cartItem.product.id && !r.variant_name);
+        for (const recipe of itemRecipes) {
+          if (!stockDelta[recipe.stock_id]) stockDelta[recipe.stock_id] = 0;
+          stockDelta[recipe.stock_id] += recipe.quantity_required * cartItem.quantity;
+        }
+      }
+      for (const id of Object.keys(stockDelta)) {
+        if (stockDelta[id] !== 0) {
+          stockDeductions.push({ id, amount: stockDelta[id] });
+        }
+      }
+    }
+
+    try {
+      if (!navigator.onLine) throw new Error('Offline');
+
+      const rpcPromise = supabase.rpc('process_checkout_v2', {
+        p_is_edit: false,
+        p_transaction: transaction,
+        p_transaction_items: itemsToInsert,
+        p_titipan_deductions: titipanDeductions,
+        p_stock_deductions: stockDeductions
+      });
+
+      const { data, error } = await Promise.race([
+        rpcPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000))
+      ]) as any;
+      
+      if (error) throw error;
+      
+      setProducts(prevProducts => prevProducts.map(p => {
+        const cartItem = currentCart.find(c => c.product.id === p.id);
+        if (cartItem && p.is_titipan && p.stock !== undefined && p.stock !== null) {
+          return { ...p, stock: Math.max(0, p.stock - cartItem.quantity) };
+        }
+        return p;
+      }));
+
+      setStocksData(prevStocks => prevStocks.map(s => {
+        let totalDeduction = 0;
+        currentCart.forEach(cartItem => {
+          const itemRecipes = recipesData.filter(r => r.product_id === cartItem.product.id);
+          const recipe = itemRecipes.find(r => r.stock_id === s.id);
+          if (recipe) {
+            totalDeduction += recipe.quantity_required * cartItem.quantity;
+          }
+        });
+        if (totalDeduction > 0) {
+          return { ...s, quantity: Math.max(0, s.quantity - totalDeduction) };
+        }
+        return s;
+      }));
+      
+      setSuccessOrderId(orderId);
+      setCheckoutState('success');
+      
+      setTimeout(() => {
+        setCheckoutState(prev => {
+          if (prev === 'success') {
+            setCart([]);
+            setSuccessOrderId('');
+            return 'idle';
+          }
+          return prev;
+        });
+      }, 1000);
+
+    } catch (err: any) {
+      console.warn('Checkout Failed:', err);
+      
+      const errMsg = err.message || '';
+      if (errMsg.includes('INSUFFICIENT_STOCK')) {
+        const cleanMsg = errMsg.split('INSUFFICIENT_STOCK:')[1] || "Stok tidak mencukupi untuk memproses pesanan ini.";
+        alert(`⚠️ GAGAL DIPROSES:\n\n${cleanMsg.trim()}\n\nPesanan ini dibatalkan secara otomatis (Stok belum terpotong).`);
+        setCheckoutState('ready');
+        return;
+      }
+
+      if (errMsg.includes('Offline') || errMsg.includes('Failed to fetch') || errMsg.includes('Timeout')) {
+        const queue = JSON.parse(localStorage.getItem('offline_transactions') || '[]');
+        queue.push({ transaction, itemsToInsert, titipanDeductions, stockDeductions });
+        localStorage.setItem('offline_transactions', JSON.stringify(queue));
+        
+        setSuccessOrderId(orderId);
+        setCheckoutState('success');
+        
+        setTimeout(() => {
+          setCheckoutState(prev => {
+            if (prev === 'success') {
+              setCart([]);
+              setSuccessOrderId('');
+              return 'idle';
+            }
+            return prev;
+          });
+        }, 1000);
+      } else {
+        alert("⚠️ Terjadi kesalahan sistem: " + errMsg);
+        setCheckoutState('ready');
+      }
+    }
   };
 
   const handleNewOrder = () => {

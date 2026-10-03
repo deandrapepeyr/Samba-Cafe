@@ -368,9 +368,14 @@ export default function RecipesPage() {
                     return (
                       <div key={ing.id} className="flex items-center gap-3 p-3 text-sm bg-black/40 border border-white/5 rounded-xl hover:bg-black/60 transition-colors">
                         <span className="flex-1 text-zinc-300">
-                          {stockItem?.name || 'Unknown'} — <span className="font-semibold text-zinc-100">{ing.quantity_required}</span><span className="text-zinc-500">{stockItem?.unit?.replace(/[^a-zA-Z]/g, '') || ''}</span>
+                          {stockItem?.name || 'Unknown'} — <span className="font-semibold text-zinc-100">{ing.quantity_required}</span>
+                          <span className="text-zinc-500">
+                            {stockItem?.tracking_method === 'CHECKPOINT' ? ' penggunaan' : (stockItem?.unit?.replace(/[^a-zA-Z]/g, '') || '')}
+                          </span>
                         </span>
-                        <span className="text-zinc-500 text-xs w-20 text-right">Rp {Math.round(cost).toLocaleString('id-ID')}</span>
+                        <span className="text-zinc-500 text-xs w-20 text-right">
+                          Rp {Math.round(cost).toLocaleString('id-ID')}
+                        </span>
                         <button 
                           onClick={(e) => handleDeleteIngredient(ing.id, e)}
                           className="text-zinc-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-white/5 transition-colors"
@@ -483,6 +488,9 @@ export default function RecipesPage() {
                                   className={`px-3 py-2.5 text-sm rounded-lg cursor-pointer hover:bg-white/10 transition-colors ${newStockId === s.id ? 'bg-primary/20 text-primary font-bold' : 'text-zinc-300'}`}
                                   onClick={() => {
                                     setNewStockId(s.id);
+                                    if (s.tracking_method === 'CHECKPOINT') {
+                                      setNewQuantity('1');
+                                    }
                                     setIsDropdownOpen(false);
                                   }}
                                 >
@@ -499,7 +507,9 @@ export default function RecipesPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Takaran / Jumlah</label>
+                    <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                      {stocks.find(s => s.id === newStockId)?.tracking_method === 'CHECKPOINT' ? 'Penggunaan' : 'Takaran / Jumlah'}
+                    </label>
                     <div className="relative">
                       <input 
                         type="number" step="any"
@@ -509,7 +519,9 @@ export default function RecipesPage() {
                         onChange={(e) => setNewQuantity(e.target.value)}
                       />
                       <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-zinc-500 font-bold uppercase">
-                        {newStockId ? stocks.find(s => s.id === newStockId)?.unit?.replace(/[^a-zA-Z]/g, '') : ''}
+                        {stocks.find(s => s.id === newStockId)?.tracking_method === 'CHECKPOINT' 
+                          ? 'Kali pakai' 
+                          : (newStockId ? stocks.find(s => s.id === newStockId)?.unit?.replace(/[^a-zA-Z]/g, '') : '')}
                       </span>
                     </div>
                   </div>
