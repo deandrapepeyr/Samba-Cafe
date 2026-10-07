@@ -1404,7 +1404,10 @@ export default function POSPage() {
               <h3 className="text-sm font-bold text-zinc-400 mb-3 px-1 uppercase tracking-wider">Antrean Pesanan</h3>
               <div className="flex w-full overflow-x-auto snap-x snap-mandatory scrollbar-hide gap-3 pb-2 px-1">
                 {preparingOrders.map((order, idx) => {
-                  const itemsToCook = order.items || [];
+                  const itemsToCook = order.items?.filter((item: any) => {
+                    const p = products.find(prod => prod.name === item.product_name);
+                    return p ? !p.is_quick : true;
+                  }) || [];
                   
                   return (
                   <div 
@@ -1426,7 +1429,7 @@ export default function POSPage() {
                           {idx + 1}
                         </span>
                         <span className="font-bold text-sm text-zinc-100 truncate">
-                          {order.customer_name ? order.customer_name : (order.id.startsWith('order_') ? order.id.split('_').pop() : order.id)}
+                          {order.customer_name ? order.customer_name : order.id}
                         </span>
                       </div>
                       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border shrink-0 ml-2 ${
@@ -1439,7 +1442,7 @@ export default function POSPage() {
                     
                     {order.customer_name && (
                       <div className="text-[10px] text-zinc-500 mb-1 font-mono">
-                        #{order.id.startsWith('order_') ? order.id.split('_').pop() : order.id}
+                        {order.id}
                       </div>
                     )}
 
