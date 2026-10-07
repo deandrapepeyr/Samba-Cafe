@@ -274,11 +274,21 @@ export default function POSPage() {
           items: itemsData ? itemsData.filter((i: any) => i.transaction_id === tx.id) : []
         }));
 
-        setPendingQrOrders(txWithItems.filter(d => d.status === 'pending' && d.order_source === 'CUSTOMER_QR'));
-        setPreparingOrders(txWithItems.filter(d => d.status === 'preparing' || d.status === 'ready'));
+        const newPending = txWithItems.filter(d => d.status === 'pending' && d.order_source === 'CUSTOMER_QR');
+        const newPreparing = txWithItems.filter(d => d.status === 'preparing' || d.status === 'ready');
+        setPendingQrOrders(newPending);
+        setPreparingOrders(newPreparing);
+        try {
+          localStorage.setItem('samba_pending_orders_cache', JSON.stringify(newPending));
+          localStorage.setItem('samba_preparing_orders_cache', JSON.stringify(newPreparing));
+        } catch(e) {}
       } else {
         setPendingQrOrders([]);
         setPreparingOrders([]);
+        try {
+          localStorage.setItem('samba_pending_orders_cache', '[]');
+          localStorage.setItem('samba_preparing_orders_cache', '[]');
+        } catch(e) {}
       }
     };
 
@@ -310,6 +320,12 @@ export default function POSPage() {
         
         const cachedCats = localStorage.getItem('samba_categories_cache');
         if (cachedCats) { setCategories(JSON.parse(cachedCats)); }
+
+        const cachedPending = localStorage.getItem('samba_pending_orders_cache');
+        if (cachedPending) setPendingQrOrders(JSON.parse(cachedPending));
+        
+        const cachedPreparing = localStorage.getItem('samba_preparing_orders_cache');
+        if (cachedPreparing) setPreparingOrders(JSON.parse(cachedPreparing));
       } catch(e) {}
 
       const [categoriesRes, productsRes, stocksRes, recipesRes] = await Promise.all([
