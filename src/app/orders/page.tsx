@@ -216,7 +216,12 @@ export default function OrdersPage() {
       try {
         const cached = localStorage.getItem('samba_admin_orders_cache');
         if (cached) {
-          setOrders(JSON.parse(cached));
+          const parsed = JSON.parse(cached).map((o: any) => ({
+            ...o,
+            createdAt: o.createdAt ? new Date(o.createdAt) : undefined,
+            completedAt: o.completedAt ? new Date(o.completedAt) : undefined,
+          }));
+          setOrders(parsed);
           setIsLoadingData(false);
         }
       } catch (e) {}
