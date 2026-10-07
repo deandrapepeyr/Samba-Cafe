@@ -183,7 +183,7 @@ export default function OrdersPage() {
       // Guard: don't overwrite recently locally-updated orders (fixes race condition)
       setOrders(prev => {
         const now = Date.now();
-        return formattedOrders.map(order => {
+        const updated = formattedOrders.map(order => {
           const localUpdateTime = localUpdatesRef.current[order.id];
           if (localUpdateTime && now - localUpdateTime < 10000) {
             const existingOrder = prev.find(o => o.id === order.id);
@@ -194,9 +194,18 @@ export default function OrdersPage() {
           }
           return order;
         });
+        
+        try {
+          localStorage.setItem('samba_admin_orders_cache', JSON.stringify(updated));
+        } catch(e) {}
+        
+        return updated;
       });
     } else {
       setOrders([]);
+      try {
+        localStorage.setItem('samba_admin_orders_cache', '[]');
+      } catch(e) {}
     }
     
     setIsLoadingData(false);
@@ -204,6 +213,14 @@ export default function OrdersPage() {
 
   useEffect(() => {
     if (role) {
+      try {
+        const cached = localStorage.getItem('samba_admin_orders_cache');
+        if (cached) {
+          setOrders(JSON.parse(cached));
+          setIsLoadingData(false);
+        }
+      } catch (e) {}
+      
       fetchOrders(true);
 
       // Realtime listener for transactions

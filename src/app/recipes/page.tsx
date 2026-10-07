@@ -42,9 +42,23 @@ export default function RecipesPage() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   useEffect(() => {
+    try {
+      const cachedCats = localStorage.getItem('samba_admin_categories_cache');
+      const cachedProds = localStorage.getItem('samba_admin_products_cache');
+      const cachedStocks = localStorage.getItem('samba_admin_recipes_stocks_cache');
+      const cachedIngs = localStorage.getItem('samba_admin_ingredients_cache');
+      
+      if (cachedCats && cachedProds && cachedStocks && cachedIngs) {
+        setCategories(JSON.parse(cachedCats));
+        setProducts(JSON.parse(cachedProds));
+        setStocks(JSON.parse(cachedStocks));
+        setProductIngredients(JSON.parse(cachedIngs));
+        setIsLoadingData(false);
+      }
+    } catch(e) {}
+    
     fetchData();
   }, []);
-
   const fetchData = async () => {
     setIsLoadingData(true);
     const [catRes, prodRes, stockRes, ingRes] = await Promise.all([
@@ -54,8 +68,15 @@ export default function RecipesPage() {
       supabase.from('product_ingredients').select('*')
     ]);
     
-    if (catRes.data) setCategories(catRes.data);
-    if (prodRes.data) setProducts(prodRes.data.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
+    if (catRes.data) {
+      setCategories(catRes.data);
+      try { localStorage.setItem('samba_admin_categories_cache', JSON.stringify(catRes.data)); } catch(e) {}
+    }
+    if (prodRes.data) {
+      const sorted = prodRes.data.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+      setProducts(sorted);
+      try { localStorage.setItem('samba_admin_products_cache', JSON.stringify(sorted)); } catch(e) {}
+    }
     if (stockRes.data) {
       const parsedStocks = stockRes.data.map((s: any) => {
         const match = s.name.match(/^(.*?)\s*\|titipan:(.+?)\|$/);
@@ -64,9 +85,14 @@ export default function RecipesPage() {
         }
         return { ...s, is_titipan: false, original_name: s.name };
       });
-      setStocks(parsedStocks.sort((a, b) => a.name.localeCompare(b.name)));
+      const sorted = parsedStocks.sort((a, b) => a.name.localeCompare(b.name));
+      setStocks(sorted);
+      try { localStorage.setItem('samba_admin_recipes_stocks_cache', JSON.stringify(sorted)); } catch(e) {}
     }
-    if (ingRes.data) setProductIngredients(ingRes.data);
+    if (ingRes.data) {
+      setProductIngredients(ingRes.data);
+      try { localStorage.setItem('samba_admin_ingredients_cache', JSON.stringify(ingRes.data)); } catch(e) {}
+    }
     
     setIsLoadingData(false);
   };

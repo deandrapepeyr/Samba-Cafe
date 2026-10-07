@@ -180,6 +180,13 @@ export default function StockPage() {
 
   useEffect(() => {
     if (role === 'manager') {
+      try {
+        const cached = localStorage.getItem('samba_admin_stocks_cache');
+        if (cached) {
+          setStocks(JSON.parse(cached));
+          setIsLoadingData(false);
+        }
+      } catch (e) {}
       fetchStocks();
     }
   }, [role]);
@@ -260,6 +267,9 @@ export default function StockPage() {
     combined.sort((a, b) => a.name.localeCompare(b.name));
     setStocks(combined);
     setIsLoadingData(false);
+    try {
+      localStorage.setItem('samba_admin_stocks_cache', JSON.stringify(combined));
+    } catch(e) {}
   };
 
   const formatDate = (dateString: string) => {
