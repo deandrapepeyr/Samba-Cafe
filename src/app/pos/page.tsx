@@ -425,19 +425,24 @@ export default function POSPage() {
     
     window.addEventListener('refresh-products', handleRefreshProducts);
     
-    // Auto-refresh via Supabase Realtime
+    // Auto-refresh via Supabase Realtime with Debounce to prevent lag
+    let refreshTimeout: NodeJS.Timeout | null = null;
+    const debouncedRefresh = () => {
+      if (refreshTimeout) clearTimeout(refreshTimeout);
+      refreshTimeout = setTimeout(() => {
+        handleRefreshProducts();
+      }, 500);
+    };
+
     const catalogChannel = supabase
       .channel(`pos_catalog_${Date.now()}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'stocks' }, () => {
-        handleRefreshProducts();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
-        handleRefreshProducts();
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stocks' }, debouncedRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, debouncedRefresh)
       .subscribe();
 
     return () => {
       window.removeEventListener('refresh-products', handleRefreshProducts);
+      if (refreshTimeout) clearTimeout(refreshTimeout);
       supabase.removeChannel(catalogChannel);
     };
   }, [userName, isLoading]);
