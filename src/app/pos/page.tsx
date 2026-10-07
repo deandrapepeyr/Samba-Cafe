@@ -259,7 +259,6 @@ export default function POSPage() {
         .from('transactions')
         .select('*')
         .in('status', ['pending', 'preparing', 'ready'])
-        .gte('created_at', startOfDay.toISOString())
         .order('created_at', { ascending: true });
 
       if (data && data.length > 0) {
