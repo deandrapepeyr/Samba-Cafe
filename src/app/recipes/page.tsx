@@ -124,17 +124,7 @@ export default function RecipesPage() {
     }
   };
 
-  const getHPP = (productId: string) => {
-    const ings = productIngredients.filter(pi => pi.product_id === productId);
-    let total = 0;
-    ings.forEach(ing => {
-      const stock = stocks.find(s => s.id === ing.stock_id);
-      if (stock) {
-        total += (stock.cost_per_unit || 0) * ing.quantity_required;
-      }
-    });
-    return total;
-  };
+
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
@@ -173,16 +163,6 @@ export default function RecipesPage() {
 
   // Calculations for meta line
   const totalItems = filteredProducts.length;
-  let avgPct = 0;
-  if (totalItems > 0) {
-    let sumPct = 0;
-    filteredProducts.forEach(p => {
-      const hpp = getHPP(p.id);
-      const pct = p.price > 0 ? (hpp / p.price) * 100 : 0;
-      sumPct += pct;
-    });
-    avgPct = Math.round(sumPct / totalItems);
-  }
 
   // Generate available categories for chips (only for current type)
   const availableCategories = useMemo(() => {
@@ -192,11 +172,7 @@ export default function RecipesPage() {
     return ['Semua', ...cats];
   }, [products, categories, activeType]);
 
-  const pctColor = (p: number) => {
-    if (p <= 30) return 'bg-emerald-500';
-    if (p <= 45) return 'bg-amber-500';
-    return 'bg-red-500';
-  };
+
 
   const selectedProduct = useMemo(() => {
     return products.find(p => p.id === selectedProductId) || null;
@@ -207,7 +183,7 @@ export default function RecipesPage() {
     return productIngredients.filter(pi => pi.product_id === selectedProductId);
   }, [selectedProductId, productIngredients]);
 
-  const selectedProductHPP = selectedProductId ? getHPP(selectedProductId) : 0;
+
 
   if (role !== 'manager') return null;
 
@@ -220,7 +196,7 @@ export default function RecipesPage() {
           <header className="mb-6">
             <h1 className="font-serif text-3xl font-semibold text-white mb-1 tracking-wide">Resep Menu</h1>
             <div className="text-zinc-500 text-sm">
-              {totalItems} menu · rata-rata HPP {avgPct}%
+              {totalItems} menu
             </div>
           </header>
 
@@ -290,9 +266,7 @@ export default function RecipesPage() {
                   
                   {items.map(product => {
                     const ingredients = productIngredients.filter(pi => pi.product_id === product.id);
-                    const hpp = getHPP(product.id);
-                    const p = product.price > 0 ? Math.round((hpp / product.price) * 100) : 0;
-                    
+
                     return (
                       <div 
                         key={product.id} 
@@ -308,15 +282,7 @@ export default function RecipesPage() {
                             <h3 className="font-serif font-semibold text-zinc-100 text-base truncate">{product.name}</h3>
                             <p className="font-sans text-xs text-zinc-500 mt-0.5">{ingredients.length} bahan</p>
                           </div>
-                          <div className="flex items-center gap-2 w-28 sm:w-32 hidden sm:flex">
-                            <div className="flex-1 h-1.5 rounded-full bg-black/50 overflow-hidden">
-                              <div className={`h-full rounded-full ${pctColor(p)}`} style={{ width: `${Math.min(p, 100)}%` }} />
-                            </div>
-                            <span className="text-xs text-zinc-500 w-8 text-right">{p}%</span>
-                          </div>
-                          <div className="font-semibold text-sm w-24 text-right text-zinc-200">
-                            Rp {product.price.toLocaleString('id-ID')}
-                          </div>
+
                         </div>
                       </div>
                     );
@@ -373,9 +339,7 @@ export default function RecipesPage() {
                             {stockItem?.tracking_method === 'CHECKPOINT' ? ' penggunaan' : (stockItem?.unit?.replace(/[^a-zA-Z]/g, '') || '')}
                           </span>
                         </span>
-                        <span className="text-zinc-500 text-xs w-20 text-right">
-                          Rp {Math.round(cost).toLocaleString('id-ID')}
-                        </span>
+
                         <button 
                           onClick={(e) => handleDeleteIngredient(ing.id, e)}
                           className="text-zinc-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-white/5 transition-colors"
@@ -388,20 +352,7 @@ export default function RecipesPage() {
                 )}
               </div>
 
-              <div className="p-4 bg-zinc-950/50 rounded-xl border border-white/5 mb-6">
-                <div className="flex justify-between text-sm text-zinc-400 mb-2">
-                  <div>Total HPP (Modal):</div>
-                  <strong className="text-zinc-200">Rp {Math.round(selectedProductHPP).toLocaleString('id-ID')}</strong>
-                </div>
-                <div className="flex justify-between text-sm text-zinc-400 pb-2 border-b border-white/5 mb-2">
-                  <div>Harga Jual:</div>
-                  <strong className="text-zinc-200">Rp {selectedProduct.price.toLocaleString('id-ID')}</strong>
-                </div>
-                <div className="flex justify-between text-sm text-primary">
-                  <div>Estimasi Keuntungan (Margin):</div>
-                  <strong className="font-bold">Rp {Math.round(selectedProduct.price - selectedProductHPP).toLocaleString('id-ID')}</strong>
-                </div>
-              </div>
+
 
               <div className="flex justify-end border-t border-white/5 pt-4 mt-2">
                 <button 

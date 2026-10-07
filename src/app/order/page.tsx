@@ -686,7 +686,7 @@ export default function CustomerOrderPage() {
       )}
 
       {view === 'cart' && (
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <ScrollArea className="flex-1 px-4 py-2">
             <div className="space-y-3 pb-6">
               {cart.map(item => (
@@ -740,7 +740,7 @@ export default function CustomerOrderPage() {
       )}
 
       {view === 'checkout' && (
-        <div className="flex-1 px-4 py-6 space-y-6 overflow-y-auto">
+        <div className="flex-1 px-4 py-6 space-y-6 overflow-y-auto min-h-0">
           <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-4 space-y-3">
             <div className="flex justify-between items-center pb-3 border-b border-white/5">
               <span className="text-sm">Nama Pemesan</span>

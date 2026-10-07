@@ -125,11 +125,40 @@ export default function POSPage() {
   const [isCartOpen, setIsCartOpen] = useState(true);
   const [isMobileCartSheetOpen, setIsMobileCartSheetOpen] = useState(false);
   const [pendingQrOrders, setPendingQrOrders] = useState<any[]>([]);
+  const [preparingOrders, setPreparingOrders] = useState<any[]>([]);
+  const [refreshActiveOrdersTrigger, setRefreshActiveOrdersTrigger] = useState(0);
+  const [selectedActiveOrder, setSelectedActiveOrder] = useState<any | null>(null);
+  const [paymentModalOrder, setPaymentModalOrder] = useState<any | null>(null);
+  const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
   
   const [isEditMode, setIsEditMode] = useState(false);
   const [oldCartItems, setOldCartItems] = useState<any[]>([]);
   
   const cartEndRef = useRef<HTMLDivElement>(null);
+
+  const [isStateRestored, setIsStateRestored] = useState(false);
+
+  useEffect(() => {
+    if (selectedActiveOrder) {
+      const saved = localStorage.getItem(`checked_items_${selectedActiveOrder.id}`);
+      if (saved) {
+        try {
+          setCheckedItems(JSON.parse(saved));
+        } catch (e) {
+          setCheckedItems({});
+        }
+      } else {
+        setCheckedItems({});
+      }
+    }
+  }, [selectedActiveOrder]);
+
+  const toggleCheckItem = (idx: number) => {
+    if (!selectedActiveOrder) return;
+    const newChecked = { ...checkedItems, [idx]: !checkedItems[idx] };
+    setCheckedItems(newChecked);
+    localStorage.setItem(`checked_items_${selectedActiveOrder.id}`, JSON.stringify(newChecked));
+  };
 
   const generateNextOrderId = async () => {
     const today = new Date();
@@ -154,43 +183,119 @@ export default function POSPage() {
     return `${datePrefix}0001`;
   };
 
+  // Save state to localStorage whenever it changes, but only after initial restore
   useEffect(() => {
-    generateNextOrderId().then(setOrderNumber);
-  }, []);
+    if (isStateRestored) {
+      localStorage.setItem('samba_pos_cart', JSON.stringify(cart));
+      localStorage.setItem('samba_pos_customer', customerName);
+      localStorage.setItem('samba_pos_edit_mode', isEditMode.toString());
+      localStorage.setItem('samba_pos_old_items', JSON.stringify(oldCartItems));
+      localStorage.setItem('samba_pos_order_number', orderNumber);
+    }
+  }, [cart, customerName, isEditMode, oldCartItems, orderNumber, isStateRestored]);
+
+
+  const updateOrderStatus = async (orderId: string, newStatus: string, overrideMethod?: string) => {
+    const order = selectedActiveOrder?.id === orderId ? selectedActiveOrder : (pendingQrOrders.find(o => o.id === orderId) || preparingOrders.find(o => o.id === orderId));
+    
+    let updateData: any = { status: newStatus };
+    let finalStatus = newStatus;
+
+    if (newStatus === 'completed') {
+      finalStatus = `completed|${new Date().toISOString()}`;
+      updateData.status = finalStatus;
+    }
+    
+    if (overrideMethod) {
+      updateData.method = overrideMethod;
+    }
+
+    const { error } = await supabase
+      .from('transactions')
+      .update(updateData)
+      .eq('id', orderId);
+
+    if (!error) {
+      setRefreshActiveOrdersTrigger(prev => prev + 1);
+      // Close modal if the currently open modal's order is completed
+      if (selectedActiveOrder?.id === orderId && newStatus === 'completed') {
+        setSelectedActiveOrder(null);
+      } else if (selectedActiveOrder?.id === orderId) {
+        setSelectedActiveOrder((prev: any) => ({ ...prev, status: newStatus, ...(updateData.method ? { method: updateData.method } : {}) }));
+      }
+    }
+  };
+
+  const loadOrderForEdit = (order: any) => {
+    setIsEditMode(true);
+    setOrderNumber(order.id);
+    setCustomerName(order.customer_name || '');
+    setPaymentMethod(order.method);
+    
+    if (order.items && products) {
+      setOldCartItems(order.items);
+      const mappedCart: CartItem[] = order.items.map((it: any) => {
+        const p = products.find(prod => prod.name === it.product_name);
+        return {
+          id: p ? p.id : Math.random().toString(),
+          product: p || { id: '', name: it.product_name, price: it.price, category_id: '', image_url: '', is_available: true, is_titipan: false, titipan_name: null },
+          quantity: it.quantity,
+          notes: it.notes || ''
+        };
+      });
+      setCart(mappedCart);
+    }
+    setSelectedActiveOrder(null);
+  };
 
   useEffect(() => {
     if (!role) return;
 
-    const fetchPendingQR = async () => {
+    const fetchActiveOrders = async () => {
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
 
       const { data } = await supabase
         .from('transactions')
         .select('*')
-        .eq('status', 'pending')
-        .eq('order_source', 'CUSTOMER_QR')
-        .gte('created_at', startOfDay.toISOString());
+        .in('status', ['pending', 'preparing', 'ready'])
+        .gte('created_at', startOfDay.toISOString())
+        .order('created_at', { ascending: true });
 
-      if (data) {
-        setPendingQrOrders(data);
+      if (data && data.length > 0) {
+        const txIds = data.map(t => t.id);
+        const { data: itemsData } = await supabase
+          .from('transaction_items')
+          .select('*')
+          .in('transaction_id', txIds);
+          
+        const txWithItems = data.map(tx => ({
+          ...tx,
+          items: itemsData ? itemsData.filter((i: any) => i.transaction_id === tx.id) : []
+        }));
+
+        setPendingQrOrders(txWithItems.filter(d => d.status === 'pending' && d.order_source === 'CUSTOMER_QR'));
+        setPreparingOrders(txWithItems.filter(d => d.status === 'preparing' || d.status === 'ready'));
+      } else {
+        setPendingQrOrders([]);
+        setPreparingOrders([]);
       }
     };
 
-    fetchPendingQR();
+    fetchActiveOrders();
 
-    const channelId = `pos_pending_qr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const channelId = `pos_active_orders_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const channel = supabase
       .channel(channelId)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => {
-        fetchPendingQR();
+        fetchActiveOrders();
       })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [role]);
+  }, [role, refreshActiveOrdersTrigger]);
 
   useEffect(() => {
     if (isLoading) return; // Tunggu AuthContext selesai memuat dan sinkronisasi nama
@@ -273,6 +378,32 @@ export default function POSPage() {
               setCart(mappedCart);
             }
           }
+          setIsStateRestored(true);
+        } else if (!isStateRestored) {
+          try {
+            const savedCart = localStorage.getItem('samba_pos_cart');
+            if (savedCart) setCart(JSON.parse(savedCart));
+            
+            const savedCustomer = localStorage.getItem('samba_pos_customer');
+            if (savedCustomer) setCustomerName(savedCustomer);
+            
+            const savedEditMode = localStorage.getItem('samba_pos_edit_mode');
+            if (savedEditMode === 'true') setIsEditMode(true);
+            
+            const savedOldItems = localStorage.getItem('samba_pos_old_items');
+            if (savedOldItems) setOldCartItems(JSON.parse(savedOldItems));
+            
+            const savedOrderNum = localStorage.getItem('samba_pos_order_number');
+            if (savedOrderNum) {
+              setOrderNumber(savedOrderNum);
+            } else {
+              generateNextOrderId().then(setOrderNumber);
+            }
+          } catch (e) {
+            console.error('Failed to restore POS state from local storage', e);
+            generateNextOrderId().then(setOrderNumber);
+          }
+          setIsStateRestored(true);
         }
       }
     }
@@ -633,7 +764,11 @@ export default function POSPage() {
     
     setIsProcessingCheckout(true);
     
-    const transactionId = orderNumber;
+    let transactionId = orderNumber;
+    if (!isEditMode) {
+      transactionId = await generateNextOrderId();
+      setOrderNumber(transactionId);
+    }
 
     const transaction = {
       id: transactionId,
@@ -802,7 +937,20 @@ export default function POSPage() {
     setPaymentMethod(null);
     setCashReceived('');
     setCustomerName('');
+    setIsEditMode(false);
+    setOldCartItems([]);
     setIsMobileCartSheetOpen(false);
+
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has('edit')) {
+        url.searchParams.delete('edit');
+        window.history.replaceState({}, '', url.toString());
+      }
+    }
+
+    setRefreshActiveOrdersTrigger(prev => prev + 1);
+
     const newId = await generateNextOrderId();
     setOrderNumber(newId);
   };
@@ -1213,6 +1361,203 @@ export default function POSPage() {
               </Link>
             </div>
           )}
+          
+          {preparingOrders.length > 0 && (
+            <div className="mb-6">
+              <h3 className="text-sm font-bold text-zinc-400 mb-3 px-1 uppercase tracking-wider">Antrean Pesanan</h3>
+              <div className="flex w-full overflow-x-auto snap-x snap-mandatory scrollbar-hide gap-3 pb-2 px-1">
+                {preparingOrders.map((order, idx) => {
+                  const itemsToCook = order.items?.filter((item: any) => {
+                    const p = products.find(prod => prod.name === item.product_name);
+                    return p ? !p.is_quick : true;
+                  }) || [];
+                  
+                  return (
+                  <div 
+                    key={order.id} 
+                    onClick={() => setSelectedActiveOrder(order)}
+                    className={`cursor-pointer shrink-0 w-[260px] snap-center rounded-xl overflow-hidden transition-all duration-300 relative border p-3 hover:-translate-y-0.5 ${
+                      order.status === 'preparing' ? 'bg-zinc-900/80 border-amber-500/30 shadow-md shadow-amber-500/5 hover:border-amber-500/50' :
+                      'bg-emerald-950/40 border-emerald-500/30 shadow-md shadow-emerald-500/5 hover:border-emerald-500/50'
+                    }`}
+                  >
+                    <div className={`absolute top-0 left-0 right-0 h-0.5 ${
+                      order.status === 'preparing' ? 'bg-gradient-to-r from-amber-500/0 via-amber-500 to-amber-500/0' :
+                      'bg-gradient-to-r from-emerald-500/0 via-emerald-500 to-emerald-500/0'
+                    }`} />
+                    
+                    <div className="flex justify-between items-start mb-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="flex items-center justify-center w-5 h-5 rounded-md bg-white/10 text-white font-bold text-[10px] shrink-0">
+                          {idx + 1}
+                        </span>
+                        <span className="font-bold text-sm text-zinc-100 truncate">
+                          {order.customer_name ? order.customer_name : (order.id.startsWith('order_') ? order.id.split('_').pop() : order.id)}
+                        </span>
+                      </div>
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border shrink-0 ml-2 ${
+                        order.status === 'preparing' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
+                        'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                      }`}>
+                        {order.status === 'preparing' ? 'Antrean' : 'Siap'}
+                      </span>
+                    </div>
+                    
+                    {order.customer_name && (
+                      <div className="text-[10px] text-zinc-500 mb-1 font-mono">
+                        #{order.id.startsWith('order_') ? order.id.split('_').pop() : order.id}
+                      </div>
+                    )}
+
+                    {itemsToCook.length > 0 ? (
+                      <div className="mt-2 pt-2 border-t border-white/5 space-y-1.5 overflow-y-auto max-h-[80px] scrollbar-hide text-zinc-300">
+                        {itemsToCook.map((item: any, i: number) => (
+                          <div key={i} className="text-[10px] flex flex-col gap-0.5 leading-tight">
+                            <span className="truncate font-medium">{item.quantity}x {item.product_name}</span>
+                            {item.notes && <span className="text-[9px] text-zinc-500 truncate pl-3">- {item.notes}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mt-2 pt-2 border-t border-white/5 text-[10px] text-zinc-500 italic">
+                        Semua menu siap saji
+                      </div>
+                    )}
+                    <div className="flex justify-between items-end mt-3 pt-2 border-t border-white/5">
+                      <div className="text-[10px] text-zinc-500 flex flex-col">
+                        <span>{new Date(order.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
+                        <span>{order.method}</span>
+                      </div>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (order.status === 'ready' && order.method === 'Bayar Nanti') {
+                            setPaymentModalOrder(order);
+                          } else {
+                            updateOrderStatus(order.id, order.status === 'preparing' ? 'ready' : 'completed');
+                          }
+                        }}
+                        className={`text-[10px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors shadow-lg ${
+                          order.status === 'preparing' 
+                            ? 'bg-blue-500 hover:bg-blue-400 text-white shadow-blue-500/20' 
+                            : order.method === 'Bayar Nanti' 
+                              ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-amber-500/20'
+                              : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-emerald-500/20'
+                        }`}
+                      >
+                        {order.status === 'preparing' ? 'Tandai Siap' : (order.method === 'Bayar Nanti' ? 'Lunasi & Selesai' : 'Selesaikan')}
+                      </button>
+                    </div>
+                  </div>
+                )})}
+              </div>
+            </div>
+          )}
+
+          {/* Active Order Details Dialog */}
+          <Dialog open={!!selectedActiveOrder} onOpenChange={() => setSelectedActiveOrder(null)}>
+            <DialogContent className="bg-zinc-950 border-white/10 text-zinc-100 sm:max-w-4xl md:max-w-5xl w-[95vw] rounded-2xl max-h-[85vh] overflow-y-auto">
+              {selectedActiveOrder && (
+                <>
+                  <DialogHeader className="flex flex-row items-start justify-between pr-8">
+                    <div>
+                      <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+                        {selectedActiveOrder.customer_name ? selectedActiveOrder.customer_name : `Order #${selectedActiveOrder.id.split('_').pop()}`}
+                      </DialogTitle>
+                      {selectedActiveOrder.customer_name && (
+                        <DialogDescription className="font-mono text-zinc-400 text-sm mt-1">
+                          #{selectedActiveOrder.id.startsWith('order_') ? selectedActiveOrder.id.split('_').pop() : selectedActiveOrder.id}
+                        </DialogDescription>
+                      )}
+                    </div>
+                    
+                    <button 
+                      onClick={() => loadOrderForEdit(selectedActiveOrder)}
+                      className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-2 shadow-lg shadow-blue-500/20 transition-all active:scale-95"
+                    >
+                      <Plus size={16} strokeWidth={3} /> Tambah Menu
+                    </button>
+                  </DialogHeader>
+
+                  <div className="space-y-5 py-2">
+                    <div className="flex justify-between text-base text-zinc-400 pb-3 border-b border-white/5">
+                      <span>{new Date(selectedActiveOrder.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
+                      <span className="font-bold text-emerald-400">{selectedActiveOrder.method}</span>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <h4 className="font-bold text-sm text-zinc-300 uppercase tracking-wider">Daftar Pesanan</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {selectedActiveOrder.items?.map((item: any, i: number) => {
+                          const p = products.find(prod => prod.name === item.product_name);
+                          const isQuick = p?.is_quick;
+                          return (
+                            <button 
+                              key={i} 
+                              onClick={() => toggleCheckItem(i)}
+                              className={`flex justify-between items-center gap-4 p-4 rounded-xl border text-left transition-all ${
+                                checkedItems[i] 
+                                  ? 'bg-emerald-500/10 border-emerald-500/30' 
+                                  : 'bg-white/5 border-white/5 hover:bg-white/10'
+                              }`}
+                            >
+                              <div className="flex flex-col gap-1.5 flex-1">
+                                <span className={`font-bold text-lg flex items-center gap-2 ${checkedItems[i] ? 'text-emerald-400 line-through opacity-70' : 'text-zinc-100'}`}>
+                                  {checkedItems[i] ? <CheckCircle2 size={18} className="text-emerald-500 shrink-0" /> : <div className="w-[18px] h-[18px] rounded-full border-2 border-zinc-600 shrink-0" />}
+                                  {item.quantity}x {item.product_name}
+                                </span>
+                                {item.notes && <span className={`text-sm font-medium whitespace-pre-wrap ${checkedItems[i] ? 'text-emerald-500/50 line-through' : 'text-amber-500'}`}>{item.notes}</span>}
+                              </div>
+                              {isQuick ? (
+                                <span className={`shrink-0 text-xs font-bold px-2 py-1 rounded-md border ${checkedItems[i] ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20'}`}>Siap Saji</span>
+                              ) : (
+                                <span className={`shrink-0 text-xs font-bold px-2 py-1 rounded-md border ${checkedItems[i] ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-amber-500/10 text-amber-500 border-amber-500/20'}`}>Dimasak</span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </DialogContent>
+          </Dialog>
+
+          {/* Quick Payment Modal */}
+          <Dialog open={!!paymentModalOrder} onOpenChange={() => setPaymentModalOrder(null)}>
+            <DialogContent className="bg-zinc-950 border-white/10 text-zinc-100 max-w-sm rounded-2xl">
+              <DialogHeader>
+                <DialogTitle className="text-xl font-bold">Pilih Pembayaran</DialogTitle>
+                <DialogDescription className="text-zinc-400">
+                  Selesaikan pesanan <span className="font-mono text-white">#{paymentModalOrder?.id.split('_').pop()}</span> dengan:
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex gap-3 mt-4">
+                <button 
+                  onClick={() => {
+                    updateOrderStatus(paymentModalOrder.id, 'completed', 'Cash (Lunas)');
+                    setPaymentModalOrder(null);
+                  }}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-emerald-500/20 flex flex-col items-center gap-2 transition-transform active:scale-95"
+                >
+                  <Banknote size={24} />
+                  CASH
+                </button>
+                <button 
+                  onClick={() => {
+                    updateOrderStatus(paymentModalOrder.id, 'completed', 'QRIS');
+                    setPaymentModalOrder(null);
+                  }}
+                  className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-500/20 flex flex-col items-center gap-2 transition-transform active:scale-95"
+                >
+                  <QrCode size={24} />
+                  QRIS
+                </button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
           <div className="flex w-full overflow-x-auto snap-x snap-mandatory scrollbar-hide bg-zinc-900/40 p-1.5 rounded-2xl border border-white/5 shadow-inner gap-1">
             {categories.map(cat => (
               <button

@@ -270,7 +270,7 @@ export default function StockPage() {
 
   // Handlers
   const handleAddItem = async () => {
-    if (!newItem.name || !newItem.cost_per_unit) return;
+    if (!newItem.name) return;
 
     // Prevent duplicate item names (case-insensitive)
     const duplicateExists = stocks.some(s => s.name.toLowerCase() === newItem.name.trim().toLowerCase() && s.is_titipan === newItem.is_titipan);
@@ -447,19 +447,19 @@ export default function StockPage() {
   };
 
   // override = one-click restock using the saved default qty/price
-  const handleRestock = async (override?: { quantity: string; price: string }) => {
-    const data = override ? { ...override, saveAsDefault: false } : restockData;
-    if (!selectedStock || !data.quantity || !data.price) return;
+  const handleRestock = async (override?: { quantity: string; price?: string }) => {
+    const data = override ? { ...override, price: override.price || '0', saveAsDefault: false } : { ...restockData, price: restockData.price || '0' };
+    if (!selectedStock || !data.quantity) return;
 
     const rQty = parseFloat(data.quantity);
-    const rPrice = parseInt(data.price);
-    if (isNaN(rQty) || isNaN(rPrice) || rQty <= 0) {
-        alert("Kuantitas dan Harga harus valid.");
+    const rPrice = parseInt(data.price) || 0;
+    if (isNaN(rQty) || rQty <= 0) {
+        alert("Kuantitas harus valid.");
         return;
     }
 
-    const newUnitCost = Math.round(rPrice / rQty);
-    let finalCostPerUnit = newUnitCost;
+    const newUnitCost = rQty > 0 ? Math.round(rPrice / rQty) : 0;
+    let finalCostPerUnit = newUnitCost || selectedStock.cost_per_unit || 0;
     let finalQuantity = selectedStock.quantity;
     
     if (selectedStock.tracking_method === 'EXACT') {
@@ -813,8 +813,7 @@ export default function StockPage() {
 
   const titipanNames = Array.from(new Set(stocks.filter(s => s.is_titipan && s.titipan_name).map(s => s.titipan_name as string))).sort();
 
-  const totalModal = tabStocks.reduce((sum, s) => sum + (s.quantity * s.cost_per_unit), 0);
-  const totalProfit = tabStocks.reduce((sum, s) => sum + (s.quantity * (((s as any).price || s.cost_per_unit) - s.cost_per_unit)), 0);
+
   const lowStockCount = tabStocks.filter(s => s.quantity <= s.min_stock_alert).length;
 
   return (
@@ -869,16 +868,6 @@ export default function StockPage() {
           </div>
 
           <div className="flex flex-wrap gap-4 mb-6">
-            <div className="flex-1 min-w-[180px] bg-zinc-900 border border-white/5 rounded-2xl p-5">
-              <div className="text-zinc-500 text-xs mb-2">{activeTab === 'titipan' ? 'Total Setoran (Modal)' : 'Total Nilai Stok'}</div>
-              <div className="font-serif text-2xl font-semibold text-zinc-100">Rp {totalModal.toLocaleString('id-ID')}</div>
-            </div>
-            {(activeTab === 'titipan' || activeTab === 'topping_titipan') && (
-              <div className="flex-1 min-w-[180px] bg-zinc-900 border border-white/5 rounded-2xl p-5">
-                <div className="text-zinc-500 text-xs mb-2">Estimasi Keuntungan Cafe</div>
-                <div className="font-serif text-2xl font-semibold text-primary">Rp {totalProfit.toLocaleString('id-ID')}</div>
-              </div>
-            )}
             <div className="flex-1 min-w-[180px] bg-zinc-900 border border-white/5 rounded-2xl p-5">
               <div className="text-zinc-500 text-xs mb-2">Peringatan Stok Tipis</div>
               <div className="font-serif text-2xl font-semibold text-red-400">
@@ -935,10 +924,7 @@ export default function StockPage() {
                     <th className="font-medium py-3 px-4">Nama Item</th>
                     <th className="font-medium py-3 px-4">Status</th>
                     <th className="font-medium py-3 px-4 w-40">Stok / Pemakaian</th>
-                    <th className="font-medium py-3 px-4">Total Beli Awal</th>
                     <th className="font-medium py-3 px-4">Batas / Checkpoint</th>
-                    <th className="font-medium py-3 px-4 text-right">Harga/Satuan</th>
-                    <th className="font-medium py-3 px-4 text-right">Total Modal Stok</th>
                     <th className="font-medium py-3 px-4">Pembaruan</th>
                   </tr>
                 ) : activeTab === 'titipan' ? (
@@ -948,9 +934,6 @@ export default function StockPage() {
                     <th className="font-medium py-3 px-4">Status</th>
                     <th className="font-medium py-3 px-4 w-40">Stok Titip</th>
                     <th className="font-medium py-3 px-4">Batas Minimum</th>
-                    <th className="font-medium py-3 px-4 text-right">Harga Titip</th>
-                    <th className="font-medium py-3 px-4 text-right">Harga Jual</th>
-                    <th className="font-medium py-3 px-4 text-right">Untung/pcs</th>
                   </tr>
                 ) : activeTab === 'topping_titipan' ? (
                   <tr>
@@ -959,9 +942,6 @@ export default function StockPage() {
                     <th className="font-medium py-3 px-4">Status</th>
                     <th className="font-medium py-3 px-4 w-40">Stok Tersedia</th>
                     <th className="font-medium py-3 px-4">Batas Minimum</th>
-                    <th className="font-medium py-3 px-4 text-right">Harga Setor (Modal)</th>
-                    <th className="font-medium py-3 px-4 text-right">Harga Jual</th>
-                    <th className="font-medium py-3 px-4 text-right">Untung/pcs</th>
                   </tr>
                 ) : (
                   <tr>
@@ -969,9 +949,6 @@ export default function StockPage() {
                     <th className="font-medium py-3 px-4">Status</th>
                     <th className="font-medium py-3 px-4 w-40">Stok / Pemakaian</th>
                     <th className="font-medium py-3 px-4">Batas / Checkpoint</th>
-                    <th className="font-medium py-3 px-4 text-right">Harga Modal</th>
-                    <th className="font-medium py-3 px-4 text-right">Harga Jual</th>
-                    <th className="font-medium py-3 px-4 text-right">Untung/pcs</th>
                   </tr>
                 )}
               </thead>
@@ -1071,10 +1048,7 @@ export default function StockPage() {
                                 </div>
                               )}
                             </td>
-                            <td className="py-3 px-4 text-zinc-500 text-xs">{/^\d/.test(item.unit) ? item.unit : '-'}</td>
                             <td className="py-3 px-4 text-zinc-500 text-xs">{isCheckpoint ? (item.checkpoint_usage !== null ? `${item.checkpoint_usage} pemakaian` : 'Belum diketahui') : `${item.min_stock_alert} ${item.unit.replace(/[\d.,\s]/g, '') || 'pcs'}`}</td>
-                            <td className="py-3 px-4 text-right tabular-nums text-zinc-200">Rp {item.cost_per_unit.toLocaleString('id-ID')}</td>
-                            <td className="py-3 px-4 text-right tabular-nums font-semibold text-primary">Rp {(item.quantity * item.cost_per_unit).toLocaleString('id-ID')}</td>
                             <td className="py-3 px-4 text-zinc-500 text-xs">{formatDate(item.last_updated)}</td>
                           </>
                         ) : activeTab === 'titipan' ? (
@@ -1109,9 +1083,6 @@ export default function StockPage() {
                               )}
                             </td>
                             <td className="py-3 px-4 text-zinc-500 text-xs">{item.min_stock_alert} {item.unit.replace(/[\d.,\s]/g, '') || 'pcs'}</td>
-                            <td className="py-3 px-4 text-right tabular-nums text-zinc-500 text-xs">Rp {item.cost_per_unit.toLocaleString('id-ID')}</td>
-                            <td className="py-3 px-4 text-right tabular-nums text-zinc-200 font-semibold">Rp {((item as any).price || item.cost_per_unit).toLocaleString('id-ID')}</td>
-                            <td className="py-3 px-4 text-right tabular-nums font-semibold text-primary">Rp {(((item as any).price || item.cost_per_unit) - item.cost_per_unit).toLocaleString('id-ID')}</td>
                           </>
                         ) : activeTab === 'topping_titipan' ? (
                           <>
@@ -1145,9 +1116,6 @@ export default function StockPage() {
                               )}
                             </td>
                             <td className="py-3 px-4 text-zinc-500 text-xs">{item.min_stock_alert} {item.unit.replace(/[\d.,\s]/g, '') || 'pcs'}</td>
-                            <td className="py-3 px-4 text-right tabular-nums text-zinc-500 text-xs">Rp {item.cost_per_unit.toLocaleString('id-ID')}</td>
-                            <td className="py-3 px-4 text-right tabular-nums text-zinc-200 font-semibold">Rp {(item.sell_price || 0).toLocaleString('id-ID')}</td>
-                            <td className="py-3 px-4 text-right tabular-nums font-semibold text-primary">Rp {((item.sell_price || 0) - item.cost_per_unit).toLocaleString('id-ID')}</td>
                           </>
                         ) : (
                           <>
@@ -1183,9 +1151,6 @@ export default function StockPage() {
                               )}
                             </td>
                             <td className="py-3 px-4 text-zinc-500 text-xs">{isCheckpoint ? (item.checkpoint_usage !== null ? `${item.checkpoint_usage} pemakaian` : 'Belum diketahui') : `${item.min_stock_alert} ${item.unit.replace(/[\d.,\s]/g, '') || 'pcs'}`}</td>
-                            <td className="py-3 px-4 text-right tabular-nums text-zinc-500 text-xs">Rp {item.cost_per_unit.toLocaleString('id-ID')}</td>
-                            <td className="py-3 px-4 text-right tabular-nums text-zinc-200 font-semibold">Rp {(item.sell_price || 0).toLocaleString('id-ID')}</td>
-                            <td className="py-3 px-4 text-right tabular-nums font-semibold text-primary">Rp {((item.sell_price || 0) - item.cost_per_unit).toLocaleString('id-ID')}</td>
                           </>
                         )}
                       </tr>
@@ -1325,53 +1290,6 @@ export default function StockPage() {
               </div>
             )}
 
-            <div className="grid gap-2">
-              <label className="text-sm font-medium text-zinc-400">{newItem.is_titipan ? 'Harga Setor (Modal Penitip)' : 'Total Harga Beli (Untuk Isi di Atas)'}</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm font-medium">Rp</span>
-                <Input 
-                  type="text" 
-                  className="pl-9 bg-zinc-900/50 border-white/10 h-11 rounded-xl focus-visible:ring-primary text-zinc-100" 
-                  placeholder="0" 
-                  value={newItem.cost_per_unit === '' ? '' : Number(newItem.cost_per_unit).toLocaleString('id-ID')} 
-                  onChange={e => {
-                    const val = e.target.value.replace(/\D/g, '');
-                    setNewItem({...newItem, cost_per_unit: val === '' ? '' : parseInt(val, 10).toString()});
-                  }} 
-                />
-              </div>
-            </div>
-
-            {!newItem.is_titipan && (
-              <div className="flex justify-between items-center px-4 py-3 bg-primary/5 rounded-xl border border-primary/10">
-                <span className="text-sm font-medium text-primary">Harga Modal Per Satuan (Otomatis)</span>
-                <span className="font-bold text-primary">
-                  Rp {newItem.unit_value && newItem.cost_per_unit ? Number(parseInt(newItem.cost_per_unit) / parseFloat(newItem.unit_value)).toLocaleString('id-ID', { maximumFractionDigits: 2 }) : '0'} 
-                  <span className="text-xs font-normal opacity-80 ml-1">/ {newItem.unit_type || 'Satuan'}</span>
-                </span>
-              </div>
-            )}
-
-            {(newItem.is_titipan || newItem.is_direct_sell || newItem.is_topping) && (
-              <div className="grid gap-2">
-                <label className={`text-sm font-medium ${newItem.is_topping ? 'text-amber-500' : 'text-zinc-400'}`}>
-                  Harga Jual (Di Kasir) {newItem.is_topping ? 'Topping' : ''}
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm font-medium">Rp</span>
-                  <Input 
-                    type="text" 
-                    className={`pl-9 bg-zinc-900/50 h-11 rounded-xl text-zinc-100 ${newItem.is_topping ? 'border-amber-500/30 focus-visible:ring-amber-500' : 'border-white/10 focus-visible:ring-primary'}`} 
-                    placeholder="0" 
-                    value={newItem.sell_price === '' ? '' : Number(newItem.sell_price).toLocaleString('id-ID')} 
-                    onChange={e => {
-                      const val = e.target.value.replace(/\D/g, '');
-                      setNewItem({...newItem, sell_price: val === '' ? '' : parseInt(val, 10).toString()});
-                    }} 
-                  />
-                </div>
-              </div>
-            )}
 
             {newItem.tracking_method !== 'CHECKPOINT' && (
               <div className="grid gap-2">
@@ -1512,10 +1430,7 @@ export default function StockPage() {
                   <span className="text-zinc-400">Jumlah</span>
                   <span className="font-semibold text-zinc-100">+{def.qty} {unitLabel}</span>
                 </div>
-                <div className="flex justify-between rounded-xl bg-white/5 px-4 py-3">
-                  <span className="text-zinc-400">Total Harga</span>
-                  <span className="font-semibold text-zinc-100">Rp {def.price.toLocaleString('id-ID')}</span>
-                </div>
+
                 <div className="flex justify-between rounded-xl bg-emerald-500/10 px-4 py-3">
                   <span className="text-emerald-400">Stok setelah restock</span>
                   <span className="font-bold text-emerald-400">
@@ -1547,7 +1462,7 @@ export default function StockPage() {
           <DialogHeader>
             <DialogTitle className="text-xl text-zinc-100">Restock: <span className="text-primary">{selectedStock?.name}</span></DialogTitle>
             <DialogDescription className="text-zinc-400">
-              Masukkan jumlah pembelian barang dan total harga yang dibayarkan.
+              Masukkan jumlah barang untuk di restock.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
@@ -1567,28 +1482,7 @@ export default function StockPage() {
               </div>
             </div>
 
-            <div className="grid gap-2">
-              <label className="text-sm font-medium text-zinc-400">Total Pembayaran (Harga Beli)</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm font-medium">Rp</span>
-                <Input 
-                  type="text" 
-                  className="pl-9 bg-zinc-900/50 border-white/10 h-11 rounded-xl focus-visible:ring-primary text-zinc-100" 
-                  placeholder="0" 
-                  value={restockData.price === '' ? '' : Number(restockData.price).toLocaleString('id-ID')} 
-                  onChange={e => setRestockData({...restockData, price: e.target.value.replace(/\D/g, '')})} 
-                />
-              </div>
-            </div>
 
-            {restockData.quantity && restockData.price && (
-              <div className="flex justify-between items-center px-4 py-3 bg-primary/5 rounded-xl border border-primary/10 mt-2">
-                <span className="text-sm font-medium text-primary">Modal Per Satuan Baru</span>
-                <span className="font-bold text-primary">
-                  Rp {Math.round(parseInt(restockData.price) / parseFloat(restockData.quantity)).toLocaleString('id-ID')}
-                </span>
-              </div>
-            )}
 
             <label className="flex items-center gap-3 cursor-pointer w-fit mt-4">
               <input 
@@ -1669,72 +1563,9 @@ export default function StockPage() {
                   </div>
                 </div>
               )}
-              <div className="grid gap-2">
-                <label className="text-sm font-medium text-zinc-400">{selectedStock.is_titipan ? 'Harga Setor (Modal)' : 'Total Harga Beli (Untuk Isi di Atas)'}</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm font-medium">Rp</span>
-                  <Input 
-                    type="text" 
-                    className="pl-9 bg-zinc-900/50 border-white/10 h-11 rounded-xl focus-visible:ring-primary text-zinc-100" 
-                    value={
-                      selectedStock.is_titipan 
-                        ? (selectedStock.cost_per_unit === '' as any ? '' : Number(selectedStock.cost_per_unit).toLocaleString('id-ID'))
-                        : (editPackPrice === '' ? '' : Number(editPackPrice).toLocaleString('id-ID'))
-                    }
-                    onChange={e => {
-                      const val = e.target.value.replace(/\D/g, '');
-                      if (selectedStock.is_titipan) {
-                        setSelectedStock({...selectedStock, cost_per_unit: val === '' ? '' as any : parseInt(val, 10)});
-                      } else {
-                        setEditPackPrice(val);
-                      }
-                    }} 
-                  />
-                </div>
-              </div>
-              {selectedStock.is_titipan && (
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-zinc-400">Harga Jual (Di Kasir)</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm font-medium">Rp</span>
-                    <Input 
-                      type="text" 
-                      className="pl-9 bg-zinc-900/50 border-white/10 h-11 rounded-xl focus-visible:ring-primary text-zinc-100" 
-                      value={(selectedStock as any).price === '' || (selectedStock as any).price === undefined ? '' : Number((selectedStock as any).price).toLocaleString('id-ID')} 
-                      onChange={e => {
-                        const val = e.target.value.replace(/\D/g, '');
-                        setSelectedStock({...selectedStock, price: val === '' ? '' : parseInt(val, 10)} as any);
-                      }} 
-                    />
-                  </div>
-                </div>
-              )}
-              {selectedStock.is_topping && (
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-amber-500">Harga Jual Topping (Di Kasir)</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm font-medium">Rp</span>
-                    <Input 
-                      type="text" 
-                      className="pl-9 bg-zinc-900/50 border-amber-500/30 h-11 rounded-xl focus-visible:ring-amber-500 text-zinc-100" 
-                      value={selectedStock.sell_price === '' as any ? '' : Number(selectedStock.sell_price || 0).toLocaleString('id-ID')} 
-                      onChange={e => {
-                        const val = e.target.value.replace(/\D/g, '');
-                        setSelectedStock({...selectedStock, sell_price: val === '' ? '' as any : parseInt(val, 10)});
-                      }} 
-                    />
-                  </div>
-                </div>
-              )}
+
               {!selectedStock.is_titipan && (
                 <>
-                  <div className="flex justify-between items-center px-4 py-3 bg-primary/5 rounded-xl border border-primary/10">
-                    <span className="text-sm font-medium text-primary">Harga Modal Per Satuan (Otomatis)</span>
-                    <span className="font-bold text-primary">
-                      Rp {editUnitValue && editPackPrice ? Number(parseInt(editPackPrice) / parseFloat(editUnitValue.replace(/,/g, '.'))).toLocaleString('id-ID', { maximumFractionDigits: 2 }) : '0'} 
-                      <span className="text-xs font-normal opacity-80 ml-1">/ {editUnitType || 'Satuan'}</span>
-                    </span>
-                  </div>
                   {selectedStock.tracking_method === 'EXACT' ? (
                     <div className="grid gap-2">
                       <label className="text-sm font-medium text-red-400">Batas Minimum (Peringatan)</label>
@@ -1814,7 +1645,7 @@ export default function StockPage() {
             {selectedStock && (
               <div className="space-y-6">
                 {/* Highlight Cards */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3">
                   <div className="bg-muted/30 p-4 rounded-xl border border-border flex flex-col items-center justify-center text-center">
                     <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mb-1">{selectedStock.tracking_method === 'CHECKPOINT' ? 'Telah Terpakai' : 'Sisa Stok'}</p>
                     {selectedStock.tracking_method === 'CHECKPOINT' ? (
@@ -1822,10 +1653,6 @@ export default function StockPage() {
                     ) : (
                       <p className="text-2xl font-black text-foreground">{selectedStock.quantity} <span className="text-sm font-medium text-muted-foreground">{/^\d/.test(selectedStock.unit) ? `(${selectedStock.unit})` : selectedStock.unit}</span></p>
                     )}
-                  </div>
-                  <div className="bg-primary/5 p-4 rounded-xl border border-primary/20 flex flex-col items-center justify-center text-center">
-                    <p className="text-[10px] text-primary/80 uppercase font-bold tracking-wider mb-1">Total Modal Stok</p>
-                    <p className="text-xl font-black text-primary">Rp {(selectedStock.quantity * selectedStock.cost_per_unit).toLocaleString('id-ID')}</p>
                   </div>
                 </div>
 
@@ -1882,43 +1709,7 @@ export default function StockPage() {
                       )}
                     </div>
                   )}
-                  {(() => {
-                    let packMultiplier = 1;
-                    let baseUnit = selectedStock.unit;
-                    if (!selectedStock.is_titipan) {
-                      const unitMatch = selectedStock.unit.match(/^([\d.,]+)\s*(.*)/);
-                      if (unitMatch) {
-                         packMultiplier = parseFloat(unitMatch[1].replace(/,/g, '.'));
-                         baseUnit = unitMatch[2] || 'pcs';
-                      }
-                    }
-                    return (
-                      <>
-                        <div className="flex justify-between items-center border-b border-border/50 pb-2">
-                          <span className="text-muted-foreground font-medium">{selectedStock.is_titipan ? 'Harga Setor' : `Harga Beli`}</span>
-                          <span className="font-medium text-foreground">Rp {Number(selectedStock.cost_per_unit).toLocaleString('id-ID')} / 1 {baseUnit}</span>
-                        </div>
-                        {packMultiplier > 1 && (
-                          <div className="flex justify-between items-center border-b border-border/50 pb-2">
-                            <span className="text-muted-foreground font-medium">Harga Modal Total ({packMultiplier} {baseUnit})</span>
-                            <span className="font-medium text-amber-500">Rp {Number(selectedStock.cost_per_unit * packMultiplier).toLocaleString('id-ID')}</span>
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                  {linkedPrice !== null && (
-                    <>
-                      <div className="flex justify-between items-center border-b border-border/50 pb-2">
-                        <span className="text-muted-foreground font-medium">Harga Jual</span>
-                        <span className="font-medium text-foreground">Rp {Number(linkedPrice).toLocaleString('id-ID')} /{/^\d/.test(selectedStock.unit) ? `(${selectedStock.unit})` : selectedStock.unit}</span>
-                      </div>
-                      <div className="flex justify-between items-center border-b border-border/50 pb-2">
-                        <span className="text-muted-foreground font-medium">Estimasi Untung/pcs</span>
-                        <span className="font-medium text-green-500">Rp {Number(linkedPrice - selectedStock.cost_per_unit).toLocaleString('id-ID')}</span>
-                      </div>
-                    </>
-                  )}
+
                   <div className="flex justify-between items-center pt-1">
                     <span className="text-muted-foreground font-medium">Pembaruan</span>
                     <span className="font-medium text-muted-foreground text-xs">{formatDate(selectedStock.last_updated)}</span>
@@ -1933,7 +1724,7 @@ export default function StockPage() {
                     onClick={() => setIsQuickRestockOpen(true)}
                     className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20"
                 >
-                    Restock Cepat: +{getRestockDefault(selectedStock)!.qty} (Rp {getRestockDefault(selectedStock)!.price.toLocaleString('id-ID')})
+                    Restock Cepat: +{getRestockDefault(selectedStock)!.qty}
                 </Button>
               ) : null}
               {selectedStock?.tracking_method === 'CHECKPOINT' ? (
@@ -1953,22 +1744,22 @@ export default function StockPage() {
                 </div>
               ) : (
                 <div className="flex gap-3">
-                  <Button 
-                      variant={selectedStock?.is_titipan ? 'default' : 'outline'}
-                      onClick={() => {
-                        setIsDetailDialogOpen(false);
-                        setTimeout(() => setIsUpdateStockDialogOpen(true), 150);
-                      }} 
-                      className="flex-1 h-12 font-bold rounded-xl"
-                  >
-                      <Plus size={18} className="mr-2" /> Update Stok
-                  </Button>
-                  {!selectedStock?.is_titipan && (
+                  {!selectedStock?.is_titipan ? (
                     <Button 
                         onClick={openRestockDialog} 
-                        className="flex-1 h-12 bg-primary text-primary-foreground hover:bg-primary/90 font-bold rounded-xl shadow-lg shadow-primary/20"
+                        className="w-full h-12 bg-primary text-primary-foreground hover:bg-primary/90 font-bold rounded-xl shadow-lg shadow-primary/20"
                     >
-                        Restock
+                        Restock (Manual)
+                    </Button>
+                  ) : (
+                    <Button 
+                        onClick={() => {
+                          setIsDetailDialogOpen(false);
+                          setTimeout(() => setIsUpdateStockDialogOpen(true), 150);
+                        }} 
+                        className="w-full h-12 bg-primary text-primary-foreground hover:bg-primary/90 font-bold rounded-xl shadow-lg shadow-primary/20"
+                    >
+                        Update Stok
                     </Button>
                   )}
                 </div>

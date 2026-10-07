@@ -231,7 +231,7 @@ export default function OrderTrackingPage() {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 w-full max-w-md mx-auto pb-24">
+      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 w-full max-w-md mx-auto pb-24 min-h-0">
         
         {/* Queue Info Card */}
         {(!isReady && !isCompleted && !isRejected) && (

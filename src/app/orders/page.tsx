@@ -264,6 +264,12 @@ export default function OrdersPage() {
       }
     }
 
+    if (newStatus === 'completed' && targetOrder && targetOrder.method === 'Bayar Nanti') {
+      alert("Pesanan belum dibayar! Silakan tandai lunas atau ubah metode pembayaran terlebih dahulu sebelum menyelesaikan pesanan.");
+      setUpdatingId(null);
+      return;
+    }
+
     // Optimistic UI update
     setOrders(prev => prev.map(o => o.id === orderId ? { 
       ...o, 
@@ -609,9 +615,20 @@ export default function OrdersPage() {
 
               {order.status === 'ready' && (
                 <button
-                  disabled={updatingId === order.id}
-                  onClick={() => updateOrderStatus(order.id, 'completed')}
-                  className="h-7 px-2.5 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg transition-all flex items-center gap-1 shrink-0 whitespace-nowrap"
+                  disabled={updatingId === order.id || order.method === 'Bayar Nanti'}
+                  onClick={() => {
+                    if (order.method === 'Bayar Nanti') {
+                      alert("Tandai lunas terlebih dahulu sebelum menyelesaikan pesanan.");
+                      return;
+                    }
+                    updateOrderStatus(order.id, 'completed');
+                  }}
+                  className={`h-7 px-2.5 text-[10px] font-bold text-white transition-all flex items-center gap-1 shrink-0 whitespace-nowrap rounded-lg ${
+                    order.method === 'Bayar Nanti'
+                      ? 'bg-zinc-700 opacity-50 cursor-not-allowed'
+                      : 'bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50'
+                  }`}
+                  title={order.method === 'Bayar Nanti' ? "Belum lunas" : "Selesaikan Pesanan"}
                 >
                   {updatingId === order.id ? <RefreshCw size={12} className="animate-spin" /> : (
                     <>
@@ -1061,8 +1078,19 @@ export default function OrdersPage() {
 
                         {selectedOrder.status === 'ready' && (
                           <button
-                            onClick={() => updateOrderStatus(selectedOrder.id, 'completed')}
-                            className="w-full h-12 text-[13px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
+                            disabled={selectedOrder.method === 'Bayar Nanti'}
+                            onClick={() => {
+                              if (selectedOrder.method === 'Bayar Nanti') {
+                                alert("Tandai lunas terlebih dahulu sebelum menyelesaikan pesanan.");
+                                return;
+                              }
+                              updateOrderStatus(selectedOrder.id, 'completed');
+                            }}
+                            className={`w-full h-12 text-[13px] font-bold text-white rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg ${
+                              selectedOrder.method === 'Bayar Nanti'
+                                ? 'bg-zinc-700 opacity-50 cursor-not-allowed'
+                                : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20'
+                            }`}
                           >
                             <CheckCircle2 size={16} /> Pesanan Selesai
                           </button>
