@@ -1405,10 +1405,7 @@ export default function POSPage() {
               <h3 className="text-sm font-bold text-zinc-400 mb-3 px-1 uppercase tracking-wider">Antrean Pesanan</h3>
               <div className="flex w-full overflow-x-auto snap-x snap-mandatory scrollbar-hide gap-3 pb-2 px-1">
                 {preparingOrders.map((order, idx) => {
-                  const itemsToCook = order.items?.filter((item: any) => {
-                    const p = products.find(prod => prod.name === item.product_name);
-                    return p ? !p.is_quick : true;
-                  }) || [];
+                  const itemsToCook = order.items || [];
                   
                   return (
                   <div 
