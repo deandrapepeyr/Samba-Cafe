@@ -67,7 +67,7 @@ export default function POSPage() {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [stocksData, setStocksData] = useState<{id: string, quantity: number, name: string, sell_price: number, is_topping: boolean}[]>([]);
+  const [stocksData, setStocksData] = useState<{id: string, quantity: number, name: string, sell_price: number, is_topping: boolean, tracking_method?: string}[]>([]);
   const [recipesData, setRecipesData] = useState<{product_id: string, stock_id: string, quantity_required: number}[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
 
@@ -315,7 +315,7 @@ export default function POSPage() {
       const [categoriesRes, productsRes, stocksRes, recipesRes] = await Promise.all([
         supabase.from('categories').select('*'),
         supabase.from('products').select('*').eq('is_available', true),
-        supabase.from('stocks').select('id, quantity, name, sell_price, is_topping'),
+        supabase.from('stocks').select('id, quantity, name, sell_price, is_topping, tracking_method'),
         supabase.from('product_ingredients').select('product_id, stock_id, quantity_required, variant_name, choice_name')
       ]);
 
@@ -413,7 +413,7 @@ export default function POSPage() {
     const handleRefreshProducts = async () => {
       const [productsRes, stocksRes] = await Promise.all([
         supabase.from('products').select('*').eq('is_available', true),
-        supabase.from('stocks').select('id, quantity, name, sell_price, is_topping')
+        supabase.from('stocks').select('id, quantity, name, sell_price, is_topping, tracking_method')
       ]);
       if (stocksRes.data) setStocksData(stocksRes.data);
       if (productsRes.data) {
@@ -564,6 +564,8 @@ export default function POSPage() {
     for (const recipe of productRecipes) {
       const stockItem = stocksData.find(s => s.id === recipe.stock_id);
       if (!stockItem) return 0; // Missing ingredient
+      if (stockItem.tracking_method === 'CHECKPOINT') continue; // Do not limit by this ingredient
+      
       const possiblePortions = Math.floor(stockItem.quantity / recipe.quantity_required);
       if (possiblePortions < maxAvailable) {
         maxAvailable = possiblePortions;

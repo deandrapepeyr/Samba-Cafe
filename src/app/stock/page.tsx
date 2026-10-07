@@ -355,7 +355,7 @@ export default function StockPage() {
         }
 
         const computedCostPerUnit = Math.round(parseInt(newItem.cost_per_unit) / parseFloat(newItem.unit_value.replace(/,/g, '.'))) || 0;
-        const computedQuantity = (parseInt(newItem.quantity) || 0) * (parseFloat(newItem.unit_value.replace(/,/g, '.')) || 1);
+        const computedQuantity = (parseFloat(newItem.quantity) || 0) * (parseFloat(newItem.unit_value.replace(/,/g, '.')) || 1);
         
         // Use name hack to store titipan info for cafe stocks
         const packedName = newItem.titipan_name ? `${newItem.name.trim()} |titipan:${newItem.titipan_name.trim()}|` : newItem.name.trim();
@@ -375,7 +375,7 @@ export default function StockPage() {
           // Initial purchase becomes the default for one-click restock
           ...(newItem.tracking_method === 'EXACT' && computedQuantity > 0 ? {
             restock_qty_default: computedQuantity,
-            restock_price_default: (parseInt(newItem.cost_per_unit) || 0) * (parseInt(newItem.quantity) || 0)
+            restock_price_default: (parseInt(newItem.cost_per_unit) || 0) * (parseFloat(newItem.quantity) || 0)
           } : {})
         }]).select();
     
@@ -604,11 +604,11 @@ export default function StockPage() {
          newCostPerUnit = Math.round(totalPrice / amountAdded);
       }
     } else if (stockUpdateType === 'subtract') {
-      const amount = parseInt(stockUpdateAmount) || 0;
+      const amount = parseFloat(stockUpdateAmount) || 0;
       if (amount <= 0) return;
       newQuantity = Math.max(0, Number(selectedStock.quantity) - amount);
     } else if (stockUpdateType === 'set') {
-      const amount = parseInt(stockUpdateAmount) || 0;
+      const amount = parseFloat(stockUpdateAmount) || 0;
       newQuantity = Math.max(0, amount);
     }
 
@@ -1396,7 +1396,7 @@ export default function StockPage() {
               <div className="flex flex-col gap-1 p-4 bg-zinc-900/50 border border-white/5 rounded-xl">
                 <span className="text-xs font-medium text-zinc-400">Nanti stok di sistem akan menjadi:</span>
                 <span className="text-2xl font-bold text-primary">
-                  {Math.max(0, parseInt(stockUpdateAmount) || 0)}
+                  {Math.max(0, parseFloat(stockUpdateAmount) || 0)}
                   <span className="text-sm font-normal text-zinc-500 ml-1">{selectedStock?.unit.replace(/[\d.,\s]/g, '') || 'pcs'}</span>
                 </span>
               </div>
