@@ -79,6 +79,20 @@ export default function HistoryPage() {
 
   useEffect(() => {
     if (role) {
+      try {
+        const cachedTx = localStorage.getItem('samba_admin_history_tx_cache');
+        const cachedShifts = localStorage.getItem('samba_admin_history_shifts_cache');
+        if (cachedTx) {
+          setTransactions(JSON.parse(cachedTx));
+        }
+        if (cachedShifts && role === 'manager') {
+          setShifts(JSON.parse(cachedShifts));
+        }
+        if (cachedTx || (cachedShifts && role === 'manager')) {
+          setIsLoadingData(false);
+        }
+      } catch(e) {}
+      
       fetchData();
     }
   }, [role]);
@@ -135,8 +149,10 @@ export default function HistoryPage() {
       });
 
       setTransactions(formattedTxs);
+      try { localStorage.setItem('samba_admin_history_tx_cache', JSON.stringify(formattedTxs)); } catch(e) {}
     } else {
       setTransactions([]);
+      try { localStorage.setItem('samba_admin_history_tx_cache', '[]'); } catch(e) {}
     }
     
     // Fetch Shifts
@@ -146,7 +162,10 @@ export default function HistoryPage() {
         .select('*')
         .order('start_time', { ascending: false });
         
-      if (shiftData) setShifts(shiftData);
+      if (shiftData) {
+        setShifts(shiftData);
+        try { localStorage.setItem('samba_admin_history_shifts_cache', JSON.stringify(shiftData)); } catch(e) {}
+      }
     }
     
     setIsLoadingData(false);
