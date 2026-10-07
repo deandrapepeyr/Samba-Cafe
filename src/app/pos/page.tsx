@@ -424,7 +424,22 @@ export default function POSPage() {
     };
     
     window.addEventListener('refresh-products', handleRefreshProducts);
-    return () => window.removeEventListener('refresh-products', handleRefreshProducts);
+    
+    // Auto-refresh via Supabase Realtime
+    const catalogChannel = supabase
+      .channel(`pos_catalog_${Date.now()}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stocks' }, () => {
+        handleRefreshProducts();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
+        handleRefreshProducts();
+      })
+      .subscribe();
+
+    return () => {
+      window.removeEventListener('refresh-products', handleRefreshProducts);
+      supabase.removeChannel(catalogChannel);
+    };
   }, [userName, isLoading]);
 
   useEffect(() => {
