@@ -1334,7 +1334,7 @@ export default function POSPage() {
     >
       <div className="flex h-full w-full">
         {/* Main Content */}
-        <div className="flex-1 flex flex-col min-w-0 bg-background/50 h-full">
+        <div className="flex-1 flex flex-col min-w-0 bg-background/50 h-full overflow-y-auto">
           {isLocked && (
             <div className="px-4 md:px-6 pt-4">
               <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-2.5 text-sm font-medium text-amber-500">
@@ -1381,7 +1381,7 @@ export default function POSPage() {
             </div>
           </header>
 
-        <div className="px-4 md:px-6 pt-6 pb-2 w-full max-w-[100vw] overflow-hidden">
+        <div className="px-4 md:px-6 pt-6 pb-2 w-full max-w-[100vw] overflow-hidden shrink-0">
           {pendingQrOrders.length > 0 && (
             <div className="mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4 shadow-lg shadow-amber-500/5">
               <div className="flex items-center gap-3">
@@ -1613,7 +1613,7 @@ export default function POSPage() {
         </div>
 
         {/* Product Grid */}
-        <div className="flex-1 p-4 md:p-6 overflow-y-auto">
+        <div className="p-4 md:p-6 shrink-0">
             <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 pb-32">
               {filteredProducts.map(product => {
                 const cartItem = cart.find(c => c.product.id === product.id);
