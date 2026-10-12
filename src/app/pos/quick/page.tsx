@@ -14,6 +14,7 @@ import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { OrderQueueContainer } from '@/components/pos/OrderQueueContainer';
 
 type Product = {
   id: string;
@@ -927,33 +928,37 @@ function QuickPOSContent() {
         {/* Left Column: Search Header, Categories, and Products Grid */}
         <div className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto">
           {/* Header */}
-          <header className="px-4 md:px-6 py-4 md:py-6 sticky top-0 z-10 bg-background/80 backdrop-blur-xl border-b border-white/5">
-            <div className="flex items-center gap-2 sm:gap-3 w-full max-w-[1400px] mx-auto">
-              <div className="relative flex-1 group">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-primary transition-colors" size={20} />
+          <header className="px-4 md:px-6 py-3.5 sticky top-0 z-30 bg-[#0b0a08]/85 backdrop-blur-xl border-b border-white/10">
+            <div className="flex flex-wrap md:flex-nowrap items-center gap-3 w-full">
+              {/* Search Bar */}
+              <div className="relative flex-1 min-w-[180px] group">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-primary transition-colors" size={18} />
                 <Input
-                  className="pl-11 sm:pl-12 h-14 bg-zinc-900/50 border-white/10 text-base md:text-lg focus-visible:ring-1 focus-visible:ring-primary rounded-2xl transition-all shadow-inner hover:bg-zinc-900/80"
-                  placeholder="Search quick menu items..."
+                  className="pl-10 h-11 bg-zinc-900/60 border-white/10 text-sm focus-visible:ring-1 focus-visible:ring-primary rounded-2xl transition-all shadow-inner hover:bg-zinc-900/80"
+                  placeholder="Cari menu cepat saji..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
 
+              {/* Order Queue Header Chips */}
+              <OrderQueueContainer className="max-w-full md:max-w-[48%]" />
+
               {/* Action Buttons */}
-              <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={handleReturnToPOSWithItems}
-                  className="h-14 w-auto px-4 sm:px-6 border border-amber-500/30 text-amber-400 hover:bg-amber-500 hover:text-zinc-950 transition-all duration-300 gap-2 rounded-2xl text-sm font-bold bg-amber-500/10 shadow-lg shadow-amber-500/5 flex items-center justify-center cursor-pointer"
+                  className="h-11 px-4 border border-amber-500/30 text-amber-400 hover:bg-amber-500 hover:text-zinc-950 transition-all duration-300 gap-2 rounded-2xl text-sm font-bold bg-amber-500/10 shadow-sm flex items-center justify-center cursor-pointer"
                   title="Kembali ke POS Utama (Menu Masakan)"
                 >
-                  <Utensils size={18} />
+                  <Utensils size={16} />
                   <span className="hidden sm:inline">Menu POS Utama</span>
                 </button>
 
                 {/* Desktop Cart Toggle (identical to /pos) */}
                 <Button
                   variant="outline"
-                  className={`hidden md:flex items-center gap-2 h-14 rounded-2xl border-white/10 bg-zinc-900/50 hover:bg-zinc-800 hover:border-primary/50 transition-all duration-300 ${cart.length === 0 ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  className={`flex items-center gap-2 h-11 px-4 rounded-2xl border-white/10 bg-zinc-900/50 hover:bg-zinc-800 hover:border-primary/50 transition-all duration-300 ${cart.length === 0 ? 'opacity-60 cursor-not-allowed' : ''}`}
                   onClick={() => {
                     if (cart.length > 0) {
                       setIsCartOpen(!isCartOpen);
@@ -962,10 +967,10 @@ function QuickPOSContent() {
                   disabled={cart.length === 0}
                   title={cart.length === 0 ? "Keranjang masih kosong" : (isCartOpen ? "Sembunyikan Keranjang" : "Buka Keranjang")}
                 >
-                  <ShoppingCart size={20} className={cartItemCount > 0 ? 'text-primary' : ''} />
-                  <span className="hidden lg:inline">{isCartOpen && cart.length > 0 ? 'Hide Cart' : 'Show Cart'}</span>
+                  <ShoppingCart size={18} className={cartItemCount > 0 ? 'text-primary' : ''} />
+                  <span className="hidden lg:inline">{isCartOpen && cart.length > 0 ? 'Tutup Keranjang' : 'Keranjang'}</span>
                   {cartItemCount > 0 && (
-                    <div className="bg-primary text-primary-foreground text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center shadow-lg shadow-primary/20">
+                    <div className="bg-primary text-primary-foreground text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-lg shadow-primary/20">
                       {cartItemCount}
                     </div>
                   )}
@@ -974,111 +979,8 @@ function QuickPOSContent() {
             </div>
           </header>
 
-          {/* Antrean Pesanan Banner Strip - Nyatu dengan garis bawah search bar & filter kategori */}
-          {preparingOrders.length > 0 && (
-            <div className="w-full bg-zinc-950/90 border-b border-white/10 shrink-0">
-              <div className="flex w-full overflow-x-auto snap-x snap-mandatory scrollbar-thin">
-                {preparingOrders.map((order, idx) => {
-                  const itemsToCook = order.items?.filter((item: any) => {
-                    const p = (allProducts.length > 0 ? allProducts : products).find(prod => prod.name === item.product_name);
-                    return p ? !p.is_quick : true;
-                  }) || [];
-
-                  return (
-                    <div 
-                      key={order.id} 
-                      onClick={() => setSelectedActiveOrder(order)}
-                      className={`cursor-pointer shrink-0 w-[320px] sm:w-[350px] snap-start border-r transition-all duration-300 relative p-3 sm:p-3.5 flex flex-col justify-between ${
-                        order.status === 'preparing' 
-                          ? 'bg-amber-500/[0.04] hover:bg-amber-500/[0.08] border-white/10' 
-                          : 'bg-emerald-500/[0.04] hover:bg-emerald-500/[0.08] border-white/10'
-                      }`}
-                    >
-                      <div className={`absolute top-0 left-0 right-0 h-0.5 ${
-                        order.status === 'preparing' 
-                          ? 'bg-amber-500' 
-                          : 'bg-emerald-500'
-                      }`} />
-                      
-                      <div className="flex justify-between items-start mb-1.5">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-white/10 text-white font-extrabold text-xs shrink-0">
-                            #{idx + 1}
-                          </span>
-                          <div className="min-w-0">
-                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-400 flex items-center gap-1">
-                              <Clock size={11} className="animate-pulse" />
-                              Antrean Pesanan
-                            </span>
-                            <span className="font-bold text-sm text-zinc-100 truncate block">
-                              {order.customer_name ? order.customer_name : order.id}
-                            </span>
-                          </div>
-                        </div>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${
-                          order.status === 'preparing' 
-                            ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' 
-                            : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                        }`}>
-                          {order.status === 'preparing' ? 'Antrean' : 'Siap'}
-                        </span>
-                      </div>
-                      
-                      {order.customer_name && (
-                        <div className="text-[10px] text-zinc-500 -mt-1 mb-1 font-mono">
-                          {order.id}
-                        </div>
-                      )}
-
-                      {itemsToCook.length > 0 ? (
-                        <div className="my-1 py-1 border-t border-white/5 space-y-0.5 overflow-y-auto max-h-[62px] scrollbar-hide text-zinc-300">
-                          {itemsToCook.map((item: any, i: number) => (
-                            <div key={i} className="text-[11px] flex items-center justify-between gap-1 leading-tight">
-                              <span className="truncate font-medium text-zinc-200">{item.product_name}</span>
-                              <span className="text-amber-400 font-bold shrink-0">{item.quantity}x</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="my-1 py-1 border-t border-white/5 text-[11px] text-zinc-500 italic">
-                          Semua menu siap saji
-                        </div>
-                      )}
-
-                      <div className="flex justify-between items-center mt-1 pt-1.5 border-t border-white/5">
-                        <div className="text-[10px] text-zinc-400 flex items-center gap-1.5">
-                          <span>{new Date(order.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
-                          <span>•</span>
-                          <span className="font-semibold text-zinc-300">{order.method}</span>
-                        </div>
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (order.method === 'Bayar Nanti') {
-                              setPaymentModalOrder(order);
-                            } else {
-                              setConfirmCompleteOrder(order);
-                            }
-                          }}
-                          className={`text-[11px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all shadow-lg active:scale-95 cursor-pointer ${
-                            order.method === 'Bayar Nanti' 
-                              ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-amber-500/20' 
-                              : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-emerald-500/20'
-                          }`}
-                        >
-                          <CheckCircle2 size={13} />
-                          <span>{order.method === 'Bayar Nanti' ? 'Lunasi & Selesai' : 'Selesaikan'}</span>
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
           {/* Category Tabs & Active Orders Horizontal Queue */}
-          <div className={`px-4 md:px-6 ${preparingOrders.length > 0 ? 'py-2.5' : 'pt-6 pb-2'} w-full max-w-[100vw] overflow-hidden shrink-0`}>
+          <div className="px-4 md:px-6 pt-4 pb-2 w-full max-w-[100vw] overflow-hidden shrink-0">
             {/* Active Orders Horizontal Queue & QR Notification */}
             {pendingQrOrders.length > 0 && (
               <div className="bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-transparent border border-amber-500/30 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-pulse mb-4">
