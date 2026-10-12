@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { supabase } from '@/lib/supabase';
-import { Search, Plus, Minus, FileEdit, Menu, X, QrCode, Banknote, CheckCircle2, ShoppingCart, LockKeyhole, UserCircle, LogIn, Lock, LogOut, Eye, EyeOff, KeyRound, ShieldCheck, Utensils, Clock, ListPlus, Zap, Heart } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { Search, Plus, Minus, FileEdit, Menu, X, QrCode, Banknote, CheckCircle2, ShoppingCart, LockKeyhole, UserCircle, LogIn, Lock, LogOut, Eye, EyeOff, KeyRound, ShieldCheck, Utensils, Clock, ListPlus, Zap } from 'lucide-react';
+import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -57,6 +57,7 @@ type CartItem = {
 };
 
 export default function POSPage() {
+  const pathname = usePathname();
   const managerDecoyName = typeof window !== 'undefined' ? (localStorage.getItem('samba_manager_decoy_name') || 'budi') : 'budi';
 
   const cashierProfiles: { name: string; role: Role; label: string; initial: string }[] = [
@@ -122,13 +123,24 @@ export default function POSPage() {
   const [isHutangNameDialogOpen, setIsHutangNameDialogOpen] = useState(false);
   const [orderNumber, setOrderNumber] = useState('');
   const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
-  const [isCartOpen, setIsCartOpen] = useState(true);
+  const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobileCartSheetOpen, setIsMobileCartSheetOpen] = useState(false);
+
+  // Automatically open cart when item is added, automatically close when cart is empty
+  useEffect(() => {
+    if (cart.length > 0) {
+      setIsCartOpen(true);
+    } else {
+      setIsCartOpen(false);
+      setIsMobileCartSheetOpen(false);
+    }
+  }, [cart.length]);
   const [pendingQrOrders, setPendingQrOrders] = useState<any[]>([]);
   const [preparingOrders, setPreparingOrders] = useState<any[]>([]);
   const [refreshActiveOrdersTrigger, setRefreshActiveOrdersTrigger] = useState(0);
   const [selectedActiveOrder, setSelectedActiveOrder] = useState<any | null>(null);
   const [paymentModalOrder, setPaymentModalOrder] = useState<any | null>(null);
+  const [confirmCompleteOrder, setConfirmCompleteOrder] = useState<any | null>(null);
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
   
   const [isEditMode, setIsEditMode] = useState(false);
@@ -186,13 +198,90 @@ export default function POSPage() {
   // Save state to localStorage whenever it changes, but only after initial restore
   useEffect(() => {
     if (isStateRestored) {
-      localStorage.setItem('samba_pos_cart', JSON.stringify(cart));
-      localStorage.setItem('samba_pos_customer', customerName);
-      localStorage.setItem('samba_pos_edit_mode', isEditMode.toString());
-      localStorage.setItem('samba_pos_old_items', JSON.stringify(oldCartItems));
-      localStorage.setItem('samba_pos_order_number', orderNumber);
+      if (cart.length > 0) {
+        localStorage.setItem('samba_pos_cart', JSON.stringify(cart));
+        localStorage.setItem('samba_pos_customer', customerName);
+        localStorage.setItem('samba_pos_edit_mode', isEditMode.toString());
+        localStorage.setItem('samba_pos_old_items', JSON.stringify(oldCartItems));
+        localStorage.setItem('samba_pos_order_number', orderNumber);
+      } else {
+        localStorage.removeItem('samba_pos_cart');
+        localStorage.removeItem('samba_pos_customer');
+        localStorage.removeItem('samba_pos_edit_mode');
+        localStorage.removeItem('samba_pos_old_items');
+        localStorage.removeItem('samba_pos_order_number');
+        localStorage.removeItem('samba_hybrid_session');
+      }
     }
   }, [cart, customerName, isEditMode, oldCartItems, orderNumber, isStateRestored]);
+
+  // Sync cart when returning to /pos from /pos/quick or when storage/route updates
+  useEffect(() => {
+    const handleCartSync = (e: any) => {
+      if (e.detail?.action === 'cleared') {
+        setCart([]);
+        setCustomerName('');
+        setOldCartItems([]);
+        setIsEditMode(false);
+        generateNextOrderId().then(setOrderNumber);
+        return;
+      }
+      syncCartFromStorage();
+    };
+
+    const syncCartFromStorage = () => {
+      try {
+        const saved = localStorage.getItem('samba_pos_cart');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setCart(Array.isArray(parsed) ? parsed : []);
+        } else {
+          setCart([]);
+        }
+
+        const savedCustomer = localStorage.getItem('samba_pos_customer');
+        setCustomerName(savedCustomer || '');
+
+        const savedOrderNum = localStorage.getItem('samba_pos_order_number');
+        if (savedOrderNum && saved) {
+          setOrderNumber(savedOrderNum);
+        } else if (!saved) {
+          generateNextOrderId().then(setOrderNumber);
+        }
+      } catch (e) {
+        setCart([]);
+      }
+    };
+
+    syncCartFromStorage();
+
+    // Cross-tab broadcast channel
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('samba_pos_cart_channel');
+      bc.onmessage = (event) => {
+        if (event.data?.type === 'CART_CLEARED') {
+          setCart([]);
+          setCustomerName('');
+          setOldCartItems([]);
+          setIsEditMode(false);
+          generateNextOrderId().then(setOrderNumber);
+        }
+      };
+    } catch (e) {}
+
+    window.addEventListener('samba-pos-cart-sync', handleCartSync);
+    window.addEventListener('cart-cleared', syncCartFromStorage);
+    window.addEventListener('focus', syncCartFromStorage);
+    window.addEventListener('storage', syncCartFromStorage);
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener('samba-pos-cart-sync', handleCartSync);
+      window.removeEventListener('cart-cleared', syncCartFromStorage);
+      window.removeEventListener('focus', syncCartFromStorage);
+      window.removeEventListener('storage', syncCartFromStorage);
+    };
+  }, [pathname]);
 
 
   const updateOrderStatus = async (orderId: string, newStatus: string, overrideMethod?: string) => {
@@ -397,7 +486,11 @@ export default function POSPage() {
         } else if (!isStateRestored) {
           try {
             const savedCart = localStorage.getItem('samba_pos_cart');
-            if (savedCart) setCart(JSON.parse(savedCart));
+            if (savedCart) {
+              setCart(JSON.parse(savedCart));
+            } else {
+              setCart([]);
+            }
             
             const savedCustomer = localStorage.getItem('samba_pos_customer');
             if (savedCustomer) setCustomerName(savedCustomer);
@@ -409,7 +502,7 @@ export default function POSPage() {
             if (savedOldItems) setOldCartItems(JSON.parse(savedOldItems));
             
             const savedOrderNum = localStorage.getItem('samba_pos_order_number');
-            if (savedOrderNum) {
+            if (savedOrderNum && savedCart) {
               setOrderNumber(savedOrderNum);
             } else {
               generateNextOrderId().then(setOrderNumber);
@@ -463,8 +556,13 @@ export default function POSPage() {
   }, [userName, isLoading]);
 
   useEffect(() => {
-    if (cartEndRef.current) {
-      cartEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (cart.length > 0) {
+      const timer = setTimeout(() => {
+        if (cartEndRef.current) {
+          cartEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 50);
+      return () => clearTimeout(timer);
     }
   }, [cart.length]);
 
@@ -696,7 +794,16 @@ export default function POSPage() {
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = searchQuery.trim() !== '' ? true : (activeCategory === '1' || p.category_id === activeCategory);
-    return matchesCategory && matchesSearch;
+    // POS utama hanya tampilkan produk yang perlu dimasak (bukan cepat saji)
+    const isNotQuick = !p.is_quick;
+    return matchesCategory && matchesSearch && isNotQuick;
+  });
+
+  // Hanya tampilkan tab kategori yang punya setidaknya 1 produk yang dimasak (!is_quick)
+  const cookedProducts = products.filter(p => !p.is_quick);
+  const visibleCategories = categories.filter(cat => {
+    if (cat.id === '1') return true; // "All Menu" selalu tampil
+    return cookedProducts.some(p => p.category_id === cat.id);
   });
 
   const handleProductClick = (product: Product) => {
@@ -814,7 +921,8 @@ export default function POSPage() {
       cashier_name: userName || 'Unknown',
       status: (actualMethod === 'Bayar Nanti') ? 'preparing' : (isAllQuickFood ? 'completed' : 'preparing'),
       cash_received: actualMethod === 'Cash' ? finalCashReceived : null,
-      customer_name: customerName || null
+      customer_name: customerName || null,
+      payment_status: actualMethod === 'QRIS' ? 'PENDING_VERIFICATION' : (actualMethod === 'Bayar Nanti' ? 'UNPAID' : 'PAID')
     };
 
     const itemsToInsert = cart.map(item => ({
@@ -978,6 +1086,28 @@ export default function POSPage() {
     setOldCartItems([]);
     setIsMobileCartSheetOpen(false);
 
+    try {
+      localStorage.removeItem('samba_pos_cart');
+      localStorage.removeItem('samba_pos_customer');
+      localStorage.removeItem('samba_pos_edit_mode');
+      localStorage.removeItem('samba_pos_old_items');
+      localStorage.removeItem('samba_pos_order_number');
+      localStorage.removeItem('samba_hybrid_session');
+      localStorage.setItem('samba_cart_cleared_at', Date.now().toString());
+
+      try {
+        const bc = new BroadcastChannel('samba_pos_cart_channel');
+        bc.postMessage({ type: 'CART_CLEARED', timestamp: Date.now() });
+        bc.close();
+      } catch (e) {}
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('samba-pos-cart-sync', { detail: { action: 'cleared' } }));
+        window.dispatchEvent(new Event('cart-cleared'));
+        window.dispatchEvent(new Event('storage'));
+      }
+    } catch (e) {}
+
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
       if (url.searchParams.has('edit')) {
@@ -1015,6 +1145,21 @@ export default function POSPage() {
     }
     
     return suggestions.slice(0, 6);
+  };
+
+  const handleGoToHybridQuick = () => {
+    if (cart.length > 0) {
+      localStorage.setItem('samba_hybrid_session', JSON.stringify({
+        orderNumber,
+        cart,
+        customerName,
+        isEditMode,
+        oldCartItems
+      }));
+      router.push('/pos/quick?hybrid=1');
+    } else {
+      router.push('/pos/quick');
+    }
   };
 
   const renderCartContent = () => (
@@ -1132,6 +1277,17 @@ export default function POSPage() {
               <span className="text-primary tracking-tight">Rp {total.toLocaleString('id-ID')}</span>
             </div>
           </div>
+
+          {/* Tombol Tambah Menu Cepat Saji (Hybrid) - tampil di desktop & mobile */}
+          {!isLocked && cart.length > 0 && (
+            <button
+              onClick={handleGoToHybridQuick}
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl border border-dashed border-amber-500/40 bg-amber-500/10 text-amber-400 hover:bg-amber-500 hover:text-zinc-950 hover:border-amber-500 transition-all text-xs font-bold shadow-sm active:scale-98 cursor-pointer"
+            >
+              <Zap size={15} className="fill-amber-400/40" />
+              + Tambah Menu Cepat Saji (Hybrid)
+            </button>
+          )}
         </div>
         {isPageLoading ? (
           <Button className="w-full h-14 rounded-xl text-lg font-bold bg-zinc-800 text-zinc-500 border border-white/5" disabled>
@@ -1181,36 +1337,38 @@ export default function POSPage() {
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-3 gap-3">
-                <button 
-                  onClick={() => finalizeTransaction('QRIS', true)}
-                  className="bg-blue-500/10 hover:bg-blue-500 text-blue-500 hover:text-white border border-blue-500/20 p-3 rounded-2xl font-bold flex flex-col items-center justify-center gap-1.5 transition-all group"
-                >
-                  <QrCode size={22} className="group-hover:scale-110 transition-transform" />
-                  <span className="text-xs">QRIS</span>
-                </button>
-                
-                <button 
-                  onClick={() => setPaymentMethod('Cash')}
-                  className="bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white border border-emerald-500/20 p-3 rounded-2xl font-bold flex flex-col items-center justify-center gap-1.5 transition-all group"
-                >
-                  <Banknote size={22} className="group-hover:scale-110 transition-transform" />
-                  <span className="text-xs">Tunai</span>
-                </button>
+              <div className="space-y-2.5">
+                <div className="grid grid-cols-3 gap-3">
+                  <button 
+                    onClick={() => finalizeTransaction('QRIS', true)}
+                    className="bg-blue-500/10 hover:bg-blue-500 text-blue-500 hover:text-white border border-blue-500/20 p-3 rounded-2xl font-bold flex flex-col items-center justify-center gap-1.5 transition-all group"
+                  >
+                    <QrCode size={22} className="group-hover:scale-110 transition-transform" />
+                    <span className="text-xs">QRIS</span>
+                  </button>
+                  
+                  <button 
+                    onClick={() => setPaymentMethod('Cash')}
+                    className="bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white border border-emerald-500/20 p-3 rounded-2xl font-bold flex flex-col items-center justify-center gap-1.5 transition-all group"
+                  >
+                    <Banknote size={22} className="group-hover:scale-110 transition-transform" />
+                    <span className="text-xs">Tunai</span>
+                  </button>
 
-                <button 
-                  onClick={() => {
-                    if (!customerName) {
-                      setIsHutangNameDialogOpen(true);
-                      return;
-                    }
-                    finalizeTransaction('Bayar Nanti', true);
-                  }}
-                  className="bg-amber-500/10 hover:bg-amber-500 text-amber-500 hover:text-white border border-amber-500/20 p-3 rounded-2xl font-bold flex flex-col items-center justify-center gap-1.5 transition-all group"
-                >
-                  <Clock size={22} className="group-hover:scale-110 transition-transform" />
-                  <span className="text-xs">Hutang</span>
-                </button>
+                  <button 
+                    onClick={() => {
+                      if (!customerName) {
+                        setIsHutangNameDialogOpen(true);
+                        return;
+                      }
+                      finalizeTransaction('Bayar Nanti', true);
+                    }}
+                    className="bg-amber-500/10 hover:bg-amber-500 text-amber-500 hover:text-white border border-amber-500/20 p-3 rounded-2xl font-bold flex flex-col items-center justify-center gap-1.5 transition-all group"
+                  >
+                    <Clock size={22} className="group-hover:scale-110 transition-transform" />
+                    <span className="text-xs">Hutang</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -1248,6 +1406,16 @@ export default function POSPage() {
           onChange={e => setCustomerName(e.target.value)}
           className="w-32 bg-zinc-900 border-white/10 h-11 focus-visible:ring-primary placeholder:text-zinc-500 rounded-xl transition-all"
         />
+
+        {/* Tombol Tambah Menu Cepat Saji (Hybrid) pada Floating Bar */}
+        <button
+          onClick={handleGoToHybridQuick}
+          className="h-11 px-3.5 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-400 hover:bg-amber-500 hover:text-zinc-950 transition-all font-bold text-xs flex items-center gap-1.5 whitespace-nowrap shadow-sm active:scale-95 cursor-pointer"
+          title="Tambah menu cepat saji (minuman, snack, dll)"
+        >
+          <Zap size={15} className="fill-amber-400/40" />
+          <span>+ Cepat Saji</span>
+        </button>
 
         <div className="h-8 w-px bg-white/10 mx-1" />
 
@@ -1357,20 +1525,31 @@ export default function POSPage() {
               </div>
               {/* Action Buttons */}
               <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                <Link
-                  href="/pos/quick"
-                  prefetch={true}
-                  className="h-14 w-14 sm:w-auto px-0 sm:px-6 border border-rose-500/20 text-rose-500 hover:bg-rose-500 hover:text-zinc-950 transition-all duration-300 gap-2 rounded-2xl text-sm font-bold bg-rose-500/10 hover:border-rose-500 shadow-lg shadow-rose-500/5 flex items-center justify-center"
-                  title="MAMA MODE — One Click POS"
+                <button
+                  onClick={handleGoToHybridQuick}
+                  className="h-14 w-auto px-4 sm:px-6 border border-amber-500/20 text-amber-500 hover:bg-amber-500 hover:text-zinc-950 transition-all duration-300 gap-2 rounded-2xl text-sm font-bold bg-amber-500/10 hover:border-amber-500 shadow-lg shadow-amber-500/5 flex items-center justify-center cursor-pointer"
+                  title={cart.length > 0 ? "Tambah Cepat Saji (Hybrid Order)" : "POS Cepat Saji"}
                 >
-                  <Heart size={20} className={activeShift ? "animate-pulse fill-rose-500 text-rose-500" : ""} />
-                  <span className="hidden sm:inline">MAMA MODE</span>
-                </Link>
+                  <Zap size={20} className={activeShift ? "fill-amber-500/30 text-amber-500" : ""} />
+                  <span className="hidden sm:inline">
+                    {cart.length > 0 ? "+ Cepat Saji (Hybrid)" : "Cepat Saji"}
+                  </span>
+                </button>
 
                 {/* Desktop Cart Toggle */}
-                <Button variant="outline" className="hidden md:flex items-center gap-2 h-14 rounded-2xl border-white/10 bg-zinc-900/50 hover:bg-zinc-800 hover:border-primary/50 transition-all duration-300" onClick={() => setIsCartOpen(!isCartOpen)}>
+                <Button 
+                  variant="outline" 
+                  className={`hidden md:flex items-center gap-2 h-14 rounded-2xl border-white/10 bg-zinc-900/50 hover:bg-zinc-800 hover:border-primary/50 transition-all duration-300 ${cart.length === 0 ? 'opacity-60 cursor-not-allowed' : ''}`} 
+                  onClick={() => {
+                    if (cart.length > 0) {
+                      setIsCartOpen(!isCartOpen);
+                    }
+                  }}
+                  disabled={cart.length === 0}
+                  title={cart.length === 0 ? "Keranjang masih kosong" : (isCartOpen ? "Sembunyikan Keranjang" : "Buka Keranjang")}
+                >
                   <ShoppingCart size={20} className={cartItemCount > 0 ? 'text-primary' : ''} />
-                  <span className="hidden lg:inline">{isCartOpen ? 'Hide Cart' : 'Show Cart'}</span>
+                  <span className="hidden lg:inline">{isCartOpen && cart.length > 0 ? 'Hide Cart' : 'Show Cart'}</span>
                   {cartItemCount > 0 && (
                     <div className="bg-primary text-primary-foreground text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center shadow-lg shadow-primary/20">
                       {cartItemCount}
@@ -1381,7 +1560,110 @@ export default function POSPage() {
             </div>
           </header>
 
-        <div className="px-4 md:px-6 pt-6 pb-2 w-full max-w-[100vw] overflow-hidden shrink-0">
+          {/* Antrean Pesanan Banner Strip - Nyatu dengan garis bawah search bar & filter kategori */}
+          {preparingOrders.length > 0 && (
+            <div className="w-full bg-zinc-950/90 border-b border-white/10 shrink-0">
+              <div className="flex w-full overflow-x-auto snap-x snap-mandatory scrollbar-thin">
+                {preparingOrders.map((order, idx) => {
+                  const itemsToCook = order.items?.filter((item: any) => {
+                    const p = products.find(prod => prod.name === item.product_name);
+                    return p ? !p.is_quick : true;
+                  }) || [];
+
+                  return (
+                    <div 
+                      key={order.id} 
+                      onClick={() => setSelectedActiveOrder(order)}
+                      className={`cursor-pointer shrink-0 w-[320px] sm:w-[350px] snap-start border-r transition-all duration-300 relative p-3 sm:p-3.5 flex flex-col justify-between ${
+                        order.status === 'preparing' 
+                          ? 'bg-amber-500/[0.04] hover:bg-amber-500/[0.08] border-white/10' 
+                          : 'bg-emerald-500/[0.04] hover:bg-emerald-500/[0.08] border-white/10'
+                      }`}
+                    >
+                      <div className={`absolute top-0 left-0 right-0 h-0.5 ${
+                        order.status === 'preparing' 
+                          ? 'bg-amber-500' 
+                          : 'bg-emerald-500'
+                      }`} />
+                      
+                      <div className="flex justify-between items-start mb-1.5">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-white/10 text-white font-extrabold text-xs shrink-0">
+                            #{idx + 1}
+                          </span>
+                          <div className="min-w-0">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-400 flex items-center gap-1">
+                              <Clock size={11} className="animate-pulse" />
+                              Antrean Pesanan
+                            </span>
+                            <span className="font-bold text-sm text-zinc-100 truncate block">
+                              {order.customer_name ? order.customer_name : order.id}
+                            </span>
+                          </div>
+                        </div>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${
+                          order.status === 'preparing' 
+                            ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' 
+                            : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                        }`}>
+                          {order.status === 'preparing' ? 'Antrean' : 'Siap'}
+                        </span>
+                      </div>
+                      
+                      {order.customer_name && (
+                        <div className="text-[10px] text-zinc-500 -mt-1 mb-1 font-mono">
+                          {order.id}
+                        </div>
+                      )}
+
+                      {itemsToCook.length > 0 ? (
+                        <div className="my-1 py-1 border-t border-white/5 space-y-0.5 overflow-y-auto max-h-[62px] scrollbar-hide text-zinc-300">
+                          {itemsToCook.map((item: any, i: number) => (
+                            <div key={i} className="text-[11px] flex items-center justify-between gap-1 leading-tight">
+                              <span className="truncate font-medium text-zinc-200">{item.product_name}</span>
+                              <span className="text-amber-400 font-bold shrink-0">{item.quantity}x</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="my-1 py-1 border-t border-white/5 text-[11px] text-zinc-500 italic">
+                          Semua menu siap saji
+                        </div>
+                      )}
+
+                      <div className="flex justify-between items-center mt-1 pt-1.5 border-t border-white/5">
+                        <div className="text-[10px] text-zinc-400 flex items-center gap-1.5">
+                          <span>{new Date(order.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
+                          <span>•</span>
+                          <span className="font-semibold text-zinc-300">{order.method}</span>
+                        </div>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (order.method === 'Bayar Nanti') {
+                              setPaymentModalOrder(order);
+                            } else {
+                              setConfirmCompleteOrder(order);
+                            }
+                          }}
+                          className={`text-[11px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all shadow-lg active:scale-95 cursor-pointer ${
+                            order.method === 'Bayar Nanti' 
+                              ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-amber-500/20' 
+                              : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-emerald-500/20'
+                          }`}
+                        >
+                          <CheckCircle2 size={13} />
+                          <span>{order.method === 'Bayar Nanti' ? 'Lunasi & Selesai' : 'Selesaikan'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+        <div className={`px-4 md:px-6 ${preparingOrders.length > 0 ? 'py-2.5' : 'pt-6 pb-2'} w-full max-w-[100vw] overflow-hidden shrink-0`}>
           {pendingQrOrders.length > 0 && (
             <div className="mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4 shadow-lg shadow-amber-500/5">
               <div className="flex items-center gap-3">
@@ -1396,98 +1678,6 @@ export default function POSPage() {
               <Link href="/orders" className="w-full sm:w-auto bg-amber-500 hover:bg-amber-400 text-black font-bold h-10 px-6 rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-amber-500/20 transition-transform active:scale-95">
                 Cek Pesanan
               </Link>
-            </div>
-          )}
-          
-          {preparingOrders.length > 0 && (
-            <div className="mb-6">
-              <h3 className="text-sm font-bold text-zinc-400 mb-3 px-1 uppercase tracking-wider">Antrean Pesanan</h3>
-              <div className="flex w-full overflow-x-auto snap-x snap-mandatory scrollbar-hide gap-3 pb-2 px-1">
-                {preparingOrders.map((order, idx) => {
-                  const itemsToCook = order.items?.filter((item: any) => {
-                    const p = products.find(prod => prod.name === item.product_name);
-                    return p ? !p.is_quick : true;
-                  }) || [];
-                  
-                  return (
-                  <div 
-                    key={order.id} 
-                    onClick={() => setSelectedActiveOrder(order)}
-                    className={`cursor-pointer shrink-0 w-[260px] snap-center rounded-xl overflow-hidden transition-all duration-300 relative border p-3 hover:-translate-y-0.5 ${
-                      order.status === 'preparing' ? 'bg-zinc-900/80 border-amber-500/30 shadow-md shadow-amber-500/5 hover:border-amber-500/50' :
-                      'bg-emerald-950/40 border-emerald-500/30 shadow-md shadow-emerald-500/5 hover:border-emerald-500/50'
-                    }`}
-                  >
-                    <div className={`absolute top-0 left-0 right-0 h-0.5 ${
-                      order.status === 'preparing' ? 'bg-gradient-to-r from-amber-500/0 via-amber-500 to-amber-500/0' :
-                      'bg-gradient-to-r from-emerald-500/0 via-emerald-500 to-emerald-500/0'
-                    }`} />
-                    
-                    <div className="flex justify-between items-start mb-1">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="flex items-center justify-center w-5 h-5 rounded-md bg-white/10 text-white font-bold text-[10px] shrink-0">
-                          {idx + 1}
-                        </span>
-                        <span className="font-bold text-sm text-zinc-100 truncate">
-                          {order.customer_name ? order.customer_name : order.id}
-                        </span>
-                      </div>
-                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border shrink-0 ml-2 ${
-                        order.status === 'preparing' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
-                        'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                      }`}>
-                        {order.status === 'preparing' ? 'Antrean' : 'Siap'}
-                      </span>
-                    </div>
-                    
-                    {order.customer_name && (
-                      <div className="text-[10px] text-zinc-500 mb-1 font-mono">
-                        {order.id}
-                      </div>
-                    )}
-
-                    {itemsToCook.length > 0 ? (
-                      <div className="mt-2 pt-2 border-t border-white/5 space-y-1.5 overflow-y-auto max-h-[80px] scrollbar-hide text-zinc-300">
-                        {itemsToCook.map((item: any, i: number) => (
-                          <div key={i} className="text-[10px] flex flex-col gap-0.5 leading-tight">
-                            <span className="truncate font-medium">{item.quantity}x {item.product_name}</span>
-                            {item.notes && <span className="text-[9px] text-zinc-500 truncate pl-3">- {item.notes}</span>}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="mt-2 pt-2 border-t border-white/5 text-[10px] text-zinc-500 italic">
-                        Semua menu siap saji
-                      </div>
-                    )}
-                    <div className="flex justify-between items-end mt-3 pt-2 border-t border-white/5">
-                      <div className="text-[10px] text-zinc-500 flex flex-col">
-                        <span>{new Date(order.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
-                        <span>{order.method}</span>
-                      </div>
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (order.status === 'ready' && order.method === 'Bayar Nanti') {
-                            setPaymentModalOrder(order);
-                          } else {
-                            updateOrderStatus(order.id, order.status === 'preparing' ? 'ready' : 'completed');
-                          }
-                        }}
-                        className={`text-[10px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors shadow-lg ${
-                          order.status === 'preparing' 
-                            ? 'bg-blue-500 hover:bg-blue-400 text-white shadow-blue-500/20' 
-                            : order.method === 'Bayar Nanti' 
-                              ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-amber-500/20'
-                              : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-emerald-500/20'
-                        }`}
-                      >
-                        {order.status === 'preparing' ? 'Tandai Siap' : (order.method === 'Bayar Nanti' ? 'Lunasi & Selesai' : 'Selesaikan')}
-                      </button>
-                    </div>
-                  </div>
-                )})}
-              </div>
             </div>
           )}
 
@@ -1555,6 +1745,24 @@ export default function POSPage() {
                         })}
                       </div>
                     </div>
+
+                    <div className="pt-4 border-t border-white/5 flex justify-end">
+                      <Button
+                        onClick={() => {
+                          const order = selectedActiveOrder;
+                          setSelectedActiveOrder(null);
+                          if (order.method === 'Bayar Nanti') {
+                            setPaymentModalOrder(order);
+                          } else {
+                            setConfirmCompleteOrder(order);
+                          }
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+                      >
+                        <CheckCircle2 size={16} className="mr-1.5" />
+                        {selectedActiveOrder.method === 'Bayar Nanti' ? 'Lunasi & Selesaikan' : 'Selesaikan Pesanan'}
+                      </Button>
+                    </div>
                   </div>
                 </>
               )}
@@ -1595,8 +1803,40 @@ export default function POSPage() {
             </DialogContent>
           </Dialog>
 
+          {/* Konfirmasi Selesai Dialog (1-click confirmation) */}
+          <Dialog open={!!confirmCompleteOrder} onOpenChange={() => setConfirmCompleteOrder(null)}>
+            <DialogContent className="bg-zinc-950 border-white/10 text-zinc-100 max-w-sm rounded-2xl">
+              <DialogHeader>
+                <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                  <CheckCircle2 className="text-emerald-500" size={22} />
+                  Selesaikan Pesanan?
+                </DialogTitle>
+                <DialogDescription className="text-zinc-400 pt-2 text-sm">
+                  Pesanan <span className="font-mono text-white font-bold">#{confirmCompleteOrder?.id.split('_').pop()}</span>
+                  {confirmCompleteOrder?.customer_name && <span> atas nama <span className="text-amber-400 font-semibold">{confirmCompleteOrder.customer_name}</span></span>} akan ditandai selesai dan dikeluarkan dari antrean.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="flex sm:justify-end gap-2 mt-4">
+                <Button variant="outline" onClick={() => setConfirmCompleteOrder(null)} className="border-white/10 hover:bg-white/5">
+                  Batal
+                </Button>
+                <Button 
+                  onClick={() => {
+                    if (confirmCompleteOrder) {
+                      updateOrderStatus(confirmCompleteOrder.id, 'completed');
+                      setConfirmCompleteOrder(null);
+                    }
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+                >
+                  Ya, Selesaikan
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           <div className="flex w-full overflow-x-auto snap-x snap-mandatory scrollbar-hide bg-zinc-900/40 p-1.5 rounded-2xl border border-white/5 shadow-inner gap-1">
-            {categories.map(cat => (
+            {visibleCategories.map(cat => (
               <button
                 key={cat.id}
                 onClick={() => setActiveCategory(cat.id)}
@@ -1703,7 +1943,7 @@ export default function POSPage() {
       </div>
 
       {/* Desktop Cart Sidebar */}
-      {(isCartOpen && cartItemCount > 0) && (
+      {(isCartOpen && cart.length > 0) && (
         <div className="hidden lg:flex w-72 xl:w-80 border-l border-border bg-card flex-col h-full shrink-0 transition-all duration-300">
           {renderCartContent()}
         </div>
@@ -2386,7 +2626,7 @@ export default function POSPage() {
               </div>
               <DialogTitle className="font-extrabold text-white text-2xl tracking-tight">Bayar dengan QRIS</DialogTitle>
               <DialogDescription className="text-sm text-muted-foreground mt-2">
-                Arahkan pelanggan untuk men-scan QRIS di bawah ini.
+                Pembayaran menggunakan QRIS Statis GoPay Merchant. Arahkan pelanggan untuk men-scan QRIS di bawah ini.
               </DialogDescription>
             </DialogHeader>
 
@@ -2412,10 +2652,10 @@ export default function POSPage() {
             <div className="flex flex-col gap-3 mt-8 relative z-10">
               <Button 
                 onClick={handleQRISPaymentSuccess} 
-                className="w-full h-14 bg-green-500 hover:bg-green-600 text-white font-bold text-lg rounded-xl transition-all border-none shadow-lg shadow-green-500/20"
+                className="w-full h-14 bg-primary hover:bg-primary/90 text-white font-bold text-lg rounded-xl transition-all border-none shadow-lg shadow-primary/20"
                 disabled={isProcessingCheckout}
               >
-                {isProcessingCheckout ? "Processing..." : "✓ Konfirmasi Lunas"}
+                {isProcessingCheckout ? "Processing..." : "Tutup & Tunggu Pembayaran"}
               </Button>
               <Button 
                 onClick={() => setIsQRISModalOpen(false)} 

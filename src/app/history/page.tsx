@@ -26,6 +26,10 @@ type Transaction = {
   itemsCount: number;
   status: string;
   cash_received?: number;
+  payment_status?: string | null;
+  payment_confirmed_at?: string | null;
+  payment_confirmed_by?: string | null;
+  payment_proof_url?: string | null;
   itemsDetail: {
     name: string;
     price: number;
@@ -137,6 +141,10 @@ export default function HistoryPage() {
           customer_name: tx.customer_name,
           order_source: tx.order_source,
           cash_received: tx.cash_received,
+          payment_status: tx.payment_status,
+          payment_confirmed_at: tx.payment_confirmed_at,
+          payment_confirmed_by: tx.payment_confirmed_by,
+          payment_proof_url: tx.payment_proof_url,
           itemsCount: items.reduce((sum, item) => sum + item.quantity, 0),
           status: tx.status,
           itemsDetail: items.map(item => ({
@@ -177,6 +185,63 @@ export default function HistoryPage() {
   // Dialog state
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [selectedCashierGroup, setSelectedCashierGroup] = useState<CashierGroup | null>(null);
+  const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
+
+  const handleConfirmPayment = async (txId: string) => {
+    if (!role || isConfirmingPayment) return;
+    
+    // Konfirmasi kasir
+    if (!confirm("Apakah Anda yakin pembayaran ini sudah lunas di GoPay Merchant?\n\nPastikan nominal sesuai dengan total tagihan!")) {
+      return;
+    }
+
+    setIsConfirmingPayment(true);
+    try {
+      const now = new Date().toISOString();
+      const userName = localStorage.getItem('samba_admin_name') || 'Cashier';
+
+      const { error } = await supabase
+        .from('transactions')
+        .update({
+          payment_status: 'PAID',
+          payment_confirmed_at: now,
+          payment_confirmed_by: userName
+        })
+        .eq('id', txId);
+
+      if (error) throw error;
+
+      // Update local state
+      setTransactions(prev => prev.map(t => {
+        if (t.id === txId) {
+          const updatedTx = {
+            ...t,
+            payment_status: 'PAID',
+            payment_confirmed_at: now,
+            payment_confirmed_by: userName
+          };
+          if (selectedTx?.id === txId) setSelectedTx(updatedTx);
+          return updatedTx;
+        }
+        return t;
+      }));
+      
+      // Update cache
+      const updatedList = transactions.map(t => 
+        t.id === txId 
+          ? { ...t, payment_status: 'PAID', payment_confirmed_at: now, payment_confirmed_by: userName }
+          : t
+      );
+      localStorage.setItem('samba_admin_history_tx_cache', JSON.stringify(updatedList));
+
+      alert('✅ Pembayaran berhasil dikonfirmasi sebagai Lunas!');
+    } catch (err: any) {
+      console.error(err);
+      alert('❌ Gagal mengonfirmasi pembayaran: ' + (err.message || 'Unknown error'));
+    } finally {
+      setIsConfirmingPayment(false);
+    }
+  };
 
   if (!role) return null;
 
@@ -386,11 +451,22 @@ export default function HistoryPage() {
                               {trx.order_source === 'CUSTOMER_QR' && <span className="px-1.5 py-0.5 text-[8px] bg-purple-500/10 text-purple-500 rounded font-bold uppercase">QR</span>}
                             </div>
                             <div className="flex items-center gap-1.5">
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                                trx.method === 'QRIS' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : 'bg-green-500/10 text-green-500 border-green-500/20'
-                              }`}>
-                                {trx.method}
-                              </span>
+                              <div className="flex flex-col items-end gap-1">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                                  trx.method === 'QRIS' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : 'bg-green-500/10 text-green-500 border-green-500/20'
+                                }`}>
+                                  {trx.method}
+                                </span>
+                                {trx.payment_status && (
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase ${
+                                    trx.payment_status === 'PAID' ? 'bg-green-500/10 text-green-600 border-green-500/20' :
+                                    trx.payment_status === 'PENDING_VERIFICATION' ? 'bg-amber-500/10 text-amber-600 border-amber-500/20' :
+                                    'bg-red-500/10 text-red-500 border-red-500/20'
+                                  }`}>
+                                    {trx.payment_status === 'PENDING_VERIFICATION' ? 'VERIFIKASI' : trx.payment_status.replace('_', ' ')}
+                                  </span>
+                                )}
+                              </div>
                               <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
                                 isPrep ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' :
                                 isReady ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
@@ -470,12 +546,21 @@ export default function HistoryPage() {
                                 <td className="p-4 text-muted-foreground">{trx.date}</td>
                                 <td className="p-4 text-muted-foreground">{trx.cashier_name || 'Unknown'}{trx.customer_name ? ` (${trx.customer_name})` : ''}</td>
                                 <td className="p-4">{trx.itemsCount} items</td>
-                                <td className="p-4">
+                                <td className="p-4 flex flex-col items-start gap-1 justify-center">
                                   <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${
                                     trx.method === 'QRIS' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : 'bg-green-500/10 text-green-500 border-green-500/20'
                                   }`}>
                                     {trx.method}
                                   </span>
+                                  {trx.payment_status && (
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase ${
+                                      trx.payment_status === 'PAID' ? 'bg-green-500/10 text-green-600 border-green-500/20' :
+                                      trx.payment_status === 'PENDING_VERIFICATION' ? 'bg-amber-500/10 text-amber-600 border-amber-500/20' :
+                                      'bg-red-500/10 text-red-500 border-red-500/20'
+                                    }`}>
+                                      {trx.payment_status === 'PENDING_VERIFICATION' ? 'VERIFIKASI' : trx.payment_status.replace('_', ' ')}
+                                    </span>
+                                  )}
                                 </td>
                                 <td className="p-4">
                                   <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${
@@ -677,12 +762,33 @@ export default function HistoryPage() {
               <div className="py-4 space-y-4">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Payment Method</span>
-                  <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${
-                    selectedTx.method === 'QRIS' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : 'bg-green-500/10 text-green-500 border-green-500/20'
-                  }`}>
-                    {selectedTx.method}
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${
+                      selectedTx.method === 'QRIS' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : 'bg-green-500/10 text-green-500 border-green-500/20'
+                    }`}>
+                      {selectedTx.method}
+                    </span>
+                    {selectedTx.payment_status && (
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase ${
+                        selectedTx.payment_status === 'PAID' ? 'bg-green-500/10 text-green-600 border-green-500/20' :
+                        selectedTx.payment_status === 'PENDING_VERIFICATION' ? 'bg-amber-500/10 text-amber-600 border-amber-500/20' :
+                        'bg-red-500/10 text-red-500 border-red-500/20'
+                      }`}>
+                        {selectedTx.payment_status.replace('_', ' ')}
+                      </span>
+                    )}
+                  </div>
                 </div>
+
+                {selectedTx.payment_status === 'PAID' && selectedTx.payment_confirmed_at && (
+                  <div className="flex justify-between items-center text-xs bg-green-500/5 p-2 rounded border border-green-500/10">
+                    <span className="text-muted-foreground">Dikonfirmasi oleh:</span>
+                    <div className="text-right">
+                      <span className="font-semibold text-green-600 dark:text-green-400">{selectedTx.payment_confirmed_by || 'Unknown'}</span>
+                      <p className="text-[10px] text-muted-foreground">{new Date(selectedTx.payment_confirmed_at).toLocaleString('id-ID')}</p>
+                    </div>
+                  </div>
+                )}
                 
                 <Separator className="bg-border" />
                 
@@ -721,6 +827,29 @@ export default function HistoryPage() {
                       <span>Kembalian</span>
                       <span>Rp {(selectedTx.cash_received - selectedTx.total).toLocaleString('id-ID')}</span>
                     </div>
+                  </div>
+                )}
+
+                {selectedTx.method === 'QRIS' && selectedTx.payment_status === 'PENDING_VERIFICATION' && (
+                  <div className="pt-4 border-t border-border mt-2">
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mb-3 font-medium bg-amber-500/10 p-2 rounded">
+                      ⚠️ Pastikan Anda sudah mengecek aplikasi GoPay Merchant dan saldo sudah masuk sebelum mengonfirmasi pembayaran ini.
+                    </p>
+                    {selectedTx.payment_proof_url && (
+                      <div className="mb-4">
+                        <p className="text-xs font-semibold text-muted-foreground mb-2">Bukti Pembayaran dari Pelanggan:</p>
+                        <a href={selectedTx.payment_proof_url} target="_blank" rel="noopener noreferrer" className="block w-full max-w-[200px] border border-border rounded-xl overflow-hidden hover:opacity-80 transition-opacity">
+                          <img src={selectedTx.payment_proof_url} alt="Bukti Pembayaran" className="w-full h-auto object-cover" />
+                        </a>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => handleConfirmPayment(selectedTx.id)}
+                      disabled={isConfirmingPayment}
+                      className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+                    >
+                      {isConfirmingPayment ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Konfirmasi Pembayaran'}
+                    </button>
                   </div>
                 )}
               </div>

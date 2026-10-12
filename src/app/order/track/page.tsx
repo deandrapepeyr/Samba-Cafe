@@ -269,8 +269,8 @@ export default function OrderTrackingPage() {
             <p className="text-xs opacity-80">
               {isReady && 'Silakan ambil pesanan Anda di kasir.'}
               {isPreparing && 'Koki kami sedang membuat pesanan Anda dengan penuh cinta.'}
-              {isPending && 'Pesanan Anda sudah masuk dan sedang menunggu kasir untuk menerimanya.'}
-              {isWaitingPayment && 'Kasir sedang mengecek pembayaran Anda.'}
+              {isPending && !isWaitingPayment && 'Pesanan Anda sudah masuk dan sedang menunggu kasir untuk menerimanya.'}
+              {isWaitingPayment && 'Pesanan sedang diproses. Kasir sedang mengecek bukti pembayaran Anda.'}
               {isRejected && 'Pembayaran tidak dapat diverifikasi. Silakan hubungi kasir atau coba lagi.'}
               {orders[0]?.method === 'Bayar Nanti' && !isPending && 'Silakan lakukan pembayaran tunai di kasir.'}
             </p>

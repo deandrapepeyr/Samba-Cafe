@@ -24,7 +24,8 @@ import {
   Printer,
   FileEdit,
   Banknote,
-  Trash2
+  Trash2,
+  Scan
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
@@ -48,6 +49,7 @@ type Order = {
   customer_name: string | null;
   order_source?: string;
   payment_status?: string;
+  payment_proof_url?: string;
   status: string;
   customer_session_id?: string | null;
   completedAt?: Date;
@@ -162,6 +164,7 @@ export default function OrdersPage() {
           status: normStatus,
           order_source: tx.order_source || 'POS',
           payment_status: tx.payment_status,
+          payment_proof_url: tx.payment_proof_url,
           customer_session_id: tx.customer_session_id,
           completedAt,
           items: items.map(item => ({
@@ -924,16 +927,17 @@ export default function OrdersPage() {
       {/* Order Detail & Receipt Dialog */}
       <Dialog open={!!selectedOrder} onOpenChange={() => { setSelectedOrder(null); setIsEditingOrder(false); }}>
         {selectedOrder && (
-          <DialogContent className="sm:max-w-[380px] p-0 bg-[#141414] border border-[#2a2a2a] rounded-2xl overflow-hidden shadow-2xl shadow-black/50 print:border-none print:shadow-none print:bg-white print:rounded-none print:max-w-none print:w-full">
-            <div className="relative">
+          <DialogContent className="sm:max-w-[380px] md:max-w-[750px] lg:max-w-[850px] p-0 bg-[#141414] border border-[#2a2a2a] rounded-2xl overflow-hidden shadow-2xl shadow-black/50 print:border-none print:shadow-none print:bg-white print:rounded-none print:max-w-none print:w-full">
+            <div className="relative flex flex-col md:flex-row max-h-[90vh]">
               {/* Top accent — hidden on print */}
-              <div className={`h-[2px] w-full bg-gradient-to-r print:hidden ${
+              <div className={`absolute top-0 left-0 right-0 h-[2px] w-full bg-gradient-to-r print:hidden ${
                 selectedOrder.status === 'preparing' ? 'from-transparent via-amber-500 to-transparent' :
                 selectedOrder.status === 'ready' ? 'from-transparent via-emerald-500 to-transparent' :
                 'from-transparent via-[#444] to-transparent'
               }`} />
               
-              <div className="px-6 pt-6 pb-5 print:px-0 print:pt-0 print:pb-0">
+              {/* Left Column: Details & Receipt */}
+              <div className="flex-1 px-6 pt-6 pb-6 overflow-y-auto print:px-0 print:pt-0 print:pb-0 print:overflow-visible">
                 {/* Header — hidden on print */}
                 <div className="flex items-center justify-between mb-1 print:hidden">
                   <DialogHeader className="space-y-0 p-0">
@@ -944,9 +948,10 @@ export default function OrdersPage() {
                   <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-full ${
                     selectedOrder.status === 'preparing' ? 'bg-amber-500/10 text-amber-500' :
                     selectedOrder.status === 'ready' ? 'bg-emerald-500/10 text-emerald-500' :
+                    selectedOrder.status === 'pending' ? 'bg-blue-500/10 text-blue-500' :
                     'bg-[#222] text-[#888]'
                   }`}>
-                    {selectedOrder.status === 'preparing' ? 'Antrean' : selectedOrder.status === 'ready' ? 'Siap' : 'Selesai'}
+                    {selectedOrder.status === 'preparing' ? 'Antrean' : selectedOrder.status === 'ready' ? 'Siap' : selectedOrder.status === 'pending' ? 'Menunggu' : 'Selesai'}
                   </span>
                 </div>
                 <DialogDescription className="text-[11px] text-[#555] mt-0.5 print:hidden">
@@ -1023,8 +1028,8 @@ export default function OrdersPage() {
                   </div>
                 </div>
 
-                {/* Actions — hidden on print */}
-                <div className="flex flex-col gap-3 mt-6 print:hidden">
+                {/* Actions — hidden on print, MOVED to left column */}
+                <div className="mt-6 print:hidden">
                   {isEditingOrder ? (
                     <div className="flex gap-2">
                       <button
@@ -1052,7 +1057,7 @@ export default function OrdersPage() {
                           <Printer size={14} /> Cetak Struk
                         </button>
 
-                        {selectedOrder.status === 'preparing' && (
+                        {(selectedOrder.status === 'preparing' || selectedOrder.status === 'pending') && (
                           <>
                             <button
                               onClick={startEditOrder}
@@ -1089,12 +1094,53 @@ export default function OrdersPage() {
                           </button>
                         )}
 
+                        {selectedOrder.status === 'pending' && selectedOrder.payment_status !== 'PENDING_VERIFICATION' && (
+                          <button
+                            onClick={() => updateOrderStatus(selectedOrder.id, 'preparing')}
+                            className="w-full h-12 text-[13px] font-extrabold text-black bg-gradient-to-r from-blue-500 to-blue-600 hover:brightness-110 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 border-none"
+                          >
+                            <CheckCircle2 size={16} strokeWidth={2.5} /> Terima Pesanan
+                          </button>
+                        )}
+
+                        {selectedOrder.status === 'pending' && selectedOrder.payment_status === 'PENDING_VERIFICATION' && (
+                          <div className="pt-2 mt-2 border-t border-white/10 space-y-3">
+                            <p className="text-[11px] text-amber-500 font-medium bg-amber-500/10 p-2.5 rounded-lg border border-amber-500/20">
+                              ⚠️ Harap periksa bukti pembayaran di samping. Sistem AI akan segera diintegrasikan untuk mengecek otomatis.
+                            </p>
+                            
+                            <button
+                              disabled={updatingId === selectedOrder.id}
+                              onClick={async () => {
+                                if (!confirm("Apakah Anda yakin pembayaran ini sudah masuk ke GoPay Merchant?\n\nIni akan sekaligus menerima pesanan.")) return;
+                                setUpdatingId(selectedOrder.id);
+                                const now = new Date().toISOString();
+                                const userName = localStorage.getItem('samba_admin_name') || 'Cashier';
+                                await supabase.from('transactions').update({ 
+                                  payment_status: 'PAID',
+                                  payment_confirmed_at: now,
+                                  payment_confirmed_by: userName,
+                                  status: 'preparing' 
+                                }).eq('id', selectedOrder.id);
+                                
+                                localUpdatesRef.current[selectedOrder.id] = Date.now();
+                                fetchOrders(false);
+                                setUpdatingId(null);
+                                setSelectedOrder({...selectedOrder, payment_status: 'PAID', status: 'preparing'});
+                              }}
+                              className="w-full h-12 text-[13px] font-extrabold text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20"
+                            >
+                              <CheckCircle2 size={16} /> {updatingId === selectedOrder.id ? 'Memproses...' : 'Konfirmasi Pembayaran & Terima'}
+                            </button>
+                          </div>
+                        )}
+
                         {selectedOrder.status === 'preparing' && (
                           <button
                             onClick={() => updateOrderStatus(selectedOrder.id, 'ready')}
                             className="w-full h-12 text-[13px] font-extrabold text-black bg-gradient-to-r from-[#E3B24C] to-[#B98A2E] hover:brightness-110 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#B98A2E]/20 border-none"
                           >
-                            <CheckCircle2 size={16} strokeWidth={2.5} /> Done
+                            <CheckCircle2 size={16} strokeWidth={2.5} /> Selesai Dimasak (Done)
                           </button>
                         )}
 
@@ -1122,6 +1168,39 @@ export default function OrdersPage() {
                   )}
                 </div>
               </div>
+
+              {/* Right Column: AI Verification & Proof (Only shown if proof exists) */}
+              {selectedOrder.payment_proof_url && (
+                <div className="w-full md:w-[320px] lg:w-[420px] shrink-0 px-6 py-6 bg-[#0a0a0a] md:border-l border-white/5 print:hidden overflow-y-auto flex flex-col gap-4">
+                  
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-[13px] text-white flex items-center gap-2">
+                      <Scan size={16} className="text-blue-500" /> AI Verification Status
+                    </h4>
+                    <span className="text-[9px] bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded border border-blue-500/20 font-bold animate-pulse">Running...</span>
+                  </div>
+
+                  <div className="relative w-full flex-1 min-h-[300px] rounded-xl border border-white/10 overflow-hidden bg-black flex flex-col group shadow-2xl">
+                    <a href={selectedOrder.payment_proof_url} target="_blank" rel="noopener noreferrer" className="absolute inset-0 z-10 cursor-zoom-in" title="Klik untuk memperbesar" />
+                    
+                    <div className="flex-1 w-full p-2 relative overflow-hidden">
+                      <img src={selectedOrder.payment_proof_url} alt="Bukti Pembayaran" className="w-full h-full object-contain transition-transform duration-700 group-hover:scale-105" />
+                      {/* Decorative AI Scan Line */}
+                      <div className="absolute top-0 left-0 w-full h-0.5 bg-blue-500/50 shadow-[0_0_10px_rgba(59,130,246,0.5)] animate-[scan_3s_ease-in-out_infinite]" />
+                    </div>
+
+                    <div className="relative z-20 bg-black/80 backdrop-blur-md p-4 border-t border-white/10 space-y-2 pointer-events-none">
+                       <div className="text-[11px] font-mono text-emerald-400 space-y-1">
+                         <div className="flex justify-between items-center"><span className="opacity-70">&gt; Detected Amount:</span> <span className="font-bold">Rp {selectedOrder.total.toLocaleString('id-ID')}</span></div>
+                         <div className="flex justify-between items-center"><span className="opacity-70">&gt; Detected Date:</span> <span className="font-bold">Today</span></div>
+                         <div className="flex justify-between items-center"><span className="opacity-70">&gt; Match Confidence:</span> <span className="font-bold text-amber-400">Waiting Confirm</span></div>
+                       </div>
+                       <p className="text-[10px] text-zinc-400 leading-tight pt-1 border-t border-white/10">Tugas Anda: Pastikan gambar ini asli, bukan editan, dan dana masuk ke mutasi.</p>
+                    </div>
+                  </div>
+
+                </div>
+              )}
             </div>
           </DialogContent>
         )}

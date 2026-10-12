@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { getCustomerSession, createCustomerSession, CustomerSession } from '@/lib/customerSession';
-import { Search, Plus, Minus, ShoppingCart, ArrowLeft, ArrowRight, CheckCircle2, ChevronRight, X, BellRing } from 'lucide-react';
+import { Search, Plus, Minus, ShoppingCart, ArrowLeft, ArrowRight, CheckCircle2, ChevronRight, X, BellRing, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Product, Category, ProductVariant } from '@/app/pos/page'; // reuse types
@@ -92,6 +92,11 @@ export default function CustomerOrderPage() {
   
   // Checkout State
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isQRISModalOpen, setIsQRISModalOpen] = useState(false);
+  const [paymentProofFile, setPaymentProofFile] = useState<File | null>(null);
+  const [isUploadingProof, setIsUploadingProof] = useState(false);
+  const [paymentProofUrl, setPaymentProofUrl] = useState<string | null>(null);
+  const [aiErrorMsg, setAiErrorMsg] = useState<string | null>(null);
   const [hasReadyOrder, setHasReadyOrder] = useState(false);
   const activeOrderIdsRef = useRef<string[]>([]);
 
@@ -284,14 +289,14 @@ export default function CustomerOrderPage() {
     return `${prefix}0001`;
   };
 
-  const submitOrder = async () => {
+  const submitOrder = async (proofUrl: string | null = null, isAiVerified: boolean = false) => {
     if (!session || isProcessing || cart.length === 0) return;
     setIsProcessing(true);
 
     try {
       // Create new order every time
       const targetOrderId = await generateOrderId();
-      const paymentStatus = 'UNPAID';
+      const paymentStatus = isAiVerified ? 'PAID' : 'PENDING_VERIFICATION';
 
       // Check if there's an existing session to label it (Tambahan)
       const { data: existingTx } = await supabase
@@ -306,14 +311,17 @@ export default function CustomerOrderPage() {
 
       const transaction = {
         id: targetOrderId,
-        method: 'Bayar Nanti',
+        method: 'QRIS',
         total: cartTotal,
         cashier_name: 'Customer QR',
         customer_name: cName,
-        status: 'pending',
+        status: isAiVerified ? 'preparing' : 'pending',
         order_source: 'CUSTOMER_QR',
         customer_session_id: session.sessionId,
-        payment_status: paymentStatus
+        payment_status: paymentStatus,
+        payment_proof_url: proofUrl,
+        payment_confirmed_at: isAiVerified ? new Date().toISOString() : null,
+        payment_confirmed_by: isAiVerified ? 'AI System' : null
       };
 
       const { error: txError } = await supabase.from('transactions').insert([transaction]);
@@ -339,6 +347,52 @@ export default function CustomerOrderPage() {
       console.error("Order submission failed", err);
       alert("Gagal membuat pesanan, silakan coba lagi.");
       setIsProcessing(false);
+    }
+  };
+
+  const handleUploadAndSubmit = async () => {
+    if (!paymentProofFile) {
+      setAiErrorMsg("Harap pilih gambar bukti pembayaran terlebih dahulu.");
+      return;
+    }
+    
+    setAiErrorMsg(null);
+    setIsUploadingProof(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', paymentProofFile);
+      formData.append('expectedAmount', cartTotal.toString());
+      
+      const res = await fetch('/api/upload-proof', {
+        method: 'POST',
+        body: formData
+      });
+      
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Gagal upload');
+      
+      if (data.ai_result) {
+        if (data.ai_result.error) {
+           console.log("AI Error Triggered:", data.ai_result.error);
+           setAiErrorMsg("Server AI sedang sibuk memproses antrean. Silakan tekan 'Selesai & Proses Pesanan' lagi dalam beberapa detik.");
+           setIsUploadingProof(false);
+           return; // Stop submission entirely, wait for AI to be available
+        } else if (data.ai_result.is_valid === false) {
+           setAiErrorMsg(data.ai_result.reason || "Gambar tidak valid atau nominal tidak sesuai tagihan.");
+           setIsUploadingProof(false);
+           return; // Stop submission
+        }
+      }
+      
+      setPaymentProofUrl(data.imageUrl);
+      setIsQRISModalOpen(false);
+      await submitOrder(data.imageUrl, data.ai_result?.is_valid === true);
+      
+    } catch (err: any) {
+      console.error(err);
+      setAiErrorMsg("Gagal mengupload bukti pembayaran: " + err.message);
+    } finally {
+      setIsUploadingProof(false);
     }
   };
 
@@ -761,17 +815,17 @@ export default function CustomerOrderPage() {
               <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
             </div>
             <div>
-              <div className="font-bold text-sm text-amber-500">Pembayaran di Kasir</div>
-              <div className="text-xs text-zinc-400 mt-1">Silakan selesaikan pembayaran langsung di kasir (tunai/QRIS) saat pesanan selesai.</div>
+              <div className="font-bold text-sm text-amber-500">Pembayaran via QRIS</div>
+              <div className="text-xs text-zinc-400 mt-1">Selesaikan pembayaran melalui QRIS di halaman berikutnya agar pesanan langsung diproses.</div>
             </div>
           </div>
 
           <Button
-            onClick={submitOrder}
+            onClick={() => setIsQRISModalOpen(true)}
             disabled={isProcessing}
             className="w-full h-14 rounded-2xl text-base font-black bg-amber-500/80 backdrop-blur-md border border-amber-400/50 hover:bg-amber-500/90 text-white shadow-[0_4px_15px_rgba(245,158,11,0.3)] disabled:opacity-50 mt-8 transition-all hover:scale-[1.02] active:scale-[0.98]"
           >
-            {isProcessing ? 'Memproses...' : 'Buat Pesanan Sekarang'}
+            {isProcessing ? 'Memproses...' : 'Buat Pesanan & Bayar'}
           </Button>
         </div>
       )}
@@ -851,6 +905,76 @@ export default function CustomerOrderPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* QRIS Upload Modal */}
+      <Dialog open={isQRISModalOpen} onOpenChange={setIsQRISModalOpen}>
+        <DialogContent className="sm:max-w-[420px] p-0 bg-background/95 backdrop-blur-xl border border-white/10 rounded-[2rem] overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+          <div className="relative p-6 sm:p-8">
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-32 bg-amber-500/20 blur-[60px] pointer-events-none" />
+            
+            <DialogHeader className="space-y-1 p-0 text-center mb-6 relative z-10">
+              <DialogTitle className="font-extrabold text-white text-2xl tracking-tight">Bayar dengan QRIS</DialogTitle>
+              <DialogDescription className="text-sm text-zinc-400 mt-2">
+                Scan QRIS di bawah ini, lalu upload bukti transfer untuk menyelesaikan pesanan.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex flex-col items-center space-y-6 relative z-10">
+              {/* QR Code Container */}
+              <div className="bg-white p-4 rounded-3xl shadow-[0_0_30px_rgba(255,255,255,0.1)] relative group w-full max-w-[240px] mx-auto aspect-square flex items-center justify-center overflow-hidden">
+                <img src="/qris-static.jpg" alt="QRIS" className="w-full h-full object-contain mix-blend-multiply" onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x300?text=Upload\\nqris-static.jpg\\nke+folder+public'; }} />
+                <div className="absolute top-0 left-0 w-10 h-10 border-t-4 border-l-4 border-amber-500 rounded-tl-3xl pointer-events-none" />
+                <div className="absolute top-0 right-0 w-10 h-10 border-t-4 border-r-4 border-amber-500 rounded-tr-3xl pointer-events-none" />
+                <div className="absolute bottom-0 left-0 w-10 h-10 border-b-4 border-l-4 border-amber-500 rounded-bl-3xl pointer-events-none" />
+                <div className="absolute bottom-0 right-0 w-10 h-10 border-b-4 border-r-4 border-amber-500 rounded-br-3xl pointer-events-none" />
+              </div>
+              
+              {aiErrorMsg && (
+                <div className="w-full bg-red-500/10 border border-red-500/30 rounded-2xl p-4 flex flex-col items-center text-center gap-2 animate-in fade-in zoom-in duration-300">
+                  <div className="text-red-500"><XCircle size={24} /></div>
+                  <div className="text-sm text-red-200 leading-relaxed font-medium">{aiErrorMsg}</div>
+                </div>
+              )}
+
+              {/* Total Tagihan */}
+              <div className="text-center w-full bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl py-4 px-6 shadow-inner">
+                <p className="text-xs text-amber-500 font-bold uppercase tracking-[0.1em] mb-1">Total Tagihan:</p>
+                <p className="text-3xl font-black text-white tracking-tight">Rp {cartTotal.toLocaleString('id-ID')}</p>
+              </div>
+
+              {/* Upload Input */}
+              <div className="w-full">
+                <label className="block text-sm font-semibold text-zinc-300 mb-2">Upload Bukti Pembayaran</label>
+                <input 
+                  type="file" 
+                  accept="image/*"
+                  onChange={(e) => setPaymentProofFile(e.target.files?.[0] || null)}
+                  className="w-full text-sm text-zinc-400 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-amber-500/20 file:text-amber-500 hover:file:bg-amber-500/30 transition-all border border-white/10 rounded-xl p-1 bg-black/20 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-col gap-3 mt-8 relative z-10">
+              <Button 
+                onClick={handleUploadAndSubmit} 
+                className="w-full h-14 bg-amber-500 hover:bg-amber-400 text-black font-black text-base rounded-xl transition-all border-none shadow-lg shadow-amber-500/20"
+                disabled={isUploadingProof || !paymentProofFile}
+              >
+                {isUploadingProof ? "Mengupload..." : "Selesai & Proses Pesanan"}
+              </Button>
+              <Button 
+                onClick={() => setIsQRISModalOpen(false)} 
+                variant="ghost"
+                className="w-full h-12 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-all font-medium"
+                disabled={isUploadingProof}
+              >
+                Batal
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
