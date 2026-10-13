@@ -43,7 +43,15 @@ export function OrderQueueContainer({ className, onAdvanceOrder, orders: propsOr
         if (itData) itemsData = itData;
       }
 
-      const mapped: QueueOrder[] = data.map((tx: any, idx: number) => {
+      const mapped: QueueOrder[] = data
+        .filter((tx: any) => {
+          // Pesanan Customer QR yang masih pending belum dikonfirmasi kasir/masuk antrean dapur
+          if (tx.order_source === 'CUSTOMER_QR' && tx.status === 'pending') {
+            return false;
+          }
+          return true;
+        })
+        .map((tx: any, idx: number) => {
         let s: OrderStatus = "diproses";
         if (tx.status === "pending") s = "baru";
         else if (tx.status === "ready") s = "siap";

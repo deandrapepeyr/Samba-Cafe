@@ -363,7 +363,12 @@ export default function POSPage() {
           items: itemsData ? itemsData.filter((i: any) => i.transaction_id === tx.id) : []
         }));
 
-        const newPending = txWithItems.filter(d => d.status === 'pending' && d.order_source === 'CUSTOMER_QR');
+        // Only show pending QR orders on POS if customer has uploaded proof / waiting confirmation
+        const newPending = txWithItems.filter(d => 
+          d.status === 'pending' && 
+          d.order_source === 'CUSTOMER_QR' && 
+          (d.payment_status === 'WAITING_CONFIRMATION' || d.payment_status === 'AI_VERIFIED' || !!d.payment_proof_url)
+        );
         const newPreparing = txWithItems.filter(d => d.status === 'preparing' || d.status === 'ready');
         setPendingQrOrders(newPending);
         setPreparingOrders(newPreparing);
@@ -1574,8 +1579,8 @@ export default function POSPage() {
                   <QrCode size={20} />
                 </div>
                 <div>
-                  <h3 className="font-bold text-amber-500 text-sm md:text-base">Pesanan Mandiri (QR) Masuk!</h3>
-                  <p className="text-xs md:text-sm text-zinc-400">Ada {pendingQrOrders.length} pesanan yang menunggu konfirmasi kasir.</p>
+                  <h3 className="font-bold text-amber-500 text-sm md:text-base">Pesanan Mandiri (QR) Valid Masuk!</h3>
+                  <p className="text-xs md:text-sm text-zinc-400">Ada {pendingQrOrders.length} pesanan terverifikasi AI yang siap dikonfirmasi kasir.</p>
                 </div>
               </div>
               <Link href="/orders" className="w-full sm:w-auto bg-amber-500 hover:bg-amber-400 text-black font-bold h-10 px-6 rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-amber-500/20 transition-transform active:scale-95">
@@ -2535,13 +2540,13 @@ export default function POSPage() {
 
             <div className="flex flex-col items-center space-y-6 relative z-10">
               {/* QR Code Container */}
-              <div className="bg-white p-4 rounded-3xl shadow-[0_0_30px_rgba(255,255,255,0.1)] relative group w-full max-w-[280px] mx-auto aspect-square flex items-center justify-center overflow-hidden">
-                <img src="/qris-static.jpg" alt="QRIS" className="w-full h-full object-contain mix-blend-multiply" onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x300?text=Upload\\nqris-static.jpg\\nke+folder+public'; }} />
-                {/* Corner Scanner Accents */}
-                <div className="absolute top-0 left-0 w-10 h-10 border-t-4 border-l-4 border-primary rounded-tl-3xl pointer-events-none" />
-                <div className="absolute top-0 right-0 w-10 h-10 border-t-4 border-r-4 border-primary rounded-tr-3xl pointer-events-none" />
-                <div className="absolute bottom-0 left-0 w-10 h-10 border-b-4 border-l-4 border-primary rounded-bl-3xl pointer-events-none" />
-                <div className="absolute bottom-0 right-0 w-10 h-10 border-b-4 border-r-4 border-primary rounded-br-3xl pointer-events-none" />
+              <div className="bg-white p-2 rounded-2xl shadow-[0_0_30px_rgba(255,255,255,0.1)] relative group w-full max-w-[280px] mx-auto flex items-center justify-center overflow-hidden border border-white/20">
+                <img 
+                  src="/qris-static.jpg" 
+                  alt="QRIS Samba Cafe" 
+                  className="w-full h-auto object-contain rounded-xl shadow-sm" 
+                  onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400?text=QRIS+Samba+Cafe'; }} 
+                />
               </div>
 
               {/* Total Tagihan */}

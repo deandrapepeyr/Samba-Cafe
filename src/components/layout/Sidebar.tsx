@@ -93,14 +93,16 @@ export function Sidebar({ onLogoutClick, onLoginClick }: { onLogoutClick?: () =>
         .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, (payload) => {
           fetchActiveCount();
           if (payload.eventType === 'INSERT' && payload.new?.order_source === 'CUSTOMER_QR') {
+            if (payload.new?.payment_status === 'WAITING_CONFIRMATION' || payload.new?.payment_status === 'AI_VERIFIED') {
+              playNotificationSound();
+              setNewOrderNotification({ id: payload.new.id, name: `${payload.new.customer_name || 'Customer'} (Bukti QR)` });
+              setTimeout(() => setNewOrderNotification(null), 10000);
+            }
+          } else if (payload.eventType === 'UPDATE' && payload.new?.order_source === 'CUSTOMER_QR' && 
+            (payload.new?.payment_status === 'WAITING_CONFIRMATION' || payload.new?.payment_status === 'AI_VERIFIED') && 
+            payload.old?.payment_status !== 'WAITING_CONFIRMATION' && payload.old?.payment_status !== 'AI_VERIFIED') {
             playNotificationSound();
-            setNewOrderNotification({ id: payload.new.id, name: payload.new.customer_name || 'Customer' });
-            setTimeout(() => setNewOrderNotification(null), 10000);
-          } else if (payload.eventType === 'UPDATE' && payload.new?.order_source === 'CUSTOMER_QR' && payload.new?.status === 'pending') {
-            // Because Supabase 'old' payload might only contain the ID, we rely on the client setting it to pending
-            // If it becomes pending via update, it means new items were added!
-            playNotificationSound();
-            setNewOrderNotification({ id: payload.new.id, name: `${payload.new.customer_name || 'Customer'} (Tambahan)` });
+            setNewOrderNotification({ id: payload.new.id, name: `${payload.new.customer_name || 'Customer'} (Bukti QR)` });
             setTimeout(() => setNewOrderNotification(null), 10000);
           }
         })
@@ -148,11 +150,15 @@ export function Sidebar({ onLogoutClick, onLoginClick }: { onLogoutClick?: () =>
 
     const { data } = await supabase
       .from('transactions')
-      .select('status')
+      .select('status, order_source, payment_status')
       .gte('created_at', startOfDay.toISOString());
 
     if (data) {
-      const active = data.filter(t => {
+      const active = data.filter((t: any) => {
+        // Customer QR orders only count if confirmed or waiting confirmation
+        if (t.order_source === 'CUSTOMER_QR' && t.status === 'pending') {
+          return t.payment_status === 'AI_VERIFIED' || t.payment_status === 'WAITING_CONFIRMATION';
+        }
         const st = (t.status || 'preparing').toLowerCase();
         return st === 'pending' || st === 'preparing' || st === 'ready' || st === 'paid';
       }).length;

@@ -25,7 +25,12 @@ import {
   FileEdit,
   Banknote,
   Trash2,
-  Scan
+  Scan,
+  AlertTriangle,
+  Sparkles,
+  X,
+  XCircle,
+  ShieldCheck
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
@@ -74,14 +79,187 @@ export default function OrdersPage() {
   const [editedItems, setEditedItems] = useState<OrderItem[]>([]);
   const [now, setNow] = useState(new Date());
 
+  // --- AI Verification State ---
+  type AiChecklistItem = {
+    passed: boolean;
+    label: string;
+    detail: string;
+  };
+
+  type AiVerificationData = {
+    is_valid: boolean;
+    detected_amount: number | null;
+    amount_matches?: boolean;
+    is_time_valid?: boolean;
+    provider?: string;
+    status_text?: string;
+    transaction_date?: string;
+    transaction_time?: string;
+    reason: string;
+    confidence?: string;
+    issues?: string[];
+    checklist?: {
+      amount_check?: AiChecklistItem;
+      time_check?: AiChecklistItem;
+      status_check?: AiChecklistItem;
+      fraud_check?: AiChecklistItem;
+    };
+  };
+  const [aiVerifications, setAiVerifications] = useState<Record<string, AiVerificationData>>({});
+  const [analyzingOrderIds, setAnalyzingOrderIds] = useState<Record<string, boolean>>({});
+  const [aiErrors, setAiErrors] = useState<Record<string, string>>({});
+
   const prevOrderCountRef = useRef<number>(0);
   const localUpdatesRef = useRef<Record<string, number>>({});
+  const aiVerifiedIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!isLoading && !role) {
       router.replace('/pos');
     }
   }, [role, isLoading, router]);
+
+  // AI Verification trigger for order detail
+  const verifyProofWithAi = async (order: Order, force = false) => {
+    if (!order.payment_proof_url) return;
+    if (!force && (aiVerifications[order.id] || analyzingOrderIds[order.id])) return;
+
+    setAnalyzingOrderIds(prev => ({ ...prev, [order.id]: true }));
+    setAiErrors(prev => {
+      const copy = { ...prev };
+      delete copy[order.id];
+      return copy;
+    });
+
+    try {
+      const res = await fetch('/api/verify-proof', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: order.id,
+          imageUrl: order.payment_proof_url,
+          expectedAmount: order.total,
+          force
+        })
+      });
+
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Gagal memverifikasi bukti transfer dengan AI');
+      }
+
+      setAiVerifications(prev => ({
+        ...prev,
+        [order.id]: data.result
+      }));
+
+      try {
+        if (data.result) {
+          localStorage.setItem(`samba_ai_res_${order.id}`, JSON.stringify(data.result));
+        }
+      } catch (e) {}
+
+      // Track that this order has been AI-verified (via ref to avoid dep array issues)
+      aiVerifiedIdsRef.current.add(order.id);
+
+      // Guard: prevent polling (3s interval) from overwriting this AI-verified status
+      localUpdatesRef.current[order.id] = Date.now();
+
+      // Immediately sync local order state to reflect the new AI verification status
+      const newStatus = data.result?.is_valid ? (data.status || 'preparing') : 'pending';
+      const newPaymentStatus = data.result?.is_valid ? (data.payment_status || 'PAID') : 'PAYMENT_REJECTED';
+
+      setOrders(prev => prev.map(o => o.id === order.id ? {
+        ...o,
+        status: newStatus,
+        payment_status: newPaymentStatus
+      } : o));
+
+      setSelectedOrder(prev => prev && prev.id === order.id ? {
+        ...prev,
+        status: newStatus,
+        payment_status: newPaymentStatus
+      } : prev);
+
+
+    } catch (err: any) {
+      console.error('AI verification failed:', err);
+      setAiErrors(prev => ({
+        ...prev,
+        [order.id]: err.message || 'Server AI sedang sibuk'
+      }));
+    } finally {
+      setAnalyzingOrderIds(prev => ({ ...prev, [order.id]: false }));
+    }
+  };
+
+  // Auto-scan any pending QR orders with proof so they NEVER stay in yellow "Memeriksa Bukti..."
+  useEffect(() => {
+    const unverifiedPending = orders.find(
+      o => o.status === 'pending' && 
+           o.order_source === 'CUSTOMER_QR' && 
+           o.payment_proof_url && 
+           (
+             o.payment_status === 'PENDING_VERIFICATION' || 
+             o.payment_status === 'WAITING_CONFIRMATION' ||
+             !o.payment_status
+           ) &&
+           !analyzingOrderIds[o.id] &&
+           !aiVerifiedIdsRef.current.has(o.id)  // skip jika sudah pernah diverifikasi AI
+    );
+
+    if (unverifiedPending) {
+      verifyProofWithAi(unverifiedPending, false);
+    }
+  }, [orders, analyzingOrderIds]);
+
+  // Load AI verification result when opening order detail
+  useEffect(() => {
+    if (selectedOrder && selectedOrder.payment_proof_url) {
+      const currentRes = aiVerifications[selectedOrder.id];
+      const isOutdated = !currentRes || !currentRes.checklist || (currentRes.reason?.includes('12.000') && selectedOrder.total !== 12000) || currentRes.checklist?.status_check?.detail?.includes('Duplikat');
+
+      if (isOutdated) {
+        // Clear stale local storage
+        try {
+          localStorage.removeItem(`samba_ai_res_${selectedOrder.id}`);
+        } catch (e) {}
+
+        // Immediately trigger fresh AI verification with force=true
+        if (!analyzingOrderIds[selectedOrder.id]) {
+          verifyProofWithAi(selectedOrder, true);
+        }
+      }
+    }
+  }, [selectedOrder?.id, selectedOrder?.payment_proof_url, aiVerifications]);
+
+  const confirmPaymentAndAcceptOrder = async (order: Order) => {
+    setUpdatingId(order.id);
+    const nowIso = new Date().toISOString();
+    const userName = localStorage.getItem('samba_admin_name') || 'Cashier';
+    
+    // Update payment status in Supabase
+    await supabase.from('transactions').update({ 
+      payment_status: 'PAID',
+      payment_confirmed_at: nowIso,
+      payment_confirmed_by: userName
+    }).eq('id', order.id);
+
+    // Transition order to 'preparing' & handle session merging
+    await updateOrderStatus(order.id, 'preparing');
+
+    setSelectedOrder(prev => prev && prev.id === order.id ? {
+      ...prev,
+      payment_status: 'PAID',
+      status: 'preparing'
+    } : null);
+  };
+
+  const rejectPayment = async (order: Order) => {
+    if (!confirm("Apakah Anda yakin ingin menolak pembayaran pesanan ini?")) return;
+    setUpdatingId(order.id);
+    await updatePaymentStatus(order.id, 'PAYMENT_REJECTED');
+  };
 
   // Update timer every 15s for dynamic elapsed time calculation
   useEffect(() => {
@@ -126,17 +304,29 @@ export default function OrdersPage() {
       .from('transactions')
       .select('*')
       .or(`created_at.gte.${startOfDay.toISOString()},status.eq.pending,status.eq.preparing,status.eq.ready,status.eq.Paid,status.eq.paid,status.is.null`)
+      .neq('status', 'cancelled')
       .order('created_at', { ascending: true });
 
     if (txData && txData.length > 0) {
-      const txIds = txData.map(t => t.id);
+      // Hide customer QR orders that are still awaiting payment during the 5-minute window
+      const validTxData = txData.filter(tx => {
+        if (tx.order_source === 'CUSTOMER_QR' && tx.status === 'pending') {
+          // Only show on POS if payment has been confirmed/uploaded for verification
+          if (tx.payment_status === 'AWAITING_PAYMENT' || !tx.payment_proof_url) {
+            return false;
+          }
+        }
+        return true;
+      });
+
+      const txIds = validTxData.map(t => t.id);
       
       const { data: itemsData } = await supabase
         .from('transaction_items')
         .select('*')
         .in('transaction_id', txIds);
 
-      const formattedOrders: Order[] = txData.map(tx => {
+      const formattedOrders: Order[] = validTxData.map(tx => {
         const items = itemsData ? itemsData.filter(i => i.transaction_id === tx.id) : [];
         const dateObj = new Date(tx.created_at);
         
@@ -502,7 +692,11 @@ export default function OrdersPage() {
   const matchesSourceFilter = (o: Order) => sourceFilter === 'all' || (sourceFilter === 'pos' && o.order_source === 'POS') || (sourceFilter === 'customer_qr' && o.order_source === 'CUSTOMER_QR');
 
   // Filtered lists
-  const pendingOrders = orders.filter(o => o.status === 'pending' && matchesSourceFilter(o) && (o.id.includes(searchQuery) || o.items.some(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()))));
+  const pendingOrders = orders.filter(o => {
+    if (o.status !== 'pending') return false;
+    if (o.order_source === 'CUSTOMER_QR' && (!o.payment_proof_url || o.payment_status === 'AWAITING_PAYMENT')) return false;
+    return matchesSourceFilter(o) && (o.id.includes(searchQuery) || o.items.some(i => i.name.toLowerCase().includes(searchQuery.toLowerCase())));
+  });
   const preparingOrders = orders.filter(o => o.status === 'preparing' && matchesSourceFilter(o) && (o.id.includes(searchQuery) || o.items.some(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()))));
   const readyOrders = orders.filter(o => o.status === 'ready' && matchesSourceFilter(o) && (o.id.includes(searchQuery) || o.items.some(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()))));
   const completedOrders = orders
@@ -559,9 +753,30 @@ export default function OrdersPage() {
                 }`}>
                   {order.method}
                 </span>
-                {order.payment_status === 'WAITING_CONFIRMATION' && (
+                {order.payment_status === 'AI_VERIFIED' && (
+                  <span className="shrink-0 whitespace-nowrap text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                    ✅ Valid AI
+                  </span>
+                )}
+                {/* PAID via QR with proof = AI verified */}
+                {order.payment_status === 'PAID' && order.order_source === 'CUSTOMER_QR' && order.payment_proof_url && (
+                  <span className="shrink-0 whitespace-nowrap text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                    ✅ Terverifikasi AI
+                  </span>
+                )}
+                {order.payment_status === 'PAYMENT_REJECTED' && order.order_source === 'CUSTOMER_QR' && (
+                  <span className="shrink-0 whitespace-nowrap text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-red-500/10 text-red-400 border-red-500/20">
+                    ❌ Ditolak AI
+                  </span>
+                )}
+                {order.payment_status === 'AI_INVALID' && (
+                  <span className="shrink-0 whitespace-nowrap text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-red-500/10 text-red-400 border-red-500/20">
+                    ❌ Ditolak AI
+                  </span>
+                )}
+                {(!order.payment_status || order.payment_status === 'WAITING_CONFIRMATION' || order.payment_status === 'PENDING_VERIFICATION') && order.method === 'QRIS' && order.status === 'pending' && (
                   <span className="shrink-0 whitespace-nowrap text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-yellow-500/10 text-yellow-400 border-yellow-500/20 animate-pulse">
-                    Menunggu Konfirmasi Pembayaran
+                    🔍 Memeriksa Bukti...
                   </span>
                 )}
               </div>
@@ -606,14 +821,31 @@ export default function OrdersPage() {
                 Detail
               </button>
 
-              {order.status === 'pending' && order.payment_status === 'WAITING_CONFIRMATION' && (
+              {order.status === 'pending' && (
                 <>
-                  <button onClick={() => updatePaymentStatus(order.id, 'PAID', 'preparing')} className="h-7 px-2.5 text-[10px] font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-all shrink-0">
-                    Konfirmasi Bayar
-                  </button>
-                  <button onClick={() => updatePaymentStatus(order.id, 'PAYMENT_REJECTED')} className="h-7 px-2.5 text-[10px] font-bold text-white bg-red-600 hover:bg-red-500 rounded-lg transition-all shrink-0">
-                    Tolak
-                  </button>
+                  {order.payment_proof_url ? (
+                    <button 
+                      onClick={() => setSelectedOrder(order)} 
+                      className={`h-7 px-2.5 text-[10px] font-bold text-white rounded-lg transition-all shrink-0 flex items-center gap-1 shadow-md ${
+                        order.payment_status === 'AI_VERIFIED'
+                          ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 hover:brightness-110 shadow-emerald-500/10'
+                          : order.payment_status === 'AI_INVALID' || order.payment_status === 'PAYMENT_REJECTED'
+                          ? 'bg-gradient-to-r from-red-600 to-red-500 hover:brightness-110 shadow-red-500/10'
+                          : 'bg-gradient-to-r from-amber-500 to-amber-600 hover:brightness-110 shadow-amber-500/10'
+                      }`}
+                    >
+                      <Sparkles size={11} /> {order.payment_status === 'AI_VERIFIED' ? 'Bukti Valid & Terima' : (order.payment_status === 'AI_INVALID' || order.payment_status === 'PAYMENT_REJECTED') ? 'Cek Bukti Ditolak' : 'Cek Bukti AI & Terima'}
+                    </button>
+                  ) : order.payment_status === 'WAITING_CONFIRMATION' ? (
+                    <>
+                      <button onClick={() => updatePaymentStatus(order.id, 'PAID', 'preparing')} className="h-7 px-2.5 text-[10px] font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-all shrink-0">
+                        Konfirmasi Bayar
+                      </button>
+                      <button onClick={() => updatePaymentStatus(order.id, 'PAYMENT_REJECTED')} className="h-7 px-2.5 text-[10px] font-bold text-white bg-red-600 hover:bg-red-500 rounded-lg transition-all shrink-0">
+                        Tolak
+                      </button>
+                    </>
+                  ) : null}
                 </>
               )}
 
@@ -626,8 +858,16 @@ export default function OrdersPage() {
               {order.status === 'preparing' && (
                 <button
                   disabled={updatingId === order.id}
-                  onClick={() => updateOrderStatus(order.id, 'ready')}
+                  onClick={() => {
+                    // Kasir double check saat pesanan selesai: jika Customer QR dengan bukti transfer, buka detail modal untuk validasi kasir!
+                    if (order.order_source === 'CUSTOMER_QR' && order.payment_proof_url) {
+                      setSelectedOrder(order);
+                    } else {
+                      updateOrderStatus(order.id, 'ready');
+                    }
+                  }}
                   className="h-7 px-2.5 text-[10px] font-extrabold text-black bg-gradient-to-r from-[#E3B24C] to-[#B98A2E] shadow-md hover:brightness-110 disabled:opacity-50 rounded-lg transition-all flex items-center gap-1 shrink-0 whitespace-nowrap border-none"
+                  title={order.order_source === 'CUSTOMER_QR' ? 'Klik untuk double check bukti pembayaran & selesaikan pesanan' : 'Selesai dimasak'}
                 >
                   {updatingId === order.id ? <RefreshCw size={12} className="animate-spin" /> : (
                     <>
@@ -1094,7 +1334,7 @@ export default function OrdersPage() {
                           </button>
                         )}
 
-                        {selectedOrder.status === 'pending' && selectedOrder.payment_status !== 'PENDING_VERIFICATION' && (
+                        {selectedOrder.status === 'pending' && !selectedOrder.payment_proof_url && selectedOrder.method !== 'Bayar Nanti' && (
                           <button
                             onClick={() => updateOrderStatus(selectedOrder.id, 'preparing')}
                             className="w-full h-12 text-[13px] font-extrabold text-black bg-gradient-to-r from-blue-500 to-blue-600 hover:brightness-110 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 border-none"
@@ -1103,45 +1343,112 @@ export default function OrdersPage() {
                           </button>
                         )}
 
-                        {selectedOrder.status === 'pending' && selectedOrder.payment_status === 'PENDING_VERIFICATION' && (
+                            {selectedOrder.status === 'pending' && selectedOrder.payment_proof_url && (
                           <div className="pt-2 mt-2 border-t border-white/10 space-y-3">
-                            <p className="text-[11px] text-amber-500 font-medium bg-amber-500/10 p-2.5 rounded-lg border border-amber-500/20">
-                              ⚠️ Harap periksa bukti pembayaran di samping. Sistem AI akan segera diintegrasikan untuk mengecek otomatis.
-                            </p>
-                            
-                            <button
-                              disabled={updatingId === selectedOrder.id}
-                              onClick={async () => {
-                                if (!confirm("Apakah Anda yakin pembayaran ini sudah masuk ke GoPay Merchant?\n\nIni akan sekaligus menerima pesanan.")) return;
-                                setUpdatingId(selectedOrder.id);
-                                const now = new Date().toISOString();
-                                const userName = localStorage.getItem('samba_admin_name') || 'Cashier';
-                                await supabase.from('transactions').update({ 
-                                  payment_status: 'PAID',
-                                  payment_confirmed_at: now,
-                                  payment_confirmed_by: userName,
-                                  status: 'preparing' 
-                                }).eq('id', selectedOrder.id);
-                                
-                                localUpdatesRef.current[selectedOrder.id] = Date.now();
-                                fetchOrders(false);
-                                setUpdatingId(null);
-                                setSelectedOrder({...selectedOrder, payment_status: 'PAID', status: 'preparing'});
-                              }}
-                              className="w-full h-12 text-[13px] font-extrabold text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20"
-                            >
-                              <CheckCircle2 size={16} /> {updatingId === selectedOrder.id ? 'Memproses...' : 'Konfirmasi Pembayaran & Terima'}
-                            </button>
+                            {aiVerifications[selectedOrder.id]?.is_valid || selectedOrder.payment_status === 'PAID' ? (
+                              <div className="p-3 bg-emerald-500/10 border border-emerald-500/25 rounded-xl text-emerald-400 text-xs flex items-start gap-2.5">
+                                <CheckCircle2 size={16} className="shrink-0 mt-0.5 text-emerald-400" />
+                                <div>
+                                  <p className="font-bold">AI Menandai: Bukti Pembayaran Valid ✅</p>
+                                  <p className="text-[11px] text-zinc-300 mt-0.5">Nominal sesuai (Rp {selectedOrder.total.toLocaleString('id-ID')}). Silakan konfirmasi untuk memasukkan pesanan ke antrean dapur.</p>
+                                </div>
+                              </div>
+                            ) : (aiVerifications[selectedOrder.id]?.is_valid === false || selectedOrder.payment_status === 'PAYMENT_REJECTED' || selectedOrder.payment_status === 'AI_INVALID') ? (
+                              <div className="p-3.5 bg-red-500/10 border border-red-500/25 rounded-xl text-red-400 text-xs flex items-start gap-2.5">
+                                <AlertTriangle size={16} className="shrink-0 mt-0.5 text-red-400" />
+                                <div className="space-y-1 w-full">
+                                  <p className="font-bold text-red-300">AI Menolak Otomatis: Bukti Tidak Valid 🚫</p>
+                                  {aiVerifications[selectedOrder.id]?.issues && aiVerifications[selectedOrder.id].issues!.length > 0 ? (
+                                    <ul className="text-[11px] text-zinc-300 space-y-1 list-disc list-inside mt-1 leading-relaxed">
+                                      {aiVerifications[selectedOrder.id].issues!.map((iss, idx) => (
+                                        <li key={idx} className="text-red-200/90">{iss}</li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <p className="text-[11px] text-zinc-300 mt-0.5 leading-relaxed">
+                                      {aiVerifications[selectedOrder.id]?.reason && !aiVerifications[selectedOrder.id]?.reason.includes('12.000')
+                                        ? aiVerifications[selectedOrder.id].reason
+                                        : 'Bukti transfer ditolak (waktu pembayaran lewat dari batas 5 menit atau bukti duplikat). Pelanggan diminta upload ulang bukti yang benar.'}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            ) : analyzingOrderIds[selectedOrder.id] ? (
+                              <div className="p-3 bg-blue-500/10 border border-blue-500/25 rounded-xl text-blue-400 text-xs flex items-start gap-2.5 animate-pulse">
+                                <RefreshCw size={16} className="shrink-0 mt-0.5 animate-spin text-blue-400" />
+                                <div>
+                                  <p className="font-bold">AI sedang memeriksa bukti pembayaran...</p>
+                                  <p className="text-[11px] text-zinc-300 mt-0.5">Sistem sedang menganalisis struk transfer di samping.</p>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="p-3 bg-amber-500/10 border border-amber-500/25 rounded-xl text-amber-400 text-xs flex items-start gap-2.5">
+                                <Scan size={16} className="shrink-0 mt-0.5 text-amber-400" />
+                                <div>
+                                  <p className="font-bold">Konfirmasi Pembayaran Kasir</p>
+                                  <p className="text-[11px] text-zinc-300 mt-0.5">Periksa bukti pembayaran di samping lalu klik konfirmasi untuk menerima pesanan.</p>
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="flex gap-2">
+                              <button
+                                disabled={updatingId === selectedOrder.id}
+                                onClick={() => confirmPaymentAndAcceptOrder(selectedOrder)}
+                                className="flex-1 h-12 text-[13px] font-extrabold text-white bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 disabled:opacity-50 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
+                              >
+                                <CheckCircle2 size={16} /> {updatingId === selectedOrder.id ? 'Memproses...' : 'Konfirmasi Pembayaran & Terima'}
+                              </button>
+                              
+                              {/* Tombol Tolak hanya muncul jika belum ditolak AI dan belum ada hasil AI */}
+                              {selectedOrder.payment_status !== 'PAYMENT_REJECTED' && selectedOrder.payment_status !== 'AI_INVALID' && !aiVerifications[selectedOrder.id] && !analyzingOrderIds[selectedOrder.id] && (
+                                <button
+                                  disabled={updatingId === selectedOrder.id}
+                                  onClick={() => rejectPayment(selectedOrder)}
+                                  className="h-12 px-4 text-[12px] font-bold text-red-400 hover:text-white bg-red-500/10 hover:bg-red-600 border border-red-500/20 disabled:opacity-50 rounded-xl transition-all flex items-center justify-center gap-1.5"
+                                >
+                                  <X size={15} /> Tolak
+                                </button>
+                              )}
+                            </div>
                           </div>
                         )}
 
                         {selectedOrder.status === 'preparing' && (
-                          <button
-                            onClick={() => updateOrderStatus(selectedOrder.id, 'ready')}
-                            className="w-full h-12 text-[13px] font-extrabold text-black bg-gradient-to-r from-[#E3B24C] to-[#B98A2E] hover:brightness-110 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#B98A2E]/20 border-none"
-                          >
-                            <CheckCircle2 size={16} strokeWidth={2.5} /> Selesai Dimasak (Done)
-                          </button>
+                          <div className="space-y-3">
+                            {selectedOrder.order_source === 'CUSTOMER_QR' && selectedOrder.payment_proof_url && (
+                              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 flex items-start gap-2">
+                                <ShieldCheck size={16} className="shrink-0 mt-0.5 text-amber-400" />
+                                <div>
+                                  <p className="font-bold">Double Check Pembayaran Kasir</p>
+                                  <p className="text-[11px] text-zinc-300 mt-0.5">Pesanan sudah selesai dimasak. Silakan periksa bukti transfer di samping lalu konfirmasi untuk menyerahkan pesanan.</p>
+                                </div>
+                              </div>
+                            )}
+                            <div className="flex gap-2">
+                              <button
+                                disabled={updatingId === selectedOrder.id}
+                                onClick={async () => {
+                                  await updateOrderStatus(selectedOrder.id, 'ready');
+                                  setSelectedOrder(null);
+                                }}
+                                className="flex-1 h-12 text-[13px] font-extrabold text-black bg-gradient-to-r from-[#E3B24C] to-[#B98A2E] hover:brightness-110 disabled:opacity-50 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#B98A2E]/20 border-none"
+                              >
+                                <CheckCircle2 size={16} strokeWidth={2.5} /> {updatingId === selectedOrder.id ? 'Memproses...' : 'Bukti Valid & Selesai Dimasak (Done)'}
+                              </button>
+                              {selectedOrder.order_source === 'CUSTOMER_QR' && selectedOrder.payment_proof_url && (
+                                <button
+                                  disabled={updatingId === selectedOrder.id}
+                                  onClick={async () => {
+                                    await rejectPayment(selectedOrder);
+                                  }}
+                                  className="h-12 px-4 text-[12px] font-bold text-red-400 hover:text-white bg-red-500/10 hover:bg-red-600 border border-red-500/20 disabled:opacity-50 rounded-xl transition-all flex items-center justify-center gap-1.5"
+                                >
+                                  <X size={15} /> Tolak Bukti
+                                </button>
+                              )}
+                            </div>
+                          </div>
                         )}
 
                         {selectedOrder.status === 'ready' && (
@@ -1170,37 +1477,261 @@ export default function OrdersPage() {
               </div>
 
               {/* Right Column: AI Verification & Proof (Only shown if proof exists) */}
-              {selectedOrder.payment_proof_url && (
-                <div className="w-full md:w-[320px] lg:w-[420px] shrink-0 px-6 py-6 bg-[#0a0a0a] md:border-l border-white/5 print:hidden overflow-y-auto flex flex-col gap-4">
-                  
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-bold text-[13px] text-white flex items-center gap-2">
-                      <Scan size={16} className="text-blue-500" /> AI Verification Status
-                    </h4>
-                    <span className="text-[9px] bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded border border-blue-500/20 font-bold animate-pulse">Running...</span>
-                  </div>
+              {selectedOrder.payment_proof_url && (() => {
+                const isAnalyzing = !!analyzingOrderIds[selectedOrder.id];
+                const rawAiResult = aiVerifications[selectedOrder.id];
+                const aiErr = aiErrors[selectedOrder.id];
 
-                  <div className="relative w-full flex-1 min-h-[300px] rounded-xl border border-white/10 overflow-hidden bg-black flex flex-col group shadow-2xl">
-                    <a href={selectedOrder.payment_proof_url} target="_blank" rel="noopener noreferrer" className="absolute inset-0 z-10 cursor-zoom-in" title="Klik untuk memperbesar" />
+                // If cached result has stale "12.000" or lacks checklist, treat as stale
+                const isStale = !!rawAiResult && (
+                  !rawAiResult.checklist || 
+                  (!!rawAiResult.reason?.includes('12.000') && selectedOrder.total !== 12000)
+                );
+                const activeRaw = isStale ? null : rawAiResult;
+
+                // Fallback: If activeRaw is not yet loaded in React state, derive from order's status so it renders immediately
+                const aiResult = activeRaw || (
+                  selectedOrder.payment_status === 'PAID' ? {
+                    is_valid: true,
+                    detected_amount: selectedOrder.total,
+                    amount_matches: true,
+                    provider: selectedOrder.method || 'QRIS',
+                    status_text: 'BERHASIL',
+                    reason: 'Bukti transfer valid dan pembayaran telah terkonfirmasi.'
+                  } : (selectedOrder.payment_status === 'PAYMENT_REJECTED' || selectedOrder.payment_status === 'AI_INVALID') ? {
+                    is_valid: false,
+                    detected_amount: null,
+                    amount_matches: false,
+                    provider: selectedOrder.method || 'QRIS',
+                    status_text: 'DITOLAK',
+                    reason: 'Bukti transfer tidak sesuai (melebihi batas waktu 5 menit atau duplikat).'
+                  } : null
+                );
+
+                return (
+                  <div className="w-full md:w-[340px] lg:w-[440px] shrink-0 px-6 py-6 bg-[#0c0c0c] md:border-l border-white/5 print:hidden overflow-y-auto flex flex-col gap-4">
                     
-                    <div className="flex-1 w-full p-2 relative overflow-hidden">
-                      <img src={selectedOrder.payment_proof_url} alt="Bukti Pembayaran" className="w-full h-full object-contain transition-transform duration-700 group-hover:scale-105" />
-                      {/* Decorative AI Scan Line */}
-                      <div className="absolute top-0 left-0 w-full h-0.5 bg-blue-500/50 shadow-[0_0_10px_rgba(59,130,246,0.5)] animate-[scan_3s_ease-in-out_infinite]" />
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-bold text-sm text-white flex items-center gap-2">
+                        <Sparkles size={16} className="text-amber-400" /> Verifikasi AI Pembayaran
+                      </h4>
+                      {isAnalyzing ? (
+                        <span className="text-[10px] bg-blue-500/10 text-blue-400 px-2.5 py-0.5 rounded-full border border-blue-500/20 font-bold flex items-center gap-1.5 animate-pulse">
+                          <RefreshCw size={10} className="animate-spin" /> Menganalisis...
+                        </span>
+                      ) : aiResult ? (
+                        aiResult.is_valid ? (
+                          <span className="text-[10px] bg-emerald-500/15 text-emerald-400 px-2.5 py-0.5 rounded-full border border-emerald-500/30 font-bold flex items-center gap-1 shadow-sm shadow-emerald-500/10">
+                            <CheckCircle2 size={11} /> Bukti Valid
+                          </span>
+                        ) : (
+                          <span className="text-[10px] bg-red-500/15 text-red-400 px-2.5 py-0.5 rounded-full border border-red-500/30 font-bold flex items-center gap-1 shadow-sm shadow-red-500/10">
+                            <AlertTriangle size={11} /> Meragukan / Tidak Cocok
+                          </span>
+                        )
+                      ) : aiErr ? (
+                        <span className="text-[10px] bg-amber-500/15 text-amber-400 px-2.5 py-0.5 rounded-full border border-amber-500/30 font-bold">
+                          AI Sedang Sibuk
+                        </span>
+                      ) : null}
                     </div>
 
-                    <div className="relative z-20 bg-black/80 backdrop-blur-md p-4 border-t border-white/10 space-y-2 pointer-events-none">
-                       <div className="text-[11px] font-mono text-emerald-400 space-y-1">
-                         <div className="flex justify-between items-center"><span className="opacity-70">&gt; Detected Amount:</span> <span className="font-bold">Rp {selectedOrder.total.toLocaleString('id-ID')}</span></div>
-                         <div className="flex justify-between items-center"><span className="opacity-70">&gt; Detected Date:</span> <span className="font-bold">Today</span></div>
-                         <div className="flex justify-between items-center"><span className="opacity-70">&gt; Match Confidence:</span> <span className="font-bold text-amber-400">Waiting Confirm</span></div>
-                       </div>
-                       <p className="text-[10px] text-zinc-400 leading-tight pt-1 border-t border-white/10">Tugas Anda: Pastikan gambar ini asli, bukan editan, dan dana masuk ke mutasi.</p>
+                    {/* Image Preview Box */}
+                    <div className="relative w-full rounded-2xl border border-white/10 overflow-hidden bg-black flex flex-col group shadow-2xl">
+                      <a href={selectedOrder.payment_proof_url} target="_blank" rel="noopener noreferrer" className="absolute inset-0 z-10 cursor-zoom-in" title="Klik untuk memperbesar gambar di tab baru" />
+                      
+                      <div className="w-full h-[240px] p-2 relative overflow-hidden flex items-center justify-center bg-zinc-950/80">
+                        <img 
+                          src={selectedOrder.payment_proof_url} 
+                          alt="Bukti Pembayaran" 
+                          className="w-full h-full object-contain transition-transform duration-700 group-hover:scale-105" 
+                        />
+                        
+                        {/* Laser Scan Animation Line when analyzing */}
+                        {isAnalyzing && (
+                          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-amber-400 to-transparent shadow-[0_0_15px_rgba(251,191,36,0.8)] animate-scan pointer-events-none" />
+                        )}
+                      </div>
+
+                      <div className="px-3 py-2 bg-black/70 backdrop-blur border-t border-white/5 flex items-center justify-between text-[11px] text-zinc-400 z-20">
+                        <span className="text-zinc-500">Klik untuk zoom foto</span>
+                        <button 
+                          type="button" 
+                          onClick={(e) => { 
+                            e.preventDefault(); 
+                            e.stopPropagation(); 
+                            verifyProofWithAi(selectedOrder, true); 
+                          }}
+                          disabled={isAnalyzing}
+                          className="text-amber-400 hover:text-amber-300 font-medium flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                        >
+                          <RefreshCw size={11} className={isAnalyzing ? 'animate-spin' : ''} /> Pindai Ulang AI
+                        </button>
+                      </div>
                     </div>
+
+                    {/* AI Analysis Breakdown Box */}
+                    {isAnalyzing ? (
+                      <div className="rounded-2xl border border-blue-500/20 bg-blue-950/15 p-4 space-y-2.5 animate-pulse">
+                        <div className="flex items-center gap-2 text-xs font-bold text-blue-400">
+                          <RefreshCw size={14} className="animate-spin text-blue-400" />
+                          <span>Gemini AI sedang membaca struk pembayaran...</span>
+                        </div>
+                        <p className="text-[11px] text-zinc-400 leading-relaxed">
+                          Menganalisis nominal transfer, status transaksi, nama bank/e-wallet, serta mendeteksi keaslian gambar.
+                        </p>
+                      </div>
+                    ) : aiResult ? (
+                      <div className={`rounded-2xl border p-4 space-y-3.5 transition-all ${
+                        aiResult.is_valid 
+                          ? 'border-emerald-500/30 bg-emerald-950/20 shadow-lg shadow-emerald-500/5' 
+                          : 'border-red-500/30 bg-red-950/20 shadow-lg shadow-red-500/5'
+                      }`}>
+                        {/* Header Status */}
+                        <div className="flex items-center justify-between pb-2.5 border-b border-white/5">
+                          <span className="text-xs font-bold text-zinc-300">Hasil Analisis AI:</span>
+                          <span className={`text-[11px] font-extrabold uppercase tracking-wider flex items-center gap-1 ${
+                            aiResult.is_valid ? 'text-emerald-400' : 'text-red-400'
+                          }`}>
+                            {aiResult.is_valid ? (
+                              <><CheckCircle2 size={13} /> Status: Aman & Valid</>
+                            ) : (
+                              <><XCircle size={13} /> Status: Tidak Valid</>
+                            )}
+                          </span>
+                        </div>
+
+                        {/* Parameter Checklist / Poin Evaluasi */}
+                        {aiResult.checklist && (
+                          <div className="space-y-2 py-1">
+                            <p className="text-[10px] font-bold text-zinc-400 tracking-wider uppercase">Poin Pemeriksaan Bukti:</p>
+                            <div className="space-y-1.5 text-xs">
+                              {/* 1. Nominal Check */}
+                              <div className="flex items-start justify-between gap-2 p-2 rounded-lg bg-black/40 border border-white/5">
+                                <div className="flex items-center gap-2">
+                                  {aiResult.checklist.amount_check?.passed ? (
+                                    <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                                  ) : (
+                                    <XCircle size={14} className="text-red-400 shrink-0" />
+                                  )}
+                                  <span className="text-zinc-300 font-medium">Nominal:</span>
+                                </div>
+                                <span className={`text-[11px] font-mono text-right font-bold ${
+                                  aiResult.checklist.amount_check?.passed ? 'text-emerald-400' : 'text-red-400'
+                                }`}>
+                                  {aiResult.checklist.amount_check?.detail || (aiResult.detected_amount ? `Rp ${aiResult.detected_amount.toLocaleString('id-ID')}` : '-')}
+                                </span>
+                              </div>
+
+                              {/* 2. 5-Minute Window Check */}
+                              <div className="flex items-start justify-between gap-2 p-2 rounded-lg bg-black/40 border border-white/5">
+                                <div className="flex items-center gap-2">
+                                  {aiResult.checklist.time_check?.passed ? (
+                                    <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                                  ) : (
+                                    <XCircle size={14} className="text-red-400 shrink-0" />
+                                  )}
+                                  <span className="text-zinc-300 font-medium">Batas Waktu (5 Mnt):</span>
+                                </div>
+                                <span className={`text-[11px] font-mono text-right font-bold ${
+                                  aiResult.checklist.time_check?.passed ? 'text-emerald-400' : 'text-amber-400'
+                                }`}>
+                                  {aiResult.checklist.time_check?.detail || ([aiResult.transaction_date, aiResult.transaction_time].filter(Boolean).join(' ') || '-')}
+                                </span>
+                              </div>
+
+                              {/* 3. Status Transaksi */}
+                              <div className="flex items-start justify-between gap-2 p-2 rounded-lg bg-black/40 border border-white/5">
+                                <div className="flex items-center gap-2">
+                                  {aiResult.checklist.status_check?.passed ? (
+                                    <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                                  ) : (
+                                    <XCircle size={14} className="text-red-400 shrink-0" />
+                                  )}
+                                  <span className="text-zinc-300 font-medium">Status Struk:</span>
+                                </div>
+                                <span className={`text-[11px] font-mono text-right font-bold ${
+                                  aiResult.checklist.status_check?.passed ? 'text-emerald-400' : 'text-red-400'
+                                }`}>
+                                  {aiResult.checklist.status_check?.detail || aiResult.status_text || '-'}
+                                </span>
+                              </div>
+
+                              {/* 4. Keaslian / Fraud Check */}
+                              <div className="flex items-start justify-between gap-2 p-2 rounded-lg bg-black/40 border border-white/5">
+                                <div className="flex items-center gap-2">
+                                  {aiResult.checklist.fraud_check?.passed ? (
+                                    <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                                  ) : (
+                                    <XCircle size={14} className="text-red-400 shrink-0" />
+                                  )}
+                                  <span className="text-zinc-300 font-medium">Keaslian Bukti:</span>
+                                </div>
+                                <span className={`text-[11px] font-mono text-right font-bold ${
+                                  aiResult.checklist.fraud_check?.passed ? 'text-emerald-400' : 'text-red-400'
+                                }`}>
+                                  {aiResult.checklist.fraud_check?.detail || 'Bukan duplikat'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* List of issues if not valid */}
+                        {!aiResult.is_valid && aiResult.issues && aiResult.issues.length > 0 ? (
+                          <div className="p-3 bg-red-950/40 border border-red-500/20 rounded-xl space-y-1.5">
+                            <p className="text-[11px] font-extrabold text-red-300 flex items-center gap-1.5">
+                              <AlertTriangle size={13} className="text-red-400" /> Penyebab Bukti Tidak Valid:
+                            </p>
+                            <ul className="text-[11px] text-red-200/90 space-y-1 list-disc list-inside leading-relaxed font-sans">
+                              {aiResult.issues.map((iss, idx) => (
+                                <li key={idx}>{iss}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : !aiResult.is_valid ? (
+                          <div className="p-3 bg-red-950/40 border border-red-500/20 rounded-xl">
+                            <p className="text-[11px] text-red-200/90 leading-relaxed font-sans">
+                              {aiResult.reason && !aiResult.reason.includes('12.000')
+                                ? aiResult.reason
+                                : 'Bukti transfer tidak valid (melebihi batas waktu pembayaran 5 menit atau bukti duplikat).'}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="p-2.5 bg-emerald-950/40 border border-emerald-500/20 rounded-xl flex items-center gap-2 text-emerald-300 text-[11px]">
+                            <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                            <span>Semua parameter valid. Pembayaran aman dan terkonfirmasi.</span>
+                          </div>
+                        )}
+                      </div>
+                    ) : aiErr ? (
+                      <div className="rounded-2xl border border-amber-500/25 bg-amber-950/20 p-4 space-y-2 text-xs">
+                        <div className="flex items-center justify-between text-amber-400 font-bold">
+                          <span className="flex items-center gap-1.5"><AlertTriangle size={14} /> AI Belum Merespons</span>
+                          <button 
+                            onClick={() => verifyProofWithAi(selectedOrder, true)} 
+                            className="underline hover:text-amber-300 text-[11px]"
+                          >
+                            Coba Lagi
+                          </button>
+                        </div>
+                        <p className="text-[11px] text-zinc-400 leading-relaxed">
+                          {aiErr}. Kasir dapat memverifikasi foto bukti secara visual atau menekan &apos;Pindai Ulang AI&apos;.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-white/5 bg-zinc-900/40 p-4 space-y-2 text-xs text-zinc-400">
+                        <p>Memuat verifikasi AI...</p>
+                      </div>
+                    )}
+
+                    <div className="text-[10px] text-zinc-500 leading-tight border-t border-white/5 pt-2">
+                      💡 Kasir bertanggung jawab melakukan verifikasi akhir. Jika data cocok, tekan tombol konfirmasi di panel sebelah kiri.
+                    </div>
+
                   </div>
-
-                </div>
-              )}
+                );
+              })()}
             </div>
           </DialogContent>
         )}

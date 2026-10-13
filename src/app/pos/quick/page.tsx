@@ -245,7 +245,12 @@ function QuickPOSContent() {
           items: itemsData ? itemsData.filter((i: any) => i.transaction_id === tx.id) : []
         }));
 
-        const newPending = txWithItems.filter(d => d.status === 'pending' && d.order_source === 'CUSTOMER_QR');
+        // Only show pending QR orders on POS if customer has uploaded proof / waiting confirmation
+        const newPending = txWithItems.filter(d => 
+          d.status === 'pending' && 
+          d.order_source === 'CUSTOMER_QR' && 
+          (d.payment_status === 'WAITING_CONFIRMATION' || d.payment_status === 'AI_VERIFIED' || !!d.payment_proof_url)
+        );
         const newPreparing = txWithItems.filter(d => d.status === 'preparing' || d.status === 'ready');
         setPendingQrOrders(newPending);
         setPreparingOrders(newPreparing);
@@ -989,8 +994,8 @@ function QuickPOSContent() {
                     <Clock className="w-5 h-5 md:w-6 md:h-6" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-amber-500 text-sm md:text-base">Pesanan Mandiri (QR) Masuk!</h3>
-                    <p className="text-xs md:text-sm text-zinc-400">Ada {pendingQrOrders.length} pesanan yang menunggu konfirmasi kasir.</p>
+                    <h3 className="font-bold text-amber-500 text-sm md:text-base">Pesanan Mandiri (QR) Valid Masuk!</h3>
+                    <p className="text-xs md:text-sm text-zinc-400">Ada {pendingQrOrders.length} pesanan terverifikasi AI yang siap dikonfirmasi kasir.</p>
                   </div>
                 </div>
                 <Link href="/orders" className="w-full sm:w-auto bg-amber-500 hover:bg-amber-400 text-black font-bold h-10 px-6 rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-amber-500/20 transition-transform active:scale-95">

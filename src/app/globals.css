@@ -166,3 +166,14 @@
 .animate-\[marquee_20s_linear_infinite\] {
   animation: marquee 20s linear infinite;
 }
+
+@keyframes scan {
+  0% { top: 0%; opacity: 0.7; }
+  50% { top: 96%; opacity: 1; }
+  100% { top: 0%; opacity: 0.7; }
+}
+
+.animate-scan {
+  animation: scan 2.5s ease-in-out infinite;
+}
+
