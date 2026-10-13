@@ -143,6 +143,17 @@ export default function CustomerOrderPage() {
       setIsLoadingData(false);
     }
     loadMenu();
+
+    const productsChannel = supabase
+      .channel(`customer_products_${Date.now()}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
+        loadMenu();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(productsChannel);
+    };
   }, []);
 
   useEffect(() => {
@@ -627,8 +638,8 @@ export default function CustomerOrderPage() {
                           <div 
                             key={`top-${product.id}`}
                             onClick={() => handleProductClick(product)}
-                            className={`snap-center shrink-0 w-[180px] sm:w-[210px] md:w-[230px] bg-zinc-900/40 border border-white/5 rounded-2xl sm:rounded-3xl overflow-hidden flex flex-col transition-all duration-300 ease-out hover:shadow-[0_10px_20px_rgba(0,0,0,0.3)] hover:scale-[1.02] ${
-                              product.is_available ? 'active:scale-95 cursor-pointer hover:border-amber-500/30' : 'opacity-50 grayscale cursor-not-allowed'
+                            className={`snap-center shrink-0 w-[180px] sm:w-[210px] md:w-[230px] bg-zinc-900/40 border border-white/5 rounded-2xl sm:rounded-3xl overflow-hidden flex flex-col transition-all duration-300 ease-out ${
+                              product.is_available ? 'active:scale-95 cursor-pointer hover:border-amber-500/30 hover:scale-[1.02] hover:shadow-[0_10px_20px_rgba(0,0,0,0.3)]' : 'opacity-40 grayscale cursor-not-allowed select-none'
                             }`}
                             style={{
                               animation: `fadeInRight 0.6s ease-out forwards`,
@@ -701,8 +712,8 @@ export default function CustomerOrderPage() {
                       <div 
                         key={product.id}
                         onClick={() => handleProductClick(product)}
-                        className={`bg-zinc-900/40 border border-white/5 rounded-2xl sm:rounded-3xl overflow-hidden flex flex-col transition-all duration-300 ease-out hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] ${
-                          product.is_available ? 'active:scale-95 cursor-pointer hover:border-amber-500/30' : 'opacity-50 grayscale cursor-not-allowed'
+                        className={`bg-zinc-900/40 border border-white/5 rounded-2xl sm:rounded-3xl overflow-hidden flex flex-col transition-all duration-300 ease-out ${
+                          product.is_available ? 'active:scale-95 cursor-pointer hover:border-amber-500/30 hover:scale-[1.02] hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)]' : 'opacity-40 grayscale cursor-not-allowed select-none'
                         }`}
                         style={{
                           animation: `fadeInUp 0.6s ease-out forwards`,

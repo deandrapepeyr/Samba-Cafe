@@ -179,7 +179,7 @@ function QuickPOSContent() {
 
       const [categoriesRes, productsRes, stocksRes, recipesRes] = await Promise.all([
         supabase.from('categories').select('*'),
-        supabase.from('products').select('*').eq('is_available', true),
+        supabase.from('products').select('*'),
         supabase.from('stocks').select('id, quantity'),
         supabase.from('product_ingredients').select('product_id, stock_id, quantity_required')
       ]);
@@ -275,6 +275,16 @@ function QuickPOSContent() {
       .channel(channelId)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => {
         fetchActiveOrders();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, async () => {
+        const { data } = await supabase.from('products').select('*');
+        if (data) {
+          setAllProducts(data);
+          const quickProducts = data
+            .filter((p: any) => p.is_quick === true)
+            .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0));
+          setProducts(quickProducts);
+        }
       })
       .subscribe();
 
@@ -1021,15 +1031,21 @@ function QuickPOSContent() {
               {filteredProducts.map(product => {
                 const cartItem = cart.find(c => c.product.id === product.id);
                 const qtyInCart = cartItem ? cartItem.quantity : 0;
+                const isUnavailable = !product.is_available;
 
                 return (
                   <div
                     key={product.id}
-                    onClick={() => handleProductClick(product)}
-                    className={`group relative bg-zinc-900/40 border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between h-[120px] ${
-                      isLocked
-                        ? 'border-white/5 opacity-90 cursor-pointer hover:border-amber-500/50'
-                        : `cursor-pointer ${qtyInCart > 0 ? 'border-primary/50 bg-primary/10' : 'border-white/5 hover:border-white/20 hover:bg-zinc-800/60'} hover:-translate-y-1`
+                    onClick={() => {
+                      if (isUnavailable) return;
+                      handleProductClick(product);
+                    }}
+                    className={`group relative border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between h-[120px] select-none ${
+                      isUnavailable
+                        ? 'bg-zinc-950/70 border-white/5 opacity-40 grayscale cursor-not-allowed shadow-none'
+                        : isLocked
+                        ? 'bg-zinc-900/40 border-white/5 opacity-90 cursor-pointer hover:border-amber-500/50'
+                        : `bg-zinc-900/40 cursor-pointer ${qtyInCart > 0 ? 'border-primary/50 bg-primary/10' : 'border-white/5 hover:border-white/20 hover:bg-zinc-800/60'} hover:-translate-y-1`
                     }`}
                   >
                     <div>
@@ -1038,28 +1054,36 @@ function QuickPOSContent() {
                           {categories.find(c => c.id === product.category_id)?.name || 'CEPAT SAJI'}
                         </span>
                         <div className="flex items-center gap-1.5 shrink-0">
-                          {qtyInCart > 0 && (
+                          {qtyInCart > 0 && !isUnavailable && (
                             <div className="bg-primary text-primary-foreground text-[10px] font-bold px-2 py-0.5 rounded-full">
                               {qtyInCart}x
                             </div>
                           )}
                         </div>
                       </div>
-                      <h3 className={`text-[13px] md:text-sm font-bold line-clamp-2 leading-tight ${qtyInCart > 0 ? 'text-primary' : 'text-zinc-200 group-hover:text-white'}`}>
+                      <h3 className={`text-[13px] md:text-sm font-bold line-clamp-2 leading-tight ${isUnavailable ? 'text-zinc-500' : qtyInCart > 0 ? 'text-primary' : 'text-zinc-200 group-hover:text-white'}`}>
                         {product.name}
                       </h3>
                     </div>
 
                     <div className="flex justify-between items-end mt-2">
-                      <p className={`text-sm font-bold ${qtyInCart > 0 ? 'text-zinc-200' : 'text-zinc-400'}`}>
+                      <p className={`text-sm font-bold ${isUnavailable ? 'text-zinc-600 line-through decoration-zinc-600' : qtyInCart > 0 ? 'text-zinc-200' : 'text-zinc-400'}`}>
                         Rp {product.price.toLocaleString('id-ID')}
                       </p>
-                      <span className={`text-[11px] font-bold ${!isStockEmpty(product) ? 'text-emerald-500' : 'text-rose-500'}`}>
+                      <span className={`text-[11px] font-bold ${!isUnavailable ? 'text-emerald-500' : 'text-rose-400 font-extrabold uppercase'}`}>
                         {getStockString(product)}
                       </span>
                     </div>
 
-                    {isLocked && (
+                    {isUnavailable && (
+                      <div className="absolute inset-0 bg-black/40 backdrop-blur-[0.5px] rounded-2xl flex items-center justify-center pointer-events-none">
+                        <span className="bg-zinc-900/90 text-rose-400 border border-rose-500/20 text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider shadow-sm">
+                          Habis
+                        </span>
+                      </div>
+                    )}
+
+                    {isLocked && !isUnavailable && (
                       <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-md text-amber-400 p-1.5 rounded-lg border border-amber-500/30 z-20">
                         <LockKeyhole size={14} />
                       </div>
