@@ -464,189 +464,264 @@ export default function CustomerOrderPage() {
   return (
     <div className="h-[100dvh] bg-[#0a0a0a] text-white flex flex-col relative overflow-hidden">
       {/* Header */}
-      <div className="sticky top-0 z-40 bg-[#0a0a0a]/70 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center justify-between">
-        <div className="flex flex-col">
-          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-0.5">
-            {view === 'menu' ? 'Samba Cafe' : 'Pesanan Anda'}
-          </span>
-          <h1 className="text-xl font-black tracking-tight leading-none text-white">
-            <TypewriterText text={view === 'menu' ? `Halo, ${session?.customerName}` : view === 'cart' ? 'Keranjang Pesanan' : 'Ringkasan Pesanan'} speed={60} />
-          </h1>
-        </div>
-        {view === 'menu' ? (
-          <div className="flex items-center gap-2">
-            {session && (
-              <Button 
-                variant="ghost" 
-                onClick={() => router.push('/order/track')} 
-                className={`rounded-full border text-[11px] font-bold px-3.5 py-1.5 h-auto flex items-center gap-2 transition-all ${
-                  hasReadyOrder 
-                    ? 'bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border-emerald-500/50 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)] animate-pulse'
-                    : 'bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/30 text-amber-500 hover:bg-amber-500/20 hover:border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.15)]'
-                }`}
-              >
-                <span className="relative flex h-2 w-2 shrink-0">
-                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${hasReadyOrder ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
-                  <span className={`relative inline-flex rounded-full h-2 w-2 ${hasReadyOrder ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
-                </span>
-                {hasReadyOrder ? 'Pesanan Siap! !' : 'Cek Status Order'}
-              </Button>
-            )}
-            <Button variant="ghost" size="icon" onClick={() => setView('cart')} className="relative rounded-full bg-white/5 hover:bg-white/10 shrink-0">
-              <ShoppingCart size={20} />
-              {cartItemCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-amber-500 text-black text-[10px] font-black w-4 h-4 flex items-center justify-center rounded-full border border-[#0a0a0a]">
-                  {cartItemCount}
-                </span>
-              )}
-            </Button>
+      <div className="sticky top-0 z-40 bg-[#0a0a0a]/70 backdrop-blur-xl border-b border-white/5 px-4 sm:px-6 lg:px-8 py-3">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex flex-col">
+            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-0.5">
+              {view === 'menu' ? 'Samba Cafe' : 'Pesanan Anda'}
+            </span>
+            <h1 className="text-xl font-black tracking-tight leading-none text-white">
+              <TypewriterText text={view === 'menu' ? `Halo, ${session?.customerName}` : view === 'cart' ? 'Keranjang Pesanan' : 'Ringkasan Pesanan'} speed={60} />
+            </h1>
           </div>
-        ) : (
-          <Button variant="ghost" size="icon" onClick={() => setView('menu')} className="rounded-full bg-white/5 hover:bg-white/10 shrink-0">
-            <X size={20} />
-          </Button>
-        )}
+          {view === 'menu' ? (
+            <div className="flex items-center gap-2">
+              {session && (
+                <Button 
+                  variant="ghost" 
+                  onClick={() => router.push('/order/track')} 
+                  className={`rounded-full border text-[11px] font-bold px-3.5 py-1.5 h-auto flex items-center gap-2 transition-all ${
+                    hasReadyOrder 
+                      ? 'bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border-emerald-500/50 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)] animate-pulse'
+                      : 'bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/30 text-amber-500 hover:bg-amber-500/20 hover:border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.15)]'
+                  }`}
+                >
+                  <span className="relative flex h-2 w-2 shrink-0">
+                    <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${hasReadyOrder ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
+                    <span className={`relative inline-flex rounded-full h-2 w-2 ${hasReadyOrder ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
+                  </span>
+                  {hasReadyOrder ? 'Pesanan Siap! !' : 'Cek Status Order'}
+                </Button>
+              )}
+              <Button variant="ghost" size="icon" onClick={() => setView('cart')} className="relative rounded-full bg-white/5 hover:bg-white/10 shrink-0">
+                <ShoppingCart size={20} />
+                {cartItemCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-amber-500 text-black text-[10px] font-black w-4 h-4 flex items-center justify-center rounded-full border border-[#0a0a0a]">
+                    {cartItemCount}
+                  </span>
+                )}
+              </Button>
+            </div>
+          ) : (
+            <Button variant="ghost" size="icon" onClick={() => setView('menu')} className="rounded-full bg-white/5 hover:bg-white/10 shrink-0">
+              <X size={20} />
+            </Button>
+          )}
+        </div>
       </div>
 
       {view === 'menu' && (
         <div className="flex-1 overflow-y-auto scroll-smooth relative">
           {/* Hero Section */}
           <div 
-            className="relative w-full h-[240px] bg-cover bg-center bg-no-repeat overflow-hidden shrink-0" 
+            className="relative w-full h-[220px] sm:h-[260px] md:h-[300px] bg-cover bg-center bg-no-repeat overflow-hidden shrink-0" 
             style={{ backgroundImage: "url('/cafe_hero_bg.png')" }}
           >
             <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
             <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/20 to-transparent" />
             <div className="absolute inset-0 flex items-center justify-center flex-col px-4 text-center z-10 mt-2">
-               <h1 className="text-4xl md:text-5xl font-black text-white drop-shadow-2xl tracking-tight min-h-[48px]">
+               <h1 className="text-4xl md:text-5xl lg:text-6xl font-black text-white drop-shadow-2xl tracking-tight min-h-[48px]">
                  <TypewriterText text="Samba Cafe" delay={1200} speed={60} />
                </h1>
-               <p className="text-zinc-200 text-sm font-medium drop-shadow-xl mt-2 max-w-[280px] leading-relaxed min-h-[40px]">
+               <p className="text-zinc-200 text-sm md:text-base font-medium drop-shadow-xl mt-2 max-w-md leading-relaxed min-h-[40px]">
                  <TypewriterText text="Pilih hidangan favoritmu di bawah ini dan pesan langsung dari mejamu 👇" delay={2000} speed={40} />
                </p>
             </div>
           </div>
           
           <div className="relative z-10 bg-[#0a0a0a] rounded-t-3xl pt-5 pb-8 -mt-8 shadow-[0_-15px_40px_rgba(0,0,0,0.8)] min-h-[800px]">
-          {activeUnpaidOrder && (
-            <div className="px-4 pt-2 pb-2">
-              <div 
-                onClick={() => router.push('/order/track')}
-                className="bg-gradient-to-r from-amber-500/25 via-amber-500/15 to-amber-500/10 border-2 border-amber-500/50 rounded-2xl p-4 flex items-center justify-between cursor-pointer shadow-[0_0_30px_rgba(245,158,11,0.25)] animate-pulse"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 bg-amber-500/30 rounded-full flex items-center justify-center text-amber-300 shrink-0 border border-amber-400/40">
-                    <Clock size={20} className="animate-spin" />
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="font-extrabold text-amber-300 text-sm truncate">Menunggu Pembayaran QRIS</h3>
-                    <p className="text-zinc-300 text-xs mt-0.5 font-mono">#{activeUnpaidOrder.id} • Rp {activeUnpaidOrder.total?.toLocaleString('id-ID')}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 bg-amber-500 hover:bg-amber-400 text-black px-3.5 py-2 rounded-xl font-black text-xs shrink-0 shadow-md ml-2 transition-all">
-                  <QrCode size={14} />
-                  <span>Bayar Sekarang</span>
-                  <ChevronRight size={14} />
-                </div>
-              </div>
-            </div>
-          )}
-          {hasReadyOrder && (
-            <div className="px-4 pt-4 pb-2">
-              <div 
-                onClick={() => router.push('/order/track')}
-                className="bg-gradient-to-r from-emerald-500/10 to-emerald-500/5 border border-emerald-500/30 rounded-2xl p-4 flex items-center justify-between cursor-pointer shadow-[0_0_20px_rgba(16,185,129,0.15)] animate-pulse"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-500 shrink-0">
-                    <BellRing size={20} className="animate-bounce" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-emerald-400 text-sm">Pesananmu Sudah Siap!</h3>
-                    <p className="text-zinc-400 text-xs mt-0.5">Silakan ambil di kasir ya.</p>
-                  </div>
-                </div>
-                <ChevronRight className="text-emerald-500" size={20} />
-              </div>
-            </div>
-          )}
-          {/* Search */}
-          <div className="px-4 py-3">
-            <div className="relative group">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-amber-500 transition-colors" size={18} />
-              <input
-                placeholder="Cari minuman, makanan..."
-                className="w-full h-12 pl-12 pr-4 bg-zinc-900/50 border border-white/10 rounded-2xl text-sm text-zinc-100 placeholder:text-zinc-500 outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 transition-all shadow-inner"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {/* Categories (Sticky on scroll) */}
-          {searchQuery.trim() === '' && (
-            <div className="sticky top-0 z-30 pt-3 pb-3 px-0 mb-4 bg-[#0a0a0a]/90 backdrop-blur-2xl border-b border-white/5 shadow-[0_10px_30px_rgba(0,0,0,0.5)] transition-all select-none">
-              <div className="flex gap-2 overflow-x-auto overflow-y-hidden scrollbar-none px-4 overscroll-x-contain">
-                {categories.map(cat => (
-                  <button
-                    key={cat.id}
-                    onClick={() => setActiveCategory(cat.id)}
-                    className={`shrink-0 h-10 px-5 rounded-2xl text-[13px] font-bold transition-all flex items-center justify-center backdrop-blur-md border ${
-                      activeCategory === cat.id 
-                        ? 'bg-amber-500/90 border-amber-400/50 text-white shadow-[0_4px_15px_rgba(245,158,11,0.4)] scale-105' 
-                        : 'bg-white/5 border-white/10 text-zinc-300 hover:bg-white/10'
-                    }`}
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              {activeUnpaidOrder && (
+                <div className="pt-2 pb-2 mb-3">
+                  <div 
+                    onClick={() => router.push('/order/track')}
+                    className="bg-gradient-to-r from-amber-500/25 via-amber-500/15 to-amber-500/10 border-2 border-amber-500/50 rounded-2xl p-4 flex items-center justify-between cursor-pointer shadow-[0_0_30px_rgba(245,158,11,0.25)] animate-pulse"
                   >
-                    {cat.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Product Grid */}
-          {isLoadingData ? (
-            <div className="p-8 text-center text-zinc-500 text-sm">Memuat menu...</div>
-          ) : (
-            <div className="pb-32">
-              {/* Best Sellers Carousel */}
-              {searchQuery.trim() === '' && activeCategory === '1' && topProducts.length > 0 && (
-                <div className="mb-6">
-                  <div className="px-4 mb-3 flex items-center justify-between">
-                    <h2 className="text-lg font-black text-white flex items-center gap-2">
-                      <span className="text-amber-500">🔥</span> Paling Banyak Dipesan
-                    </h2>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 bg-amber-500/30 rounded-full flex items-center justify-center text-amber-300 shrink-0 border border-amber-400/40">
+                        <Clock size={20} className="animate-spin" />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="font-extrabold text-amber-300 text-sm truncate">Menunggu Pembayaran QRIS</h3>
+                        <p className="text-zinc-300 text-xs mt-0.5 font-mono">#{activeUnpaidOrder.id} • Rp {activeUnpaidOrder.total?.toLocaleString('id-ID')}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 bg-amber-500 hover:bg-amber-400 text-black px-3.5 py-2 rounded-xl font-black text-xs shrink-0 shadow-md ml-2 transition-all">
+                      <QrCode size={14} />
+                      <span>Bayar Sekarang</span>
+                      <ChevronRight size={14} />
+                    </div>
                   </div>
-                  <div className="px-4 flex gap-4 overflow-x-auto snap-x scrollbar-none pb-4">
-                    {topProducts.map((product, index) => (
+                </div>
+              )}
+
+              {hasReadyOrder && (
+                <div className="pt-2 pb-2 mb-3">
+                  <div 
+                    onClick={() => router.push('/order/track')}
+                    className="bg-gradient-to-r from-emerald-500/10 to-emerald-500/5 border border-emerald-500/30 rounded-2xl p-4 flex items-center justify-between cursor-pointer shadow-[0_0_20px_rgba(16,185,129,0.15)] animate-pulse"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-500 shrink-0">
+                        <BellRing size={20} className="animate-bounce" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-emerald-400 text-sm">Pesananmu Sudah Siap!</h3>
+                        <p className="text-zinc-400 text-xs mt-0.5">Silakan ambil di kasir ya.</p>
+                      </div>
+                    </div>
+                    <ChevronRight className="text-emerald-500" size={20} />
+                  </div>
+                </div>
+              )}
+
+              {/* Search */}
+              <div className="py-3">
+                <div className="relative group max-w-md sm:max-w-lg">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-amber-500 transition-colors" size={18} />
+                  <input
+                    placeholder="Cari minuman, makanan..."
+                    className="w-full h-12 pl-12 pr-4 bg-zinc-900/50 border border-white/10 rounded-2xl text-sm text-zinc-100 placeholder:text-zinc-500 outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 transition-all shadow-inner"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Categories (Sticky on scroll) */}
+              {searchQuery.trim() === '' && (
+                <div className="sticky top-0 z-30 pt-3 pb-3 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 mb-4 bg-[#0a0a0a]/90 backdrop-blur-2xl border-b border-white/5 shadow-[0_10px_30px_rgba(0,0,0,0.5)] transition-all select-none">
+                  <div className="flex gap-2 overflow-x-auto overflow-y-hidden scrollbar-none overscroll-x-contain">
+                    {categories.map(cat => (
+                      <button
+                        key={cat.id}
+                        onClick={() => setActiveCategory(cat.id)}
+                        className={`shrink-0 h-10 px-5 rounded-2xl text-[13px] font-bold transition-all flex items-center justify-center backdrop-blur-md border ${
+                          activeCategory === cat.id 
+                            ? 'bg-amber-500/90 border-amber-400/50 text-white shadow-[0_4px_15px_rgba(245,158,11,0.4)] scale-105' 
+                            : 'bg-white/5 border-white/10 text-zinc-300 hover:bg-white/10'
+                        }`}
+                      >
+                        {cat.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Product Grid */}
+              {isLoadingData ? (
+                <div className="p-8 text-center text-zinc-500 text-sm">Memuat menu...</div>
+              ) : (
+                <div className="pb-32">
+                  {/* Best Sellers Carousel */}
+                  {searchQuery.trim() === '' && activeCategory === '1' && topProducts.length > 0 && (
+                    <div className="mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <h2 className="text-lg sm:text-xl font-black text-white flex items-center gap-2">
+                          <span className="text-amber-500">🔥</span> Paling Banyak Dipesan
+                        </h2>
+                      </div>
+                      <div className="flex gap-4 overflow-x-auto snap-x scrollbar-none pb-4">
+                        {topProducts.map((product, index) => (
+                          <div 
+                            key={`top-${product.id}`}
+                            onClick={() => handleProductClick(product)}
+                            className={`snap-center shrink-0 w-[180px] sm:w-[210px] md:w-[230px] bg-zinc-900/40 border border-white/5 rounded-2xl sm:rounded-3xl overflow-hidden flex flex-col transition-all duration-300 ease-out hover:shadow-[0_10px_20px_rgba(0,0,0,0.3)] hover:scale-[1.02] ${
+                              product.is_available ? 'active:scale-95 cursor-pointer hover:border-amber-500/30' : 'opacity-50 grayscale cursor-not-allowed'
+                            }`}
+                            style={{
+                              animation: `fadeInRight 0.6s ease-out forwards`,
+                              animationDelay: `${index * 100}ms`,
+                              opacity: 0,
+                              transform: 'translateX(20px)'
+                            }}
+                          >
+                            <style jsx>{`
+                              @keyframes fadeInRight {
+                                to { opacity: 1; transform: translateX(0); }
+                              }
+                            `}</style>
+                            <div className="h-[140px] sm:h-[160px] bg-zinc-800/50 relative overflow-hidden flex items-center justify-center">
+                              {product.image_url ? (
+                                <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" loading="lazy" />
+                              ) : (
+                                <span className="text-zinc-700 font-bold text-2xl uppercase">{product.name.charAt(0)}</span>
+                              )}
+                              <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                                <span className="text-[10px] font-bold text-white uppercase tracking-wider">Best Seller</span>
+                              </div>
+                              {!product.is_available && (
+                                <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-[2px]">
+                                  <div className="bg-zinc-900 text-white text-xs font-bold px-3 py-1.5 rounded-full border border-white/10">
+                                    HABIS
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            <div className="p-3 sm:p-4 flex flex-col gap-2 flex-1 justify-between">
+                              <h3 className="font-bold text-xs sm:text-sm md:text-base leading-snug line-clamp-2 text-white">{product.name}</h3>
+                              <div className="flex items-center justify-between mt-auto pt-1">
+                                <span className="font-black text-amber-500 text-xs sm:text-sm md:text-base">Rp{product.price.toLocaleString('id-ID')}</span>
+                                {product.is_available && (
+                                  getProductQuantity(product.id) > 0 ? (
+                                    <div className="flex items-center gap-1.5 bg-amber-500/80 backdrop-blur-md border border-amber-400/50 rounded-full px-2 py-1 text-white font-bold shadow-[0_4px_15px_rgba(245,158,11,0.3)]" onClick={(e) => e.stopPropagation()}>
+                                      <button onClick={(e) => handleDecreaseProduct(product.id, e)} className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-black/20 flex items-center justify-center hover:bg-black/40 transition-colors">
+                                        <Minus size={12} />
+                                      </button>
+                                      <span className="text-xs sm:text-sm px-1">{getProductQuantity(product.id)}</span>
+                                      <button onClick={(e) => { e.stopPropagation(); handleProductClick(product); }} className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-black/20 flex items-center justify-center hover:bg-black/40 transition-colors">
+                                        <Plus size={12} />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button onClick={(e) => { e.stopPropagation(); handleProductClick(product); }} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-amber-500/80 backdrop-blur-md border border-amber-400/50 text-white flex items-center justify-center font-bold shadow-[0_4px_15px_rgba(245,158,11,0.3)] hover:bg-amber-500/90 hover:scale-105 transition-all">
+                                      <Plus size={14} />
+                                    </button>
+                                  )
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* All Menu Section Title */}
+                  <div className="mb-3 flex items-center justify-between">
+                    <h2 className="text-lg sm:text-xl font-black text-white">Semua Menu</h2>
+                    <span className="text-xs text-zinc-500 font-medium">{filteredProducts.length} menu</span>
+                  </div>
+
+                  {/* Responsive Grid: 2 cols on mobile, 3 on sm, 4 on md, 5 on lg, 6 on xl */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 lg:gap-5 pt-2">
+                    {filteredProducts.map((product, index) => (
                       <div 
-                        key={`top-${product.id}`}
+                        key={product.id}
                         onClick={() => handleProductClick(product)}
-                        className={`snap-center shrink-0 w-[240px] bg-zinc-900/40 border border-white/5 rounded-3xl overflow-hidden flex flex-col transition-all duration-300 ease-out hover:shadow-[0_10px_20px_rgba(0,0,0,0.3)] ${
+                        className={`bg-zinc-900/40 border border-white/5 rounded-2xl sm:rounded-3xl overflow-hidden flex flex-col transition-all duration-300 ease-out hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] ${
                           product.is_available ? 'active:scale-95 cursor-pointer hover:border-amber-500/30' : 'opacity-50 grayscale cursor-not-allowed'
                         }`}
                         style={{
-                          animation: `fadeInRight 0.6s ease-out forwards`,
-                          animationDelay: `${index * 100}ms`,
+                          animation: `fadeInUp 0.6s ease-out forwards`,
+                          animationDelay: `${index * 30}ms`,
                           opacity: 0,
-                          transform: 'translateX(20px)'
+                          transform: 'translateY(20px)'
                         }}
                       >
                         <style jsx>{`
-                          @keyframes fadeInRight {
-                            to { opacity: 1; transform: translateX(0); }
+                          @keyframes fadeInUp {
+                            to { opacity: 1; transform: translateY(0); }
                           }
                         `}</style>
-                        <div className="h-[160px] bg-zinc-800/50 relative overflow-hidden flex items-center justify-center">
+                        <div className="aspect-square bg-zinc-800/50 relative overflow-hidden flex items-center justify-center">
                           {product.image_url ? (
-                            <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" loading="lazy" />
+                            <img src={product.image_url} alt={product.name} className="w-full h-full object-cover transition-transform duration-500 hover:scale-105" loading="lazy" />
                           ) : (
-                            <span className="text-zinc-700 font-bold text-2xl uppercase">{product.name.charAt(0)}</span>
+                            <span className="text-zinc-700 font-bold text-xs uppercase">{product.name.charAt(0)}</span>
                           )}
-                          <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                            <span className="text-[10px] font-bold text-white uppercase tracking-wider">Best Seller</span>
-                          </div>
                           {!product.is_available && (
                             <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-[2px]">
                               <div className="bg-zinc-900 text-white text-xs font-bold px-3 py-1.5 rounded-full border border-white/10">
@@ -655,24 +730,24 @@ export default function CustomerOrderPage() {
                             </div>
                           )}
                         </div>
-                        <div className="p-4 flex flex-col gap-2">
-                          <h3 className="font-bold text-base leading-snug line-clamp-2 text-white">{product.name}</h3>
-                          <div className="flex items-center justify-between mt-1">
-                            <span className="font-black text-amber-500 text-base">Rp{product.price.toLocaleString('id-ID')}</span>
+                        <div className="p-3 sm:p-4 flex flex-col flex-1 justify-between gap-2">
+                          <h3 className="font-semibold text-xs sm:text-[13px] md:text-sm leading-snug line-clamp-2 text-zinc-100">{product.name}</h3>
+                          <div className="flex items-center justify-between mt-auto pt-1">
+                            <span className="font-bold text-amber-500 text-xs sm:text-sm md:text-base">Rp{product.price.toLocaleString('id-ID')}</span>
                             {product.is_available && (
                               getProductQuantity(product.id) > 0 ? (
-                                <div className="flex items-center gap-2 bg-amber-500/80 backdrop-blur-md border border-amber-400/50 rounded-full px-2 py-1 text-white font-bold shadow-[0_4px_15px_rgba(245,158,11,0.3)]" onClick={(e) => e.stopPropagation()}>
-                                  <button onClick={(e) => handleDecreaseProduct(product.id, e)} className="w-6 h-6 rounded-full bg-black/20 flex items-center justify-center hover:bg-black/40 transition-colors">
-                                    <Minus size={14} />
+                                <div className="flex items-center gap-1.5 bg-amber-500/80 backdrop-blur-md border border-amber-400/50 rounded-full px-1.5 py-0.5 text-white font-bold shadow-[0_4px_15px_rgba(245,158,11,0.3)]" onClick={(e) => e.stopPropagation()}>
+                                  <button onClick={(e) => handleDecreaseProduct(product.id, e)} className="w-5 h-5 rounded-full bg-black/20 flex items-center justify-center hover:bg-black/40 transition-colors">
+                                    <Minus size={12} />
                                   </button>
-                                  <span className="text-sm px-1">{getProductQuantity(product.id)}</span>
-                                  <button onClick={(e) => { e.stopPropagation(); handleProductClick(product); }} className="w-6 h-6 rounded-full bg-black/20 flex items-center justify-center hover:bg-black/40 transition-colors">
-                                    <Plus size={14} />
+                                  <span className="text-xs px-1">{getProductQuantity(product.id)}</span>
+                                  <button onClick={(e) => { e.stopPropagation(); handleProductClick(product); }} className="w-5 h-5 rounded-full bg-black/20 flex items-center justify-center hover:bg-black/40 transition-colors">
+                                    <Plus size={12} />
                                   </button>
                                 </div>
                               ) : (
-                                <button onClick={(e) => { e.stopPropagation(); handleProductClick(product); }} className="w-8 h-8 rounded-full bg-amber-500/80 backdrop-blur-md border border-amber-400/50 text-white flex items-center justify-center font-bold shadow-[0_4px_15px_rgba(245,158,11,0.3)] hover:bg-amber-500/90 transition-colors">
-                                  <Plus size={16} />
+                                <button onClick={(e) => { e.stopPropagation(); handleProductClick(product); }} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-amber-500/80 backdrop-blur-md border border-amber-400/50 text-white flex items-center justify-center font-bold shadow-[0_4px_15px_rgba(245,158,11,0.3)] hover:bg-amber-500/90 hover:scale-110 active:scale-95 transition-all">
+                                  <Plus size={14} />
                                 </button>
                               )
                             )}
@@ -683,84 +758,18 @@ export default function CustomerOrderPage() {
                   </div>
                 </div>
               )}
-
-              {/* All Menu Section Title */}
-              <div className="px-4 mb-3">
-                <h2 className="text-lg font-black text-white">Semua Menu</h2>
-              </div>
-              <div className="grid grid-cols-2 gap-3 px-4 pt-2">
-              {filteredProducts.map((product, index) => (
-                <div 
-                  key={product.id}
-                  onClick={() => handleProductClick(product)}
-                  className={`bg-zinc-900/40 border border-white/5 rounded-3xl overflow-hidden flex flex-col transition-all duration-300 ease-out hover:shadow-[0_10px_20px_rgba(0,0,0,0.3)] ${
-                    product.is_available ? 'active:scale-95 cursor-pointer hover:border-amber-500/30' : 'opacity-50 grayscale cursor-not-allowed'
-                  }`}
-                  style={{
-                    animation: `fadeInUp 0.6s ease-out forwards`,
-                    animationDelay: `${index * 50}ms`,
-                    opacity: 0,
-                    transform: 'translateY(20px)'
-                  }}
-                >
-                  <style jsx>{`
-                    @keyframes fadeInUp {
-                      to { opacity: 1; transform: translateY(0); }
-                    }
-                  `}</style>
-                  <div className="aspect-square bg-zinc-800/50 relative overflow-hidden flex items-center justify-center">
-                    {product.image_url ? (
-                      <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" loading="lazy" />
-                    ) : (
-                      <span className="text-zinc-700 font-bold text-xs uppercase">{product.name.charAt(0)}</span>
-                    )}
-                    {!product.is_available && (
-                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-[2px]">
-                        <div className="bg-zinc-900 text-white text-xs font-bold px-3 py-1.5 rounded-full border border-white/10">
-                          HABIS
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-3 flex flex-col flex-1 justify-between gap-2">
-                    <h3 className="font-semibold text-[13px] leading-snug line-clamp-2">{product.name}</h3>
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-amber-500 text-sm">Rp{product.price.toLocaleString('id-ID')}</span>
-                      {product.is_available && (
-                        getProductQuantity(product.id) > 0 ? (
-                          <div className="flex items-center gap-1.5 bg-amber-500/80 backdrop-blur-md border border-amber-400/50 rounded-full px-1.5 py-0.5 text-white font-bold shadow-[0_4px_15px_rgba(245,158,11,0.3)]" onClick={(e) => e.stopPropagation()}>
-                            <button onClick={(e) => handleDecreaseProduct(product.id, e)} className="w-5 h-5 rounded-full bg-black/20 flex items-center justify-center hover:bg-black/40 transition-colors">
-                              <Minus size={12} />
-                            </button>
-                            <span className="text-xs px-1">{getProductQuantity(product.id)}</span>
-                            <button onClick={(e) => { e.stopPropagation(); handleProductClick(product); }} className="w-5 h-5 rounded-full bg-black/20 flex items-center justify-center hover:bg-black/40 transition-colors">
-                              <Plus size={12} />
-                            </button>
-                          </div>
-                        ) : (
-                          <button onClick={(e) => { e.stopPropagation(); handleProductClick(product); }} className="w-6 h-6 rounded-full bg-amber-500/80 backdrop-blur-md border border-amber-400/50 text-white flex items-center justify-center font-bold shadow-[0_4px_15px_rgba(245,158,11,0.3)] hover:bg-amber-500/90 transition-colors">
-                            <Plus size={14} />
-                          </button>
-                        )
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
             </div>
-            </div>
-          )}
-          </div> {/* End Menu Content Container */}
+          </div>
 
           {/* Floating Cart Button */}
           {cartItemCount > 0 && (
-            <div className="sticky bottom-6 left-0 right-0 px-4 z-50 mt-4">
+            <div className="fixed bottom-6 left-0 right-0 px-4 z-50 flex justify-center pointer-events-none">
               <button
                 onClick={() => setView('cart')}
-                className="w-full h-14 bg-amber-500/60 backdrop-blur-2xl border border-amber-200/40 rounded-2xl shadow-[0_8px_32px_rgba(245,158,11,0.4)] text-white font-black flex items-center justify-between px-5 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                className="w-full max-w-md h-14 bg-amber-500/90 hover:bg-amber-500 backdrop-blur-2xl border border-amber-200/40 rounded-2xl shadow-[0_8px_32px_rgba(245,158,11,0.5)] text-white font-black flex items-center justify-between px-5 hover:scale-[1.02] active:scale-[0.98] transition-all pointer-events-auto"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-black/20 flex items-center justify-center text-sm backdrop-blur-md border border-white/10">
+                  <div className="w-8 h-8 rounded-full bg-black/25 flex items-center justify-center text-sm backdrop-blur-md border border-white/20">
                     {cartItemCount}
                   </div>
                   <span>Lihat Keranjang</span>
@@ -773,7 +782,7 @@ export default function CustomerOrderPage() {
       )}
 
       {view === 'cart' && (
-        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden max-w-2xl mx-auto w-full">
           <ScrollArea className="flex-1 px-4 py-2">
             <div className="space-y-3 pb-6">
               {cart.map(item => (
@@ -829,7 +838,7 @@ export default function CustomerOrderPage() {
       )}
 
       {view === 'checkout' && (
-        <div className="flex-1 px-4 py-6 space-y-6 overflow-y-auto min-h-0">
+        <div className="flex-1 px-4 py-6 space-y-6 overflow-y-auto min-h-0 max-w-2xl mx-auto w-full">
           <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-4 space-y-3">
             <div className="flex justify-between items-center pb-3 border-b border-white/5">
               <span className="text-sm">Nama Pemesan</span>
