@@ -1754,7 +1754,7 @@ export default function POSPage() {
                     }}
                     className={`group relative border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between h-[120px] select-none ${
                       isUnavailable
-                        ? 'bg-zinc-950/70 border-white/5 opacity-40 grayscale cursor-not-allowed shadow-none'
+                        ? 'bg-zinc-900/40 border-zinc-700/50 opacity-70 cursor-not-allowed shadow-none'
                         : isLocked
                         ? 'bg-zinc-900/40 border-white/5 opacity-90 cursor-pointer hover:border-amber-500/50'
                         : `bg-zinc-900/40 cursor-pointer ${qtyInCart > 0 ? 'border-primary/50 bg-primary/10' : 'border-white/5 hover:border-white/20 hover:bg-zinc-800/60'} hover:-translate-y-1`
@@ -1778,27 +1778,19 @@ export default function POSPage() {
                            )}
                          </div>
                       </div>
-                      <h3 className={`text-[13px] md:text-sm font-bold line-clamp-2 leading-tight ${isUnavailable ? 'text-zinc-500' : qtyInCart > 0 ? 'text-primary' : 'text-zinc-200 group-hover:text-white'}`}>
+                      <h3 className={`text-[13px] md:text-sm font-bold line-clamp-2 leading-tight ${isUnavailable ? 'text-zinc-400' : qtyInCart > 0 ? 'text-primary' : 'text-zinc-200 group-hover:text-white'}`}>
                         {product.name}
                       </h3>
                     </div>
                     
                     <div className="flex justify-between items-end mt-2">
-                      <p className={`text-sm font-bold ${isUnavailable ? 'text-zinc-600 line-through decoration-zinc-600' : qtyInCart > 0 ? 'text-zinc-200' : 'text-zinc-400'}`}>
+                      <p className={`text-sm font-bold ${isUnavailable ? 'text-zinc-500' : qtyInCart > 0 ? 'text-zinc-200' : 'text-zinc-400'}`}>
                         Rp {product.price.toLocaleString('id-ID')}
                       </p>
-                      <span className={`text-[11px] font-bold ${!isUnavailable ? 'text-emerald-500' : 'text-rose-400 font-extrabold uppercase'}`}>
+                      <span className={`text-[11px] font-bold ${!isUnavailable ? 'text-emerald-500' : 'text-rose-400/90 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-md uppercase tracking-wider'}`}>
                         {getStockString(product)}
                       </span>
                     </div>
-
-                    {isUnavailable && (
-                      <div className="absolute inset-0 bg-black/40 backdrop-blur-[0.5px] rounded-2xl flex items-center justify-center pointer-events-none">
-                        <span className="bg-zinc-900/90 text-rose-400 border border-rose-500/20 text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider shadow-sm">
-                          Habis
-                        </span>
-                      </div>
-                    )}
 
                     {isLocked && !isUnavailable && (
                       <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-md text-amber-400 p-1.5 rounded-lg border border-amber-500/30 z-20">
