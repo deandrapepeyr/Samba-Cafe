@@ -1363,57 +1363,6 @@ export default function SettingsPage() {
                 <p className="text-[10px] text-zinc-500 font-medium mt-0.5">Jika dicentang, menu ini tidak masuk Antrian Dapur saat Lunas.</p>
               </div>
             </div>
-            
-            {/* Ingredients Section */}
-            <div className="mt-4 pt-4 border-t border-white/10">
-              <h4 className="text-sm font-medium mb-3 text-zinc-300 flex items-center gap-2">
-                <Utensils size={16} className="text-primary"/> 
-                Resep / Bahan Baku (Opsional)
-              </h4>
-              <div className="space-y-3">
-                {newIngredients.map((ing, idx) => (
-                  <div key={idx} className="flex gap-2 items-center animate-in fade-in">
-                    <select 
-                      className="flex-1 min-w-0 h-10 rounded-xl border border-white/10 bg-zinc-900/50 px-2 py-1 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-primary"
-                      value={ing.stock_id}
-                      onChange={(e) => {
-                        const newIngs = [...newIngredients];
-                        newIngs[idx].stock_id = e.target.value;
-                        setNewIngredients(newIngs);
-                      }}
-                    >
-                      <option value="" disabled className="bg-zinc-900">Pilih bahan...</option>
-                      {(() => {
-                        let baseFiltered = stocks;
-                        if (newItem.is_titipan) {
-                          baseFiltered = stocks.filter(s => s.is_titipan && s.titipan_name?.trim().toLowerCase() === newItem.titipan_name?.trim().toLowerCase());
-                        } else {
-                          baseFiltered = stocks.filter(s => !s.is_titipan);
-                        }
-                        return baseFiltered.map(s => <option key={s.id} value={s.id} className="bg-zinc-900">{s.name} {s.is_titipan ? `[${s.titipan_name}]` : ''} ({s.unit})</option>);
-                      })()}
-                    </select>
-                    <Input 
-                      className="w-24 shrink-0 h-10 bg-zinc-900/50 border-white/10 text-zinc-100 rounded-xl text-center" 
-                      placeholder="Takaran" 
-                      type="number" step="any"
-                      value={ing.quantity_required}
-                      onChange={(e) => {
-                        const newIngs = [...newIngredients];
-                        newIngs[idx].quantity_required = e.target.value;
-                        setNewIngredients(newIngs);
-                      }}
-                    />
-                    <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-xl" onClick={() => setNewIngredients(newIngredients.filter((_, i) => i !== idx))}>
-                      <Trash2 size={16} />
-                    </Button>
-                  </div>
-                ))}
-                <Button variant="outline" size="sm" className="w-full border-dashed border-white/20 text-zinc-400 hover:text-zinc-100 hover:bg-white/5 h-10 rounded-xl transition-colors" onClick={() => setNewIngredients([...newIngredients, {stock_id: '', quantity_required: ''}])}>
-                  <Plus size={16} className="mr-2" /> Tambah Bahan
-                </Button>
-              </div>
-            </div>
           </div>
           <DialogFooter className="pt-4 mt-2 border-t border-white/5">
             <Button variant="outline" className="border-white/10 hover:bg-white/5 rounded-xl" onClick={() => setIsAddItemDialogOpen(false)}>Cancel</Button>
@@ -1556,56 +1505,6 @@ export default function SettingsPage() {
                 </div>
               </div>
               
-              {/* Ingredients Section */}
-              <div className="mt-4 pt-4 border-t border-white/10">
-                <h4 className="text-sm font-medium mb-3 text-zinc-300 flex items-center gap-2">
-                  <Utensils size={16} className="text-primary"/> 
-                  Resep / Bahan Baku (Opsional)
-                </h4>
-                <div className="space-y-3">
-                  {editIngredients.map((ing, idx) => (
-                    <div key={idx} className="flex gap-2 items-center animate-in fade-in">
-                      <select 
-                        className="flex-1 min-w-0 h-10 rounded-xl border border-white/10 bg-zinc-900/50 px-2 py-1 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-primary"
-                        value={ing.stock_id}
-                        onChange={(e) => {
-                          const newIngs = [...editIngredients];
-                          newIngs[idx].stock_id = e.target.value;
-                          setEditIngredients(newIngs);
-                        }}
-                      >
-                        <option value="" disabled className="bg-zinc-900">Pilih bahan...</option>
-                        {(() => {
-                          let baseFiltered = stocks;
-                          if (editingItem.is_titipan) {
-                            baseFiltered = stocks.filter(s => s.is_titipan && s.titipan_name?.trim().toLowerCase() === editingItem.titipan_name?.trim().toLowerCase());
-                          } else {
-                            baseFiltered = stocks.filter(s => !s.is_titipan);
-                          }
-                          return baseFiltered.map(s => <option key={s.id} value={s.id} className="bg-zinc-900">{s.name} {s.is_titipan ? `[${s.titipan_name}]` : ''} ({s.unit})</option>);
-                        })()}
-                      </select>
-                      <Input 
-                        className="w-24 shrink-0 h-10 bg-zinc-900/50 border-white/10 text-zinc-100 rounded-xl text-center" 
-                        placeholder="Takaran" 
-                        type="number" step="any"
-                        value={ing.quantity_required}
-                        onChange={(e) => {
-                          const newIngs = [...editIngredients];
-                          newIngs[idx].quantity_required = e.target.value;
-                          setEditIngredients(newIngs);
-                        }}
-                      />
-                      <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-xl" onClick={() => setEditIngredients(editIngredients.filter((_, i) => i !== idx))}>
-                        <Trash2 size={16} />
-                      </Button>
-                    </div>
-                  ))}
-                  <Button variant="outline" size="sm" className="w-full border-dashed border-white/20 text-zinc-400 hover:text-zinc-100 hover:bg-white/5 h-10 rounded-xl transition-colors" onClick={() => setEditIngredients([...editIngredients, {stock_id: '', quantity_required: ''}])}>
-                    <Plus size={16} className="mr-2" /> Tambah Bahan
-                  </Button>
-                </div>
-              </div>
 
               {/* Separated Variants & Toppings Section */}
               <div className="mt-6 border-t border-white/5 pt-6 pb-2">
@@ -1777,82 +1676,42 @@ export default function SettingsPage() {
                           <div className="space-y-2">
                             <label className="text-xs font-semibold text-zinc-400 block mb-2">Pilihan Topping & Harga</label>
                             {variant.choices.map((choice: any, cIdx: number) => (
-                              <div key={cIdx} className="flex flex-col gap-3 p-3 bg-zinc-950/50 rounded-xl border border-white/5 relative group/choice">
+                              <div key={cIdx} className="flex gap-2 items-center">
+                                <Input 
+                                  placeholder="Nama Topping (cth: Keju Extra)" 
+                                  className="h-10 flex-1 bg-zinc-900/50 border-white/5 text-sm rounded-xl focus-visible:ring-amber-500/50 text-zinc-200 placeholder:text-zinc-600"
+                                  value={choice.name}
+                                  onChange={(e) => {
+                                    const newV = [...editingItem.variants];
+                                    newV[vIdx].choices[cIdx].name = e.target.value;
+                                    setEditingItem({...editingItem, variants: newV});
+                                  }}
+                                />
+                                <div className="relative w-32 shrink-0">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-zinc-500">Rp</span>
+                                  <Input 
+                                    placeholder="0" 
+                                    className="h-10 pl-9 pr-3 bg-zinc-900/50 border-white/5 text-sm rounded-xl focus-visible:ring-amber-500/50 text-zinc-200"
+                                    value={choice.price ? choice.price.toLocaleString('id-ID') : ''}
+                                    onChange={(e) => {
+                                      const raw = e.target.value.replace(/\D/g, '');
+                                      const newV = [...editingItem.variants];
+                                      newV[vIdx].choices[cIdx].price = raw ? parseInt(raw) : 0;
+                                      setEditingItem({...editingItem, variants: newV});
+                                    }}
+                                  />
+                                </div>
                                 <button 
                                   onClick={() => {
                                     const newV = [...editingItem.variants];
                                     newV[vIdx].choices.splice(cIdx, 1);
                                     setEditingItem({...editingItem, variants: newV});
                                   }}
-                                  className="absolute -right-2 -top-2 w-7 h-7 flex items-center justify-center bg-zinc-900 border border-white/10 text-zinc-500 hover:text-red-400 hover:border-red-500/30 rounded-full shadow-lg transition-colors z-10 opacity-0 group-hover/choice:opacity-100"
+                                  className="p-2.5 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
+                                  title="Hapus Topping"
                                 >
-                                  <X size={14} />
+                                  <X size={16} />
                                 </button>
-                                <div className="grid gap-1.5">
-                                  <label className="text-[10px] uppercase tracking-wider font-semibold text-zinc-500">Pilih Stok Topping (Opsional)</label>
-                                  <select
-                                    className="h-10 w-full bg-zinc-900/80 border-white/10 text-sm rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/50 text-zinc-200"
-                                    value={choice.stock_id || ''}
-                                    onChange={(e) => {
-                                      const newV = [...editingItem.variants];
-                                      newV[vIdx].choices[cIdx].stock_id = e.target.value;
-                                      if (e.target.value) {
-                                        const stock = stocks.find(s => s.id === e.target.value);
-                                        if (stock) {
-                                          newV[vIdx].choices[cIdx].name = stock.name;
-                                          newV[vIdx].choices[cIdx].price = stock.sell_price || newV[vIdx].choices[cIdx].price || 0;
-                                        }
-                                      } else {
-                                        newV[vIdx].choices[cIdx].price = 0;
-                                        newV[vIdx].choices[cIdx].name = '';
-                                      }
-                                      setEditingItem({...editingItem, variants: newV});
-                                    }}
-                                  >
-                                    <option value="">-- Tanpa Potong Stok --</option>
-                                    {(() => {
-                                      let baseFiltered = stocks.filter(s => s.is_topping);
-                                      if (editingItem.is_titipan) {
-                                        baseFiltered = baseFiltered.filter(s => s.is_titipan && s.titipan_name?.trim().toLowerCase() === editingItem.titipan_name?.trim().toLowerCase());
-                                      } else {
-                                        baseFiltered = baseFiltered.filter(s => !s.is_titipan);
-                                      }
-                                      return baseFiltered.map(s => (
-                                        <option key={s.id} value={s.id}>{s.name} {s.is_titipan ? `[Titipan: ${s.titipan_name}]` : ''} - Tersisa: {s.quantity} {s.unit.replace(/[\d.,\s]/g, '') || 'pcs'}</option>
-                                      ));
-                                    })()}
-                                  </select>
-                                </div>
-                                <div className="flex gap-2 items-center">
-                                  <Input 
-                                    placeholder="Nama Tampilan (cth: Keju Extra)" 
-                                    className={`h-10 flex-1 bg-zinc-900/50 border-white/5 text-sm rounded-xl focus-visible:ring-amber-500/50 text-zinc-200 placeholder:text-zinc-600 ${choice.stock_id ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                    value={choice.stock_id ? (stocks.find(s => s.id === choice.stock_id)?.name || choice.name) : choice.name}
-                                    disabled={!!choice.stock_id}
-                                    onChange={(e) => {
-                                      const newV = [...editingItem.variants];
-                                      newV[vIdx].choices[cIdx].name = e.target.value;
-                                      setEditingItem({...editingItem, variants: newV});
-                                    }}
-                                  />
-                                  <div className="relative w-32 shrink-0">
-                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-zinc-500">Rp</span>
-                                    <Input 
-                                      placeholder="0" 
-                                      className={`h-10 pl-9 pr-3 bg-zinc-900/50 border-white/5 text-sm rounded-xl focus-visible:ring-amber-500/50 text-zinc-200 ${choice.stock_id ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                      value={choice.stock_id 
-                                        ? (stocks.find(s => s.id === choice.stock_id)?.sell_price || choice.price || 0).toLocaleString('id-ID')
-                                        : (choice.price ? choice.price.toLocaleString('id-ID') : '')}
-                                      disabled={!!choice.stock_id}
-                                      onChange={(e) => {
-                                        const raw = e.target.value.replace(/\D/g, '');
-                                        const newV = [...editingItem.variants];
-                                        newV[vIdx].choices[cIdx].price = raw ? parseInt(raw) : 0;
-                                        setEditingItem({...editingItem, variants: newV});
-                                      }}
-                                    />
-                                  </div>
-                                </div>
                               </div>
                             ))}
                             <Button 
