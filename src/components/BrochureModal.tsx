@@ -11,6 +11,8 @@ interface Product {
   price: number;
   category_id: string;
   image_url?: string;
+  is_titipan?: boolean;
+  titipan_name?: string | null;
 }
 
 interface Category {
@@ -35,13 +37,16 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
     window.print();
   };
 
+  // Hanya menu asli Samba Cafe (tidak termasuk menu titipan)
+  const cafeProducts = products.filter(p => !p.is_titipan && !p.titipan_name);
+
   const displayCategories = categories.filter(c => 
     c.id !== '1' && 
     !c.name.toLowerCase().includes('ciki') && 
-    products.some(p => p.category_id === c.id)
+    cafeProducts.some(p => p.category_id === c.id)
   );
 
-  const heroProduct = products.find(p => p.name.toLowerCase().includes('katsu') && p.image_url) || products.find(p => p.image_url);
+  const heroProduct = cafeProducts.find(p => p.name.toLowerCase().includes('katsu') && p.image_url) || cafeProducts.find(p => p.image_url);
 
   useEffect(() => {
     const updateScale = () => {
@@ -79,6 +84,9 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
               <Printer className="text-primary" size={20} />
               Brochure Generator (A5 - 2 Pages)
             </h2>
+            <span className="hidden sm:inline-flex text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-1 rounded-full font-bold">
+              Menu Samba Cafe Saja (Tanpa Titipan)
+            </span>
           </div>
           <div className="flex items-center gap-3">
             <Button 
@@ -173,7 +181,7 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
                 )}
 
                 {(() => {
-                  const galleryItems = products.filter(p => displayCategories.some(c => c.id === p.category_id) && p.image_url).slice(0, 8);
+                  const galleryItems = cafeProducts.filter(p => displayCategories.some(c => c.id === p.category_id) && p.image_url).slice(0, 8);
                   if (galleryItems.length === 0) return null;
                   return (
                     <div className="flex flex-wrap gap-3 justify-center items-center my-4 z-10 w-full max-w-xl">
@@ -224,7 +232,7 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
                   }}
                 >
                   {displayCategories.map(cat => {
-                    const catProducts = products.filter(p => p.category_id === cat.id).slice(0, 25);
+                    const catProducts = cafeProducts.filter(p => p.category_id === cat.id).slice(0, 25);
                     return (
                       <div key={cat.id} className="flex flex-col mb-5" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
                         <div className={`inline-block py-1 px-3 rounded-full mb-2 self-start border ${theme === 'dark' ? 'border-[#ffb300] text-[#ffb300]' : 'border-[#e65100] text-[#e65100] bg-white'}`}>
