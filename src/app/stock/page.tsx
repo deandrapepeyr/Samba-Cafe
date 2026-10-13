@@ -68,12 +68,13 @@ export default function StockAvailabilityPage() {
     setIsLoadingData(true);
     try {
       const [prodRes, catRes] = await Promise.all([
-        supabase.from('products').select('*').order('sort_order', { ascending: true }),
+        supabase.from('products').select('*'),
         supabase.from('categories').select('*')
       ]);
 
       if (prodRes.data) {
-        setProducts(prodRes.data as ProductItem[]);
+        const sorted = (prodRes.data as ProductItem[]).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.name.localeCompare(b.name));
+        setProducts(sorted);
       }
       if (catRes.data) {
         setCategories(catRes.data as CategoryItem[]);
