@@ -11,7 +11,6 @@ import {
   AlertTriangle, 
   Filter, 
   RefreshCw, 
-  Sparkles,
   Coffee,
   Check,
   X
