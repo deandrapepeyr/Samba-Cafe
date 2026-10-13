@@ -694,37 +694,15 @@ export default function POSPage() {
 
   const getProductStock = (productId: string) => {
     const product = products.find(p => p.id === productId);
-    if (product?.is_titipan) return product.stock ?? null;
-
-    const productRecipes = recipesData.filter(r => r.product_id === productId);
-    if (productRecipes.length === 0) return null; // Infinite/Not Tracked
-    
-    let maxAvailable = Infinity;
-    for (const recipe of productRecipes) {
-      const stockItem = stocksData.find(s => s.id === recipe.stock_id);
-      if (!stockItem) return 0; // Missing ingredient
-      if (stockItem.tracking_method === 'CHECKPOINT') continue; // Do not limit by this ingredient
-      
-      const possiblePortions = Math.floor(stockItem.quantity / recipe.quantity_required);
-      if (possiblePortions < maxAvailable) {
-        maxAvailable = possiblePortions;
-      }
-    }
-    return maxAvailable;
+    return product?.is_available ? 1 : 0;
   };
 
   const getStockString = (product: Product) => {
-    if (!product.is_available) return 'tidak ada stok';
-    const stock = getProductStock(product.id);
-    if (stock === null) return 'stok Ada'; // Not tracked by recipe
-    if (stock === 0) return 'Habis';
-    return `stok ${stock}`;
+    return product.is_available ? 'Tersedia' : 'Habis';
   };
 
   const isStockEmpty = (product: Product) => {
-    if (!product.is_available) return true;
-    const stock = getProductStock(product.id);
-    return stock === 0;
+    return !product.is_available;
   };
 
   const handleCheckoutClick = () => {

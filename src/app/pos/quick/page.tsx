@@ -356,17 +356,11 @@ function QuickPOSContent() {
   }, [products, stocksData, recipesData]);
 
   const isStockEmpty = (product: Product) => {
-    if (!product.is_available) return true;
-    const stock = getProductStock(product.id);
-    return stock === 0;
+    return !product.is_available;
   };
 
   const getStockString = (product: Product) => {
-    if (!product.is_available) return 'tidak ada stok';
-    const stock = getProductStock(product.id);
-    if (stock === null) return 'stok Ada';
-    if (stock === 0) return 'Habis';
-    return `stok ${stock}`;
+    return product.is_available ? 'Tersedia' : 'Habis';
   };
 
   const isLocked = !isLoading && !isCheckingShift && (!role || !activeShift);

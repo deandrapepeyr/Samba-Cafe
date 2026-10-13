@@ -301,11 +301,7 @@ export function Sidebar({ onLogoutClick, onLoginClick }: { onLogoutClick?: () =>
                   </Link>
                   <Link href="/stock" className={cn("flex items-center gap-3 px-3 py-3 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-all", { "bg-primary/10 text-primary hover:bg-primary/10": pathname === '/stock' })}>
                     <Package size={20} className="shrink-0" />
-                    <span className={cn("font-medium", isExpanded ? "block" : "hidden")}>Stock</span>
-                  </Link>
-                  <Link href="/recipes" className={cn("flex items-center gap-3 px-3 py-3 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-all", { "bg-primary/10 text-primary hover:bg-primary/10": pathname === '/recipes' })}>
-                    <BookOpen size={20} className="shrink-0" />
-                    <span className={cn("font-medium", isExpanded ? "block" : "hidden")}>Resep Menu</span>
+                    <span className={cn("font-medium", isExpanded ? "block" : "hidden")}>Ketersediaan Menu</span>
                   </Link>
                   <Link href="/settings" className={cn("flex items-center gap-3 px-3 py-3 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-all", { "bg-primary/10 text-primary hover:bg-primary/10": pathname === '/settings' })}>
                     <Settings size={20} className="shrink-0" />
