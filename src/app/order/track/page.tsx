@@ -495,7 +495,7 @@ export default function OrderTrackingPage() {
   let currentStatusLabel = 'Pesanan Diproses';
   if (isReady) currentStatusLabel = 'Pesanan Siap Diambil';
   else if (hasNeedsPayment) currentStatusLabel = 'Menunggu Pembayaran QRIS';
-  else if (isWaitingCashier) currentStatusLabel = 'AI Sedang Memeriksa Bukti...';
+  else if (isWaitingCashier) currentStatusLabel = 'Menunggu Konfirmasi Kasir';
   else if (isPreparing) currentStatusLabel = 'Pesanan Sedang Disiapkan';
   else if (isPending) currentStatusLabel = 'Menunggu Diproses';
 
@@ -523,7 +523,7 @@ export default function OrderTrackingPage() {
                 : hasNeedsPayment || isReplacingProof 
                 ? (needsPaymentOrders.some(o => o.payment_status === 'PAYMENT_REJECTED') ? 'Bukti Ditolak — Upload Ulang' : 'Pembayaran & Pesanan')
                 : isWaitingCashier 
-                ? 'AI Memeriksa Bukti'
+                ? 'Menunggu Kasir'
                 : activePaidOrders.length > 0
                 ? 'Pantau Pesanan Anda'
                 : 'Status Pesanan'}
@@ -836,13 +836,13 @@ export default function OrderTrackingPage() {
             {/* Status Card */}
             <div className="bg-gradient-to-b from-zinc-900/90 to-zinc-900/50 border border-amber-500/30 rounded-3xl p-6 shadow-2xl relative overflow-hidden text-center space-y-4">
               <div className="w-16 h-16 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-2xl flex items-center justify-center mx-auto shadow-lg shadow-amber-500/5">
-                <RefreshCw size={28} className="animate-spin text-amber-400" />
+                <CheckCircle2 size={28} className="text-amber-400" />
               </div>
               
               <div>
-                <h2 className="text-lg font-black text-white">AI Sedang Memeriksa Bukti</h2>
+                <h2 className="text-lg font-black text-white">Bukti Pembayaran Terkirim</h2>
                 <p className="text-xs text-zinc-400 mt-1 max-w-[280px] mx-auto leading-relaxed">
-                  Sistem AI kami sedang menganalisis bukti transfer Anda secara otomatis. Hasilnya akan muncul dalam beberapa detik.
+                  Bukti transfer Anda sudah diterima. Pesanan sedang menunggu konfirmasi kasir.
                 </p>
               </div>
 
@@ -858,9 +858,9 @@ export default function OrderTrackingPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold text-zinc-200">Bukti Transfer Terlampir</p>
-                    <p className="text-[11px] text-amber-400 font-medium mt-0.5 flex items-center gap-1">
-                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                      AI sedang menganalisis...
+                    <p className="text-[11px] text-emerald-400 font-medium mt-0.5 flex items-center gap-1">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                      Menunggu konfirmasi kasir
                     </p>
                   </div>
                   <Button

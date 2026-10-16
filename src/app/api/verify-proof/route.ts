@@ -1,7 +1,4 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
-import crypto from 'crypto';
 import { GoogleGenAI } from '@google/genai';
 import { supabase } from '@/lib/supabase';
 
@@ -152,27 +149,10 @@ export async function POST(req: Request) {
           if (previousPaid && previousPaid.length > 0) {
             for (const prev of previousPaid) {
               if (!prev.payment_proof_url) continue;
-
-              // Check 1: identical path
+              // Check: identical URL (works for Supabase Storage URLs)
               if (prev.payment_proof_url === imageUrl) {
                 matchedDuplicate = prev;
                 break;
-              }
-
-              // Check 2: identical file content via SHA-256 hash
-              try {
-                const prevClean = prev.payment_proof_url.replace(/^\//, '');
-                const prevPath = path.join(process.cwd(), 'public', prevClean);
-                if (fs.existsSync(prevPath)) {
-                  const prevBuf = fs.readFileSync(prevPath);
-                  const prevHash = crypto.createHash('sha256').update(prevBuf).digest('hex');
-                  if (prevHash === imageHash) {
-                    matchedDuplicate = prev;
-                    break;
-                  }
-                }
-              } catch (readErr) {
-                // Ignore file read error on old files
               }
             }
           }
