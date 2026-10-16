@@ -306,32 +306,25 @@ export async function POST(req: Request) {
 
       const ai = new GoogleGenAI({ apiKey });
 
-      // Helper to call AI: Use gemini-flash-latest with fallback to gemini-flash-lite-latest and gemini-2.5-flash
+      // Helper to call AI: Use active modern Gemini models with sequential fallback (avoiding deprecated gemini-2.5-flash)
+      const candidateModels = [
+        'gemini-3.5-flash-lite',
+        'gemini-3.5-flash',
+        'gemini-flash-lite-latest',
+        'gemini-3.8-flash',
+        'gemini-flash-latest'
+      ];
+
       const callAI = async () => {
-        try {
-          const mainCall = ai.models.generateContent({
-            model: 'gemini-flash-latest',
-            contents: [
-              prompt,
-              { inlineData: { data: base64Image, mimeType } }
-            ],
-            config: {
-              responseMimeType: 'application/json',
-            }
-          });
-
-          const timeoutMain = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout gemini-flash-latest (15s)')), 15000)
-          );
-
-          return await Promise.race([mainCall, timeoutMain]) as any;
-        } catch (mainErr: any) {
-          console.warn('gemini-flash-latest attempt 1 failed:', mainErr?.message);
-          
+        let lastErr: any = null;
+        for (const model of candidateModels) {
           try {
-            await new Promise(r => setTimeout(r, 800));
-            return await ai.models.generateContent({
-              model: 'gemini-flash-lite-latest',
+            const timeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error(`Timeout ${model} (12s)`)), 12000)
+            );
+
+            const callPromise = ai.models.generateContent({
+              model,
               contents: [
                 prompt,
                 { inlineData: { data: base64Image, mimeType } }
@@ -339,21 +332,19 @@ export async function POST(req: Request) {
               config: {
                 responseMimeType: 'application/json',
               }
-            }) as any;
-          } catch (retryErr: any) {
-            console.warn('gemini-flash-lite-latest retry failed, falling back to gemini-2.5-flash:', retryErr?.message);
-            return await ai.models.generateContent({
-              model: 'gemini-2.5-flash',
-              contents: [
-                prompt,
-                { inlineData: { data: base64Image, mimeType } }
-              ],
-              config: {
-                responseMimeType: 'application/json',
-              }
-            }) as any;
+            });
+
+            const result = await Promise.race([callPromise, timeoutPromise]) as any;
+            if (result && result.text) {
+              return result;
+            }
+          } catch (err: any) {
+            console.warn(`Gemini model ${model} attempt failed:`, err?.status || err?.message);
+            lastErr = err;
+            await new Promise(r => setTimeout(r, 300));
           }
         }
+        throw lastErr || new Error('Semua model Gemini AI sedang tidak dapat dihubungi');
       };
 
       const response = await callAI();
