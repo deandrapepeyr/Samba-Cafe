@@ -306,11 +306,11 @@ export async function POST(req: Request) {
 
       const ai = new GoogleGenAI({ apiKey });
 
-      // Helper to call AI: Use gemini-2.0-flash-lite (fast) with fallback to gemini-2.0-flash
+      // Helper to call AI: Use gemini-flash-latest with fallback to gemini-flash-lite-latest and gemini-2.5-flash
       const callAI = async () => {
         try {
-          const liteCall = ai.models.generateContent({
-            model: 'gemini-2.0-flash-lite',
+          const mainCall = ai.models.generateContent({
+            model: 'gemini-flash-latest',
             contents: [
               prompt,
               { inlineData: { data: base64Image, mimeType } }
@@ -320,18 +320,18 @@ export async function POST(req: Request) {
             }
           });
 
-          const timeoutLite = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout gemini-2.0-flash-lite (15s)')), 15000)
+          const timeoutMain = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Timeout gemini-flash-latest (15s)')), 15000)
           );
 
-          return await Promise.race([liteCall, timeoutLite]) as any;
-        } catch (liteErr: any) {
-          console.warn('gemini-2.0-flash-lite attempt 1 failed:', liteErr?.message);
+          return await Promise.race([mainCall, timeoutMain]) as any;
+        } catch (mainErr: any) {
+          console.warn('gemini-flash-latest attempt 1 failed:', mainErr?.message);
           
           try {
-            await new Promise(r => setTimeout(r, 1000));
+            await new Promise(r => setTimeout(r, 800));
             return await ai.models.generateContent({
-              model: 'gemini-2.0-flash-lite',
+              model: 'gemini-flash-lite-latest',
               contents: [
                 prompt,
                 { inlineData: { data: base64Image, mimeType } }
@@ -341,9 +341,9 @@ export async function POST(req: Request) {
               }
             }) as any;
           } catch (retryErr: any) {
-            console.warn('gemini-2.0-flash-lite retry failed, falling back to gemini-2.0-flash:', retryErr?.message);
+            console.warn('gemini-flash-lite-latest retry failed, falling back to gemini-2.5-flash:', retryErr?.message);
             return await ai.models.generateContent({
-              model: 'gemini-2.0-flash',
+              model: 'gemini-2.5-flash',
               contents: [
                 prompt,
                 { inlineData: { data: base64Image, mimeType } }
@@ -478,7 +478,7 @@ export async function POST(req: Request) {
         : issues.join(' • ');
 
       const newPaymentStatus = isValid ? 'PAID' : 'AI_INVALID';
-      const targetStatus = 'preparing'; // Always move to preparing — cashier will review if AI_INVALID
+      const targetStatus = isValid ? 'preparing' : 'pending';
 
       // Save to in-memory cache for instant subsequent reads
       verificationCache.set(cacheKey, parsedResult);
@@ -499,11 +499,11 @@ export async function POST(req: Request) {
               .eq('id', orderId);
             if (dbErr) console.error('Failed to update valid transaction in database:', dbErr);
           } else {
-            // AI could not confirm validity — move to preparing anyway, flag for cashier review
+            // AI could not confirm validity — keep in pending for cashier review
             const { error: dbErr } = await supabase
               .from('transactions')
               .update({ 
-                status: 'preparing',
+                status: 'pending',
                 payment_status: 'AI_INVALID',
                 payment_confirmed_at: null,
                 payment_confirmed_by: null

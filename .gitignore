@@ -42,3 +42,5 @@ next-env.d.ts
 # uploads
 /public/images/proofs/*
 *.JPG.jpeg
+
+.vercel

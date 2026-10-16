@@ -167,7 +167,7 @@ export default function OrdersPage() {
 
       // Immediately sync local order state to reflect the new AI verification status
       const newStatus = data.result?.is_valid ? (data.status || 'preparing') : 'pending';
-      const newPaymentStatus = data.result?.is_valid ? (data.payment_status || 'PAID') : 'PAYMENT_REJECTED';
+      const newPaymentStatus = data.result?.is_valid ? (data.payment_status || 'PAID') : (data.payment_status || 'AI_INVALID');
 
       setOrders(prev => prev.map(o => o.id === order.id ? {
         ...o,
@@ -181,9 +181,9 @@ export default function OrdersPage() {
         payment_status: newPaymentStatus
       } : prev);
 
-
     } catch (err: any) {
       console.error('AI verification failed:', err);
+      aiVerifiedIdsRef.current.add(order.id);
       setAiErrors(prev => ({
         ...prev,
         [order.id]: err.message || 'Server AI sedang sibuk'
@@ -213,25 +213,30 @@ export default function OrdersPage() {
     }
   }, [orders, analyzingOrderIds]);
 
-  // Load AI verification result when opening order detail
+  // Load AI verification result when opening order detail (instant from cache/localStorage, no infinite loop)
   useEffect(() => {
-    if (selectedOrder && selectedOrder.payment_proof_url) {
-      const currentRes = aiVerifications[selectedOrder.id];
-      const isOutdated = !currentRes || !currentRes.checklist || (currentRes.reason?.includes('12.000') && selectedOrder.total !== 12000) || currentRes.checklist?.status_check?.detail?.includes('Duplikat');
+    if (!selectedOrder || !selectedOrder.payment_proof_url) return;
 
-      if (isOutdated) {
-        // Clear stale local storage
-        try {
-          localStorage.removeItem(`samba_ai_res_${selectedOrder.id}`);
-        } catch (e) {}
+    // 1. If already in React state, do not trigger anything
+    if (aiVerifications[selectedOrder.id]) return;
 
-        // Immediately trigger fresh AI verification with force=true
-        if (!analyzingOrderIds[selectedOrder.id]) {
-          verifyProofWithAi(selectedOrder, true);
+    // 2. Try loading from localStorage immediately
+    try {
+      const cached = localStorage.getItem(`samba_ai_res_${selectedOrder.id}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && (parsed.reason || parsed.checklist)) {
+          setAiVerifications(prev => ({ ...prev, [selectedOrder.id]: parsed }));
+          return;
         }
       }
+    } catch (e) {}
+
+    // 3. If not in state or localStorage, trigger AI verification once in background
+    if (!analyzingOrderIds[selectedOrder.id]) {
+      verifyProofWithAi(selectedOrder, false);
     }
-  }, [selectedOrder?.id, selectedOrder?.payment_proof_url, aiVerifications]);
+  }, [selectedOrder?.id, selectedOrder?.payment_proof_url]);
 
   const confirmPaymentAndAcceptOrder = async (order: Order) => {
     setUpdatingId(order.id);
@@ -364,6 +369,21 @@ export default function OrdersPage() {
             notes: item.notes
           }))
         };
+      });
+
+      // Hydrate aiVerifications from localStorage for instant display
+      formattedOrders.forEach(o => {
+        if (o.payment_proof_url) {
+          try {
+            const cached = localStorage.getItem(`samba_ai_res_${o.id}`);
+            if (cached) {
+              const parsed = JSON.parse(cached);
+              if (parsed && (parsed.reason || parsed.checklist)) {
+                setAiVerifications(prev => ({ ...prev, [o.id]: parsed }));
+              }
+            }
+          } catch (e) {}
+        }
       });
 
       // Sound notification if new pending or preparing order came in
@@ -1482,12 +1502,7 @@ export default function OrdersPage() {
                 const rawAiResult = aiVerifications[selectedOrder.id];
                 const aiErr = aiErrors[selectedOrder.id];
 
-                // If cached result has stale "12.000" or lacks checklist, treat as stale
-                const isStale = !!rawAiResult && (
-                  !rawAiResult.checklist || 
-                  (!!rawAiResult.reason?.includes('12.000') && selectedOrder.total !== 12000)
-                );
-                const activeRaw = isStale ? null : rawAiResult;
+                const activeRaw = rawAiResult;
 
                 // Fallback: If activeRaw is not yet loaded in React state, derive from order's status so it renders immediately
                 const aiResult = activeRaw || (
@@ -1515,7 +1530,7 @@ export default function OrdersPage() {
                       <h4 className="font-bold text-sm text-white flex items-center gap-2">
                         <Sparkles size={16} className="text-amber-400" /> Verifikasi AI Pembayaran
                       </h4>
-                      {isAnalyzing ? (
+                      {isAnalyzing && !aiResult ? (
                         <span className="text-[10px] bg-blue-500/10 text-blue-400 px-2.5 py-0.5 rounded-full border border-blue-500/20 font-bold flex items-center gap-1.5 animate-pulse">
                           <RefreshCw size={10} className="animate-spin" /> Menganalisis...
                         </span>
@@ -1571,7 +1586,7 @@ export default function OrdersPage() {
                     </div>
 
                     {/* AI Analysis Breakdown Box */}
-                    {isAnalyzing ? (
+                    {isAnalyzing && !aiResult ? (
                       <div className="rounded-2xl border border-blue-500/20 bg-blue-950/15 p-4 space-y-2.5 animate-pulse">
                         <div className="flex items-center gap-2 text-xs font-bold text-blue-400">
                           <RefreshCw size={14} className="animate-spin text-blue-400" />
