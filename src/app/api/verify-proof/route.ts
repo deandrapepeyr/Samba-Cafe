@@ -323,11 +323,11 @@ export async function POST(req: Request) {
 
       const ai = new GoogleGenAI({ apiKey });
 
-      // Helper to call AI: Use high-speed gemini-3.5-flash-lite with retry
+      // Helper to call AI: Use gemini-2.0-flash-lite (fast) with fallback to gemini-2.0-flash
       const callAI = async () => {
         try {
           const liteCall = ai.models.generateContent({
-            model: 'gemini-3.5-flash-lite',
+            model: 'gemini-2.0-flash-lite',
             contents: [
               prompt,
               { inlineData: { data: base64Image, mimeType } }
@@ -338,17 +338,17 @@ export async function POST(req: Request) {
           });
 
           const timeoutLite = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout gemini-3.5-flash-lite (15s)')), 15000)
+            setTimeout(() => reject(new Error('Timeout gemini-2.0-flash-lite (15s)')), 15000)
           );
 
           return await Promise.race([liteCall, timeoutLite]) as any;
         } catch (liteErr: any) {
-          console.warn('gemini-3.5-flash-lite attempt 1 failed:', liteErr?.message);
+          console.warn('gemini-2.0-flash-lite attempt 1 failed:', liteErr?.message);
           
           try {
             await new Promise(r => setTimeout(r, 1000));
             return await ai.models.generateContent({
-              model: 'gemini-3.5-flash-lite',
+              model: 'gemini-2.0-flash-lite',
               contents: [
                 prompt,
                 { inlineData: { data: base64Image, mimeType } }
@@ -358,9 +358,9 @@ export async function POST(req: Request) {
               }
             }) as any;
           } catch (retryErr: any) {
-            console.warn('gemini-3.5-flash-lite retry failed, falling back to gemini-3.8-flash:', retryErr?.message);
+            console.warn('gemini-2.0-flash-lite retry failed, falling back to gemini-2.0-flash:', retryErr?.message);
             return await ai.models.generateContent({
-              model: 'gemini-3.8-flash',
+              model: 'gemini-2.0-flash',
               contents: [
                 prompt,
                 { inlineData: { data: base64Image, mimeType } }
