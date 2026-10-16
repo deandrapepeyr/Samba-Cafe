@@ -1,3 +1,6 @@
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
 import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import { supabase } from '@/lib/supabase';
