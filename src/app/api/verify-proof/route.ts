@@ -494,8 +494,8 @@ export async function POST(req: Request) {
         ? 'Semua parameter valid. Pembayaran aman & terkonfirmasi.'
         : issues.join(' • ');
 
-      const newPaymentStatus = isValid ? 'PAID' : 'PAYMENT_REJECTED';
-      const targetStatus = isValid ? 'preparing' : 'pending';
+      const newPaymentStatus = isValid ? 'PAID' : 'AI_INVALID';
+      const targetStatus = 'preparing'; // Always move to preparing — cashier will review if AI_INVALID
 
       // Save to in-memory cache for instant subsequent reads
       verificationCache.set(cacheKey, parsedResult);
@@ -516,16 +516,17 @@ export async function POST(req: Request) {
               .eq('id', orderId);
             if (dbErr) console.error('Failed to update valid transaction in database:', dbErr);
           } else {
+            // AI could not confirm validity — move to preparing anyway, flag for cashier review
             const { error: dbErr } = await supabase
               .from('transactions')
               .update({ 
-                status: 'pending', 
-                payment_status: 'PAYMENT_REJECTED',
+                status: 'preparing',
+                payment_status: 'AI_INVALID',
                 payment_confirmed_at: null,
                 payment_confirmed_by: null
               })
               .eq('id', orderId);
-            if (dbErr) console.error('Failed to update rejected transaction in database:', dbErr);
+            if (dbErr) console.error('Failed to update AI_INVALID transaction in database:', dbErr);
           }
         } catch (dbErr) {
           console.error('Failed to update transaction in database:', dbErr);

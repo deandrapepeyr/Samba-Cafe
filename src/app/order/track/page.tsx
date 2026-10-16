@@ -134,12 +134,10 @@ export default function OrderTrackingPage() {
     };
   }, [router]);
 
-  // 1. Orders needing payment or re-upload (unpaid / rejected / invalid)
+  // 1. Orders needing payment (truly unpaid - no proof submitted yet)
   const needsPaymentOrders = orders.filter(o => 
     o.status === 'pending' && (
       o.payment_status === 'AWAITING_PAYMENT' || 
-      o.payment_status === 'AI_INVALID' || 
-      o.payment_status === 'PAYMENT_REJECTED' ||
       !o.payment_proof_url
     )
   );
@@ -152,9 +150,10 @@ export default function OrderTrackingPage() {
   const allUnpaidTotal = needsPaymentOrders.reduce((sum, o) => sum + (o.total || 0), 0);
 
   // 2. Orders awaiting cashier confirmation (proof uploaded, waiting cashier)
-  const waitingOrders = orders.filter(o => 
-    o.status === 'pending' && 
-    (o.payment_status === 'WAITING_CONFIRMATION' || (!['AWAITING_PAYMENT', 'AI_INVALID', 'PAYMENT_REJECTED'].includes(o.payment_status) && !!o.payment_proof_url))
+  const waitingOrders = orders.filter(o =>
+    o.status === 'pending' &&
+    !!o.payment_proof_url &&
+    !needsPaymentOrders.some(n => n.id === o.id)
   );
   const isWaitingCashier = !hasNeedsPayment && waitingOrders.length > 0;
   const latestWaitingOrder = isWaitingCashier ? waitingOrders[waitingOrders.length - 1] : null;
@@ -495,12 +494,10 @@ export default function OrderTrackingPage() {
 
   let currentStatusLabel = 'Pesanan Diproses';
   if (isReady) currentStatusLabel = 'Pesanan Siap Diambil';
-  else if (needsPaymentOrders.some(o => o.payment_status === 'PAYMENT_REJECTED')) currentStatusLabel = 'Bukti Ditolak — Upload Ulang';
   else if (hasNeedsPayment) currentStatusLabel = 'Menunggu Pembayaran QRIS';
   else if (isWaitingCashier) currentStatusLabel = 'AI Sedang Memeriksa Bukti...';
   else if (isPreparing) currentStatusLabel = 'Pesanan Sedang Disiapkan';
   else if (isPending) currentStatusLabel = 'Menunggu Diproses';
-  else if (isRejected) currentStatusLabel = 'Pembayaran Ditolak';
 
   const isWarningTime = timeLeft !== null && timeLeft <= 60;
 
@@ -617,32 +614,6 @@ export default function OrderTrackingPage() {
                     ? 'Waktu hampir habis! Segera upload bukti transfer sebelum pesanan otomatis dibatalkan.'
                     : 'Selesaikan pembayaran & upload bukti transfer dalam 5 menit sebelum pesanan dibatalkan otomatis.'}
                 </span>
-              </div>
-            )}
-
-            {/* If previous payment was rejected (by AI auto or cashier manually), show prominent notice */}
-            {needsPaymentOrders.some(o => o.payment_status === 'PAYMENT_REJECTED') && (
-              <div className="bg-red-500/15 border border-red-500/40 rounded-2xl p-4 flex items-start gap-3">
-                <XCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-                <div className="text-xs text-red-200">
-                  <p className="font-bold text-red-300">❌ Bukti Tidak Valid — Upload Ulang</p>
-                  <p className="mt-0.5 text-zinc-300 leading-relaxed">
-                    Sistem AI mendeteksi bukti transfer tidak sesuai (nominal berbeda, bukti lama, atau gambar tidak jelas). Pastikan nominal transfer <span className="font-bold text-white">tepat sama</span> dengan tagihan, lalu upload ulang bukti yang benar.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* AI_INVALID kept for backward compatibility only */}
-            {needsPaymentOrders.some(o => o.payment_status === 'AI_INVALID') && !needsPaymentOrders.some(o => o.payment_status === 'PAYMENT_REJECTED') && (
-              <div className="bg-red-500/15 border border-red-500/40 rounded-2xl p-4 flex items-start gap-3">
-                <XCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-                <div className="text-xs text-red-200">
-                  <p className="font-bold text-red-300">❌ Bukti Pembayaran Tidak Sesuai</p>
-                  <p className="mt-0.5 text-zinc-300 leading-relaxed">
-                    Bukti transfer tidak sesuai atau belum terbaca jelas. Silakan periksa nominal dan upload ulang bukti pembayaran yang benar.
-                  </p>
-                </div>
               </div>
             )}
 
