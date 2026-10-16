@@ -694,15 +694,27 @@ export default function POSPage() {
 
   const getProductStock = (productId: string) => {
     const product = products.find(p => p.id === productId);
-    return product?.is_available ? 1 : 0;
+    if (!product || !product.is_available) return 0;
+    if (product.is_titipan && typeof product.stock === 'number') {
+      return product.stock;
+    }
+    return null;
   };
 
   const getStockString = (product: Product) => {
-    return product.is_available ? 'Tersedia' : 'Habis';
+    if (!product.is_available) return 'Habis';
+    if (product.is_titipan && typeof product.stock === 'number') {
+      return product.stock <= 0 ? 'Habis' : `Sisa ${product.stock}`;
+    }
+    return 'Tersedia';
   };
 
   const isStockEmpty = (product: Product) => {
-    return !product.is_available;
+    if (!product.is_available) return true;
+    if (product.is_titipan && typeof product.stock === 'number') {
+      return product.stock <= 0;
+    }
+    return false;
   };
 
   const handleCheckoutClick = () => {
@@ -1743,7 +1755,7 @@ export default function POSPage() {
               {filteredProducts.map(product => {
                 const cartItem = cart.find(c => c.product.id === product.id);
                 const qtyInCart = cartItem ? cartItem.quantity : 0;
-                const isUnavailable = !product.is_available;
+                const isUnavailable = isStockEmpty(product);
                 
                 return (
                   <div 
