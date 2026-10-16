@@ -104,6 +104,8 @@ export default function OrdersPage() {
       status_check?: AiChecklistItem;
       fraud_check?: AiChecklistItem;
     };
+    _proof_url?: string;
+    _expected_amount?: number;
   };
   const [aiVerifications, setAiVerifications] = useState<Record<string, AiVerificationData>>({});
   const [analyzingOrderIds, setAnalyzingOrderIds] = useState<Record<string, boolean>>({});
@@ -112,6 +114,7 @@ export default function OrdersPage() {
   const prevOrderCountRef = useRef<number>(0);
   const localUpdatesRef = useRef<Record<string, number>>({});
   const aiVerifiedIdsRef = useRef<Set<string>>(new Set());
+  const rightPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isLoading && !role) {
@@ -148,19 +151,25 @@ export default function OrdersPage() {
         throw new Error(data.error || 'Gagal memverifikasi bukti transfer dengan AI');
       }
 
+      const resultWithMeta = {
+        ...data.result,
+        _proof_url: order.payment_proof_url,
+        _expected_amount: order.total
+      };
+
       setAiVerifications(prev => ({
         ...prev,
-        [order.id]: data.result
+        [order.id]: resultWithMeta
       }));
 
       try {
         if (data.result) {
-          localStorage.setItem(`samba_ai_res_${order.id}`, JSON.stringify(data.result));
+          localStorage.setItem(`samba_ai_res_${order.id}`, JSON.stringify(resultWithMeta));
         }
       } catch (e) {}
 
-      // Track that this order has been AI-verified (via ref to avoid dep array issues)
-      aiVerifiedIdsRef.current.add(order.id);
+      // Track that this specific proof URL and amount has been AI-verified
+      aiVerifiedIdsRef.current.add(`${order.id}_${order.payment_proof_url}_${order.total}`);
 
       // Guard: prevent polling (3s interval) from overwriting this AI-verified status
       localUpdatesRef.current[order.id] = Date.now();
@@ -205,7 +214,7 @@ export default function OrdersPage() {
              !o.payment_status
            ) &&
            !analyzingOrderIds[o.id] &&
-           !aiVerifiedIdsRef.current.has(o.id)  // skip jika sudah pernah diverifikasi AI
+           !aiVerifiedIdsRef.current.has(`${o.id}_${o.payment_proof_url}_${o.total}`)  // skip jika foto bukti & nominal sama persis sudah pernah diverifikasi AI
     );
 
     if (unverifiedPending) {
@@ -213,30 +222,44 @@ export default function OrdersPage() {
     }
   }, [orders, analyzingOrderIds]);
 
-  // Load AI verification result when opening order detail (instant from cache/localStorage, no infinite loop)
+  // Reset scroll to top when selectedOrder changes
+  useEffect(() => {
+    if (rightPanelRef.current) {
+      rightPanelRef.current.scrollTop = 0;
+    }
+  }, [selectedOrder?.id, selectedOrder?.payment_proof_url]);
+
+  // Load AI verification result when opening order detail (instant from cache/localStorage if fresh, re-verify if proof changed)
   useEffect(() => {
     if (!selectedOrder || !selectedOrder.payment_proof_url) return;
 
-    // 1. If already in React state, do not trigger anything
-    if (aiVerifications[selectedOrder.id]) return;
+    // 1. If already in React state and matches current proof URL and total, do not trigger anything
+    const existing = aiVerifications[selectedOrder.id];
+    if (existing && existing._proof_url === selectedOrder.payment_proof_url && existing._expected_amount === selectedOrder.total) {
+      return;
+    }
 
-    // 2. Try loading from localStorage immediately
+    // 2. Try loading from localStorage immediately if URL & amount match
     try {
       const cached = localStorage.getItem(`samba_ai_res_${selectedOrder.id}`);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (parsed && (parsed.reason || parsed.checklist)) {
+        const isUrlMatch = !parsed._proof_url || parsed._proof_url === selectedOrder.payment_proof_url;
+        const isAmountMatch = !parsed._expected_amount || parsed._expected_amount === selectedOrder.total;
+        if (isUrlMatch && isAmountMatch && (parsed.reason || parsed.checklist)) {
           setAiVerifications(prev => ({ ...prev, [selectedOrder.id]: parsed }));
           return;
+        } else {
+          localStorage.removeItem(`samba_ai_res_${selectedOrder.id}`);
         }
       }
     } catch (e) {}
 
-    // 3. If not in state or localStorage, trigger AI verification once in background
+    // 3. If not in state or localStorage (or stale due to new proof/amount), trigger fresh AI verification
     if (!analyzingOrderIds[selectedOrder.id]) {
-      verifyProofWithAi(selectedOrder, false);
+      verifyProofWithAi(selectedOrder, true);
     }
-  }, [selectedOrder?.id, selectedOrder?.payment_proof_url]);
+  }, [selectedOrder?.id, selectedOrder?.payment_proof_url, selectedOrder?.total]);
 
   const confirmPaymentAndAcceptOrder = async (order: Order) => {
     setUpdatingId(order.id);
@@ -371,15 +394,19 @@ export default function OrdersPage() {
         };
       });
 
-      // Hydrate aiVerifications from localStorage for instant display
+      // Hydrate aiVerifications from localStorage for instant display (only if proof URL & amount match)
       formattedOrders.forEach(o => {
         if (o.payment_proof_url) {
           try {
             const cached = localStorage.getItem(`samba_ai_res_${o.id}`);
             if (cached) {
               const parsed = JSON.parse(cached);
-              if (parsed && (parsed.reason || parsed.checklist)) {
+              const isUrlMatch = !parsed._proof_url || parsed._proof_url === o.payment_proof_url;
+              const isAmountMatch = !parsed._expected_amount || parsed._expected_amount === o.total;
+              if (isUrlMatch && isAmountMatch && (parsed.reason || parsed.checklist)) {
                 setAiVerifications(prev => ({ ...prev, [o.id]: parsed }));
+              } else {
+                localStorage.removeItem(`samba_ai_res_${o.id}`);
               }
             }
           } catch (e) {}
@@ -1524,7 +1551,7 @@ export default function OrdersPage() {
                 );
 
                 return (
-                  <div className="w-full md:w-[340px] lg:w-[440px] shrink-0 px-6 py-6 bg-[#0c0c0c] md:border-l border-white/5 print:hidden overflow-y-auto flex flex-col gap-4">
+                  <div ref={rightPanelRef} className="w-full md:w-[340px] lg:w-[440px] shrink-0 px-6 py-6 bg-[#0c0c0c] md:border-l border-white/5 print:hidden overflow-y-auto flex flex-col gap-4">
                     
                     <div className="flex items-center justify-between">
                       <h4 className="font-bold text-sm text-white flex items-center gap-2">

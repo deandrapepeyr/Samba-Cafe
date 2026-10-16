@@ -39,9 +39,9 @@ export async function POST(req: Request) {
           .eq('id', orderId)
           .maybeSingle();
 
-        if (existingTx && (existingTx.payment_status === 'PAID' || existingTx.payment_status === 'PAYMENT_REJECTED')) {
+        if (existingTx && existingTx.payment_proof_url === imageUrl && (existingTx.payment_status === 'PAID' || existingTx.payment_status === 'PAYMENT_REJECTED')) {
           const isValid = existingTx.payment_status === 'PAID';
-          const cachedResult = verificationCache.get(orderId) || verificationCache.get(cacheKey);
+          const cachedResult = verificationCache.get(cacheKey);
 
           // Only return cached result if it has the full structured checklist
           if (cachedResult && cachedResult.checklist) {
