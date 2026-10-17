@@ -134,6 +134,17 @@ export default function OrdersPage() {
       return copy;
     });
 
+    // Clear any stale verification result for this order so old analysis does not linger
+    setAiVerifications(prev => {
+      const existing = prev[order.id];
+      if (!existing || existing._proof_url !== order.payment_proof_url || existing._expected_amount !== order.total) {
+        const copy = { ...prev };
+        delete copy[order.id];
+        return copy;
+      }
+      return prev;
+    });
+
     try {
       const res = await fetch('/api/verify-proof', {
         method: 'POST',
@@ -239,13 +250,22 @@ export default function OrdersPage() {
       return;
     }
 
-    // 2. Try loading from localStorage immediately if URL & amount match
+    // Clear stale state for this order if proof or total changed
+    if (existing && (existing._proof_url !== selectedOrder.payment_proof_url || existing._expected_amount !== selectedOrder.total)) {
+      setAiVerifications(prev => {
+        const copy = { ...prev };
+        delete copy[selectedOrder.id];
+        return copy;
+      });
+    }
+
+    // 2. Try loading from localStorage immediately IF AND ONLY IF proof URL & amount strictly match
     try {
       const cached = localStorage.getItem(`samba_ai_res_${selectedOrder.id}`);
       if (cached) {
         const parsed = JSON.parse(cached);
-        const isUrlMatch = !parsed._proof_url || parsed._proof_url === selectedOrder.payment_proof_url;
-        const isAmountMatch = !parsed._expected_amount || parsed._expected_amount === selectedOrder.total;
+        const isUrlMatch = parsed._proof_url && parsed._proof_url === selectedOrder.payment_proof_url;
+        const isAmountMatch = parsed._expected_amount && parsed._expected_amount === selectedOrder.total;
         if (isUrlMatch && isAmountMatch && (parsed.reason || parsed.checklist)) {
           setAiVerifications(prev => ({ ...prev, [selectedOrder.id]: parsed }));
           return;
@@ -394,15 +414,15 @@ export default function OrdersPage() {
         };
       });
 
-      // Hydrate aiVerifications from localStorage for instant display (only if proof URL & amount match)
+      // Hydrate aiVerifications from localStorage for instant display (only if proof URL & amount strictly match)
       formattedOrders.forEach(o => {
         if (o.payment_proof_url) {
           try {
             const cached = localStorage.getItem(`samba_ai_res_${o.id}`);
             if (cached) {
               const parsed = JSON.parse(cached);
-              const isUrlMatch = !parsed._proof_url || parsed._proof_url === o.payment_proof_url;
-              const isAmountMatch = !parsed._expected_amount || parsed._expected_amount === o.total;
+              const isUrlMatch = parsed._proof_url && parsed._proof_url === o.payment_proof_url;
+              const isAmountMatch = parsed._expected_amount && parsed._expected_amount === o.total;
               if (isUrlMatch && isAmountMatch && (parsed.reason || parsed.checklist)) {
                 setAiVerifications(prev => ({ ...prev, [o.id]: parsed }));
               } else {
@@ -440,6 +460,20 @@ export default function OrdersPage() {
         } catch(e) {}
         
         return updated;
+      });
+
+      // Keep open selectedOrder in sync with latest order updates from server
+      setSelectedOrder(prev => {
+        if (!prev) return null;
+        const latest = formattedOrders.find(o => o.id === prev.id);
+        if (!latest) return prev;
+        if (latest.payment_proof_url !== prev.payment_proof_url ||
+            latest.payment_status !== prev.payment_status ||
+            latest.status !== prev.status ||
+            latest.total !== prev.total) {
+          return { ...prev, ...latest };
+        }
+        return prev;
       });
     } else {
       setOrders([]);
@@ -800,31 +834,39 @@ export default function OrdersPage() {
                 }`}>
                   {order.method}
                 </span>
-                {order.payment_status === 'AI_VERIFIED' && (
-                  <span className="shrink-0 whitespace-nowrap text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
-                    ✅ Valid AI
+                {analyzingOrderIds[order.id] ? (
+                  <span className="shrink-0 whitespace-nowrap text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-blue-500/10 text-blue-400 border-blue-500/20 animate-pulse flex items-center gap-1">
+                    <RefreshCw size={9} className="animate-spin" /> Memeriksa Bukti...
                   </span>
-                )}
-                {/* PAID via QR with proof = AI verified */}
-                {order.payment_status === 'PAID' && order.order_source === 'CUSTOMER_QR' && order.payment_proof_url && (
-                  <span className="shrink-0 whitespace-nowrap text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
-                    ✅ Terverifikasi AI
-                  </span>
-                )}
-                {order.payment_status === 'PAYMENT_REJECTED' && order.order_source === 'CUSTOMER_QR' && (
-                  <span className="shrink-0 whitespace-nowrap text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-red-500/10 text-red-400 border-red-500/20">
-                    ❌ Ditolak AI
-                  </span>
-                )}
-                {order.payment_status === 'AI_INVALID' && (
-                  <span className="shrink-0 whitespace-nowrap text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-red-500/10 text-red-400 border-red-500/20">
-                    ❌ Ditolak AI
-                  </span>
-                )}
-                {(!order.payment_status || order.payment_status === 'WAITING_CONFIRMATION' || order.payment_status === 'PENDING_VERIFICATION') && order.method === 'QRIS' && order.status === 'pending' && (
-                  <span className="shrink-0 whitespace-nowrap text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-yellow-500/10 text-yellow-400 border-yellow-500/20 animate-pulse">
-                    🔍 Memeriksa Bukti...
-                  </span>
+                ) : (
+                  <>
+                    {order.payment_status === 'AI_VERIFIED' && (
+                      <span className="shrink-0 whitespace-nowrap text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                        ✅ Valid AI
+                      </span>
+                    )}
+                    {/* PAID via QR with proof = AI verified */}
+                    {order.payment_status === 'PAID' && order.order_source === 'CUSTOMER_QR' && order.payment_proof_url && (
+                      <span className="shrink-0 whitespace-nowrap text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                        ✅ Terverifikasi AI
+                      </span>
+                    )}
+                    {order.payment_status === 'PAYMENT_REJECTED' && order.order_source === 'CUSTOMER_QR' && (
+                      <span className="shrink-0 whitespace-nowrap text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-red-500/10 text-red-400 border-red-500/20">
+                        ❌ Ditolak AI
+                      </span>
+                    )}
+                    {order.payment_status === 'AI_INVALID' && (
+                      <span className="shrink-0 whitespace-nowrap text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-red-500/10 text-red-400 border-red-500/20">
+                        ❌ Ditolak AI
+                      </span>
+                    )}
+                    {(!order.payment_status || order.payment_status === 'WAITING_CONFIRMATION' || order.payment_status === 'PENDING_VERIFICATION') && order.method === 'QRIS' && order.status === 'pending' && (
+                      <span className="shrink-0 whitespace-nowrap text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-yellow-500/10 text-yellow-400 border-yellow-500/20 animate-pulse">
+                        🔍 Memeriksa Bukti...
+                      </span>
+                    )}
+                  </>
                 )}
               </div>
               {order.customer_name && (
@@ -874,14 +916,20 @@ export default function OrdersPage() {
                     <button 
                       onClick={() => setSelectedOrder(order)} 
                       className={`h-7 px-2.5 text-[10px] font-bold text-white rounded-lg transition-all shrink-0 flex items-center gap-1 shadow-md ${
-                        order.payment_status === 'AI_VERIFIED'
+                        analyzingOrderIds[order.id]
+                          ? 'bg-gradient-to-r from-blue-600 to-blue-500 hover:brightness-110 shadow-blue-500/10'
+                          : order.payment_status === 'AI_VERIFIED'
                           ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 hover:brightness-110 shadow-emerald-500/10'
                           : order.payment_status === 'AI_INVALID' || order.payment_status === 'PAYMENT_REJECTED'
                           ? 'bg-gradient-to-r from-red-600 to-red-500 hover:brightness-110 shadow-red-500/10'
                           : 'bg-gradient-to-r from-amber-500 to-amber-600 hover:brightness-110 shadow-amber-500/10'
                       }`}
                     >
-                      <Sparkles size={11} /> {order.payment_status === 'AI_VERIFIED' ? 'Bukti Valid & Terima' : (order.payment_status === 'AI_INVALID' || order.payment_status === 'PAYMENT_REJECTED') ? 'Cek Bukti Ditolak' : 'Cek Bukti AI & Terima'}
+                      {analyzingOrderIds[order.id] ? (
+                        <><RefreshCw size={11} className="animate-spin" /> Analisis AI...</>
+                      ) : (
+                        <><Sparkles size={11} /> {order.payment_status === 'AI_VERIFIED' ? 'Bukti Valid & Terima' : (order.payment_status === 'AI_INVALID' || order.payment_status === 'PAYMENT_REJECTED') ? 'Cek Bukti Ditolak' : 'Cek Bukti AI & Terima'}</>
+                      )}
                     </button>
                   ) : order.payment_status === 'WAITING_CONFIRMATION' ? (
                     <>
@@ -1390,53 +1438,58 @@ export default function OrdersPage() {
                           </button>
                         )}
 
-                            {selectedOrder.status === 'pending' && selectedOrder.payment_proof_url && (
-                          <div className="pt-2 mt-2 border-t border-white/10 space-y-3">
-                            {aiVerifications[selectedOrder.id]?.is_valid || selectedOrder.payment_status === 'PAID' ? (
-                              <div className="p-3 bg-emerald-500/10 border border-emerald-500/25 rounded-xl text-emerald-400 text-xs flex items-start gap-2.5">
-                                <CheckCircle2 size={16} className="shrink-0 mt-0.5 text-emerald-400" />
-                                <div>
-                                  <p className="font-bold">AI Menandai: Bukti Pembayaran Valid ✅</p>
-                                  <p className="text-[11px] text-zinc-300 mt-0.5">Nominal sesuai (Rp {selectedOrder.total.toLocaleString('id-ID')}). Silakan konfirmasi untuk memasukkan pesanan ke antrean dapur.</p>
-                                </div>
-                              </div>
-                            ) : (aiVerifications[selectedOrder.id]?.is_valid === false || selectedOrder.payment_status === 'PAYMENT_REJECTED' || selectedOrder.payment_status === 'AI_INVALID') ? (
-                              <div className="p-3.5 bg-red-500/10 border border-red-500/25 rounded-xl text-red-400 text-xs flex items-start gap-2.5">
-                                <AlertTriangle size={16} className="shrink-0 mt-0.5 text-red-400" />
-                                <div className="space-y-1 w-full">
-                                  <p className="font-bold text-red-300">AI Menolak Otomatis: Bukti Tidak Valid 🚫</p>
-                                  {aiVerifications[selectedOrder.id]?.issues && aiVerifications[selectedOrder.id].issues!.length > 0 ? (
-                                    <ul className="text-[11px] text-zinc-300 space-y-1 list-disc list-inside mt-1 leading-relaxed">
-                                      {aiVerifications[selectedOrder.id].issues!.map((iss, idx) => (
-                                        <li key={idx} className="text-red-200/90">{iss}</li>
-                                      ))}
-                                    </ul>
+                            {selectedOrder.status === 'pending' && selectedOrder.payment_proof_url && (() => {
+                              const isAnalyzing = !!analyzingOrderIds[selectedOrder.id];
+                              const rawAiResult = aiVerifications[selectedOrder.id];
+                              const activeRaw = (rawAiResult && rawAiResult._proof_url === selectedOrder.payment_proof_url && rawAiResult._expected_amount === selectedOrder.total)
+                                ? rawAiResult
+                                : null;
+
+                              return (
+                                <div className="pt-2 mt-2 border-t border-white/10 space-y-3">
+                                  {isAnalyzing ? (
+                                    <div className="p-3 bg-blue-500/10 border border-blue-500/25 rounded-xl text-blue-400 text-xs flex items-start gap-2.5 animate-pulse">
+                                      <RefreshCw size={16} className="shrink-0 mt-0.5 animate-spin text-blue-400" />
+                                      <div>
+                                        <p className="font-bold">AI sedang memeriksa bukti pembayaran...</p>
+                                        <p className="text-[11px] text-zinc-300 mt-0.5">Sistem sedang menganalisis struk transfer di samping.</p>
+                                      </div>
+                                    </div>
+                                  ) : (activeRaw?.is_valid || selectedOrder.payment_status === 'PAID') ? (
+                                    <div className="p-3 bg-emerald-500/10 border border-emerald-500/25 rounded-xl text-emerald-400 text-xs flex items-start gap-2.5">
+                                      <CheckCircle2 size={16} className="shrink-0 mt-0.5 text-emerald-400" />
+                                      <div>
+                                        <p className="font-bold">AI Menandai: Bukti Pembayaran Valid ✅</p>
+                                        <p className="text-[11px] text-zinc-300 mt-0.5">Nominal sesuai (Rp {selectedOrder.total.toLocaleString('id-ID')}). Silakan konfirmasi untuk memasukkan pesanan ke antrean dapur.</p>
+                                      </div>
+                                    </div>
+                                  ) : (activeRaw?.is_valid === false || selectedOrder.payment_status === 'PAYMENT_REJECTED' || selectedOrder.payment_status === 'AI_INVALID') ? (
+                                    <div className="p-3.5 bg-red-500/10 border border-red-500/25 rounded-xl text-red-400 text-xs flex items-start gap-2.5">
+                                      <AlertTriangle size={16} className="shrink-0 mt-0.5 text-red-400" />
+                                      <div className="space-y-1 w-full">
+                                        <p className="font-bold text-red-300">AI Menolak Otomatis: Bukti Tidak Valid 🚫</p>
+                                        {activeRaw?.issues && activeRaw.issues.length > 0 ? (
+                                          <ul className="text-[11px] text-zinc-300 space-y-1 list-disc list-inside mt-1 leading-relaxed">
+                                            {activeRaw.issues.map((iss, idx) => (
+                                              <li key={idx} className="text-red-200/90">{iss}</li>
+                                            ))}
+                                          </ul>
+                                        ) : (
+                                          <p className="text-[11px] text-zinc-300 mt-0.5 leading-relaxed">
+                                            {activeRaw?.reason || 'Bukti transfer ditolak (nominal tidak sesuai atau waktu transfer kedaluwarsa). Pelanggan diminta upload ulang bukti yang benar.'}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
                                   ) : (
-                                    <p className="text-[11px] text-zinc-300 mt-0.5 leading-relaxed">
-                                      {aiVerifications[selectedOrder.id]?.reason && !aiVerifications[selectedOrder.id]?.reason.includes('12.000')
-                                        ? aiVerifications[selectedOrder.id].reason
-                                        : 'Bukti transfer ditolak (waktu pembayaran lewat dari batas 5 menit atau bukti duplikat). Pelanggan diminta upload ulang bukti yang benar.'}
-                                    </p>
+                                    <div className="p-3 bg-amber-500/10 border border-amber-500/25 rounded-xl text-amber-400 text-xs flex items-start gap-2.5">
+                                      <Scan size={16} className="shrink-0 mt-0.5 text-amber-400" />
+                                      <div>
+                                        <p className="font-bold">Konfirmasi Pembayaran Kasir</p>
+                                        <p className="text-[11px] text-zinc-300 mt-0.5">Periksa bukti pembayaran di samping lalu klik konfirmasi untuk menerima pesanan.</p>
+                                      </div>
+                                    </div>
                                   )}
-                                </div>
-                              </div>
-                            ) : analyzingOrderIds[selectedOrder.id] ? (
-                              <div className="p-3 bg-blue-500/10 border border-blue-500/25 rounded-xl text-blue-400 text-xs flex items-start gap-2.5 animate-pulse">
-                                <RefreshCw size={16} className="shrink-0 mt-0.5 animate-spin text-blue-400" />
-                                <div>
-                                  <p className="font-bold">AI sedang memeriksa bukti pembayaran...</p>
-                                  <p className="text-[11px] text-zinc-300 mt-0.5">Sistem sedang menganalisis struk transfer di samping.</p>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="p-3 bg-amber-500/10 border border-amber-500/25 rounded-xl text-amber-400 text-xs flex items-start gap-2.5">
-                                <Scan size={16} className="shrink-0 mt-0.5 text-amber-400" />
-                                <div>
-                                  <p className="font-bold">Konfirmasi Pembayaran Kasir</p>
-                                  <p className="text-[11px] text-zinc-300 mt-0.5">Periksa bukti pembayaran di samping lalu klik konfirmasi untuk menerima pesanan.</p>
-                                </div>
-                              </div>
-                            )}
 
                             <div className="flex gap-2">
                               <button
@@ -1448,7 +1501,7 @@ export default function OrdersPage() {
                               </button>
                               
                               {/* Tombol Tolak hanya muncul jika belum ditolak AI dan belum ada hasil AI */}
-                              {selectedOrder.payment_status !== 'PAYMENT_REJECTED' && selectedOrder.payment_status !== 'AI_INVALID' && !aiVerifications[selectedOrder.id] && !analyzingOrderIds[selectedOrder.id] && (
+                              {selectedOrder.payment_status !== 'PAYMENT_REJECTED' && selectedOrder.payment_status !== 'AI_INVALID' && !activeRaw && !isAnalyzing && (
                                 <button
                                   disabled={updatingId === selectedOrder.id}
                                   onClick={() => rejectPayment(selectedOrder)}
@@ -1459,7 +1512,8 @@ export default function OrdersPage() {
                               )}
                             </div>
                           </div>
-                        )}
+                        );
+                      })()}
 
                         {selectedOrder.status === 'preparing' && (
                           <div className="space-y-3">
@@ -1529,10 +1583,13 @@ export default function OrdersPage() {
                 const rawAiResult = aiVerifications[selectedOrder.id];
                 const aiErr = aiErrors[selectedOrder.id];
 
-                const activeRaw = rawAiResult;
+                // Strict validation: rawAiResult is only valid if it matches the current proof URL and total
+                const activeRaw = (rawAiResult && rawAiResult._proof_url === selectedOrder.payment_proof_url && rawAiResult._expected_amount === selectedOrder.total)
+                  ? rawAiResult
+                  : null;
 
-                // Fallback: If activeRaw is not yet loaded in React state, derive from order's status so it renders immediately
-                const aiResult = activeRaw || (
+                // While analyzing, NEVER show previous stale fallback.
+                const aiResult = isAnalyzing ? null : (activeRaw || (
                   selectedOrder.payment_status === 'PAID' ? {
                     is_valid: true,
                     detected_amount: selectedOrder.total,
@@ -1548,7 +1605,7 @@ export default function OrdersPage() {
                     status_text: 'DITOLAK',
                     reason: 'Bukti transfer tidak sesuai (melebihi batas waktu 5 menit atau duplikat).'
                   } : null
-                );
+                ));
 
                 return (
                   <div ref={rightPanelRef} className="w-full md:w-[340px] lg:w-[440px] shrink-0 px-6 py-6 bg-[#0c0c0c] md:border-l border-white/5 print:hidden overflow-y-auto flex flex-col gap-4">
@@ -1557,7 +1614,7 @@ export default function OrdersPage() {
                       <h4 className="font-bold text-sm text-white flex items-center gap-2">
                         <Sparkles size={16} className="text-amber-400" /> Verifikasi AI Pembayaran
                       </h4>
-                      {isAnalyzing && !aiResult ? (
+                      {isAnalyzing ? (
                         <span className="text-[10px] bg-blue-500/10 text-blue-400 px-2.5 py-0.5 rounded-full border border-blue-500/20 font-bold flex items-center gap-1.5 animate-pulse">
                           <RefreshCw size={10} className="animate-spin" /> Menganalisis...
                         </span>
@@ -1613,7 +1670,7 @@ export default function OrdersPage() {
                     </div>
 
                     {/* AI Analysis Breakdown Box */}
-                    {isAnalyzing && !aiResult ? (
+                    {isAnalyzing ? (
                       <div className="rounded-2xl border border-blue-500/20 bg-blue-950/15 p-4 space-y-2.5 animate-pulse">
                         <div className="flex items-center gap-2 text-xs font-bold text-blue-400">
                           <RefreshCw size={14} className="animate-spin text-blue-400" />
