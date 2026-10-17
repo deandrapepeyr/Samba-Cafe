@@ -122,6 +122,19 @@ export default function OrdersPage() {
     }
   }, [role, isLoading, router]);
 
+  // Helper to open order detail and immediately trigger loading state if unverified
+  const openOrderDetail = (order: Order) => {
+    setSelectedOrder(order);
+    if (order.payment_proof_url) {
+      const existing = aiVerifications[order.id];
+      const isFresh = existing && existing._proof_url === order.payment_proof_url && existing._expected_amount === order.total;
+      if (!isFresh) {
+        setAnalyzingOrderIds(prev => ({ ...prev, [order.id]: true }));
+        verifyProofWithAi(order, true);
+      }
+    }
+  };
+
   // AI Verification trigger for order detail
   const verifyProofWithAi = async (order: Order, force = false) => {
     if (!order.payment_proof_url) return;
@@ -134,15 +147,11 @@ export default function OrdersPage() {
       return copy;
     });
 
-    // Clear any stale verification result for this order so old analysis does not linger
+    // Wipe any existing verification in state for this order so no stale result can ever show
     setAiVerifications(prev => {
-      const existing = prev[order.id];
-      if (!existing || existing._proof_url !== order.payment_proof_url || existing._expected_amount !== order.total) {
-        const copy = { ...prev };
-        delete copy[order.id];
-        return copy;
-      }
-      return prev;
+      const copy = { ...prev };
+      delete copy[order.id];
+      return copy;
     });
 
     try {
@@ -172,12 +181,6 @@ export default function OrdersPage() {
         ...prev,
         [order.id]: resultWithMeta
       }));
-
-      try {
-        if (data.result) {
-          localStorage.setItem(`samba_ai_res_${order.id}`, JSON.stringify(resultWithMeta));
-        }
-      } catch (e) {}
 
       // Track that this specific proof URL and amount has been AI-verified
       aiVerifiedIdsRef.current.add(`${order.id}_${order.payment_proof_url}_${order.total}`);
@@ -240,42 +243,33 @@ export default function OrdersPage() {
     }
   }, [selectedOrder?.id, selectedOrder?.payment_proof_url]);
 
-  // Load AI verification result when opening order detail (instant from cache/localStorage if fresh, re-verify if proof changed)
+  // Purge any legacy AI cache from localStorage on load so stale results never linger
+  useEffect(() => {
+    try {
+      Object.keys(localStorage).forEach(k => {
+        if (k.startsWith('samba_ai_res_')) {
+          localStorage.removeItem(k);
+        }
+      });
+    } catch (e) {}
+  }, []);
+
+  // Load AI verification result when opening order detail (re-verify if not yet verified for this exact proof & amount)
   useEffect(() => {
     if (!selectedOrder || !selectedOrder.payment_proof_url) return;
 
-    // 1. If already in React state and matches current proof URL and total, do not trigger anything
     const existing = aiVerifications[selectedOrder.id];
     if (existing && existing._proof_url === selectedOrder.payment_proof_url && existing._expected_amount === selectedOrder.total) {
       return;
     }
 
     // Clear stale state for this order if proof or total changed
-    if (existing && (existing._proof_url !== selectedOrder.payment_proof_url || existing._expected_amount !== selectedOrder.total)) {
-      setAiVerifications(prev => {
-        const copy = { ...prev };
-        delete copy[selectedOrder.id];
-        return copy;
-      });
-    }
+    setAiVerifications(prev => {
+      const copy = { ...prev };
+      delete copy[selectedOrder.id];
+      return copy;
+    });
 
-    // 2. Try loading from localStorage immediately IF AND ONLY IF proof URL & amount strictly match
-    try {
-      const cached = localStorage.getItem(`samba_ai_res_${selectedOrder.id}`);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        const isUrlMatch = parsed._proof_url && parsed._proof_url === selectedOrder.payment_proof_url;
-        const isAmountMatch = parsed._expected_amount && parsed._expected_amount === selectedOrder.total;
-        if (isUrlMatch && isAmountMatch && (parsed.reason || parsed.checklist)) {
-          setAiVerifications(prev => ({ ...prev, [selectedOrder.id]: parsed }));
-          return;
-        } else {
-          localStorage.removeItem(`samba_ai_res_${selectedOrder.id}`);
-        }
-      }
-    } catch (e) {}
-
-    // 3. If not in state or localStorage (or stale due to new proof/amount), trigger fresh AI verification
     if (!analyzingOrderIds[selectedOrder.id]) {
       verifyProofWithAi(selectedOrder, true);
     }
@@ -412,25 +406,6 @@ export default function OrdersPage() {
             notes: item.notes
           }))
         };
-      });
-
-      // Hydrate aiVerifications from localStorage for instant display (only if proof URL & amount strictly match)
-      formattedOrders.forEach(o => {
-        if (o.payment_proof_url) {
-          try {
-            const cached = localStorage.getItem(`samba_ai_res_${o.id}`);
-            if (cached) {
-              const parsed = JSON.parse(cached);
-              const isUrlMatch = parsed._proof_url && parsed._proof_url === o.payment_proof_url;
-              const isAmountMatch = parsed._expected_amount && parsed._expected_amount === o.total;
-              if (isUrlMatch && isAmountMatch && (parsed.reason || parsed.checklist)) {
-                setAiVerifications(prev => ({ ...prev, [o.id]: parsed }));
-              } else {
-                localStorage.removeItem(`samba_ai_res_${o.id}`);
-              }
-            }
-          } catch (e) {}
-        }
       });
 
       // Sound notification if new pending or preparing order came in
@@ -903,7 +878,7 @@ export default function OrdersPage() {
 
             <div className="flex items-center gap-1.5 shrink-0">
               <button
-                onClick={() => setSelectedOrder(order)}
+                onClick={() => openOrderDetail(order)}
                 className="h-7 px-2.5 text-[10px] font-medium text-zinc-400 bg-zinc-900/50 hover:bg-zinc-800 hover:text-zinc-100 rounded-lg border border-white/10 transition-all flex items-center gap-1 shrink-0 whitespace-nowrap"
               >
                 <Receipt size={12} />
@@ -914,7 +889,7 @@ export default function OrdersPage() {
                 <>
                   {order.payment_proof_url ? (
                     <button 
-                      onClick={() => setSelectedOrder(order)} 
+                      onClick={() => openOrderDetail(order)} 
                       className={`h-7 px-2.5 text-[10px] font-bold text-white rounded-lg transition-all shrink-0 flex items-center gap-1 shadow-md ${
                         analyzingOrderIds[order.id]
                           ? 'bg-gradient-to-r from-blue-600 to-blue-500 hover:brightness-110 shadow-blue-500/10'
@@ -956,7 +931,7 @@ export default function OrdersPage() {
                   onClick={() => {
                     // Kasir double check saat pesanan selesai: jika Customer QR dengan bukti transfer, buka detail modal untuk validasi kasir!
                     if (order.order_source === 'CUSTOMER_QR' && order.payment_proof_url) {
-                      setSelectedOrder(order);
+                      openOrderDetail(order);
                     } else {
                       updateOrderStatus(order.id, 'ready');
                     }
@@ -1441,13 +1416,16 @@ export default function OrdersPage() {
                             {selectedOrder.status === 'pending' && selectedOrder.payment_proof_url && (() => {
                               const isAnalyzing = !!analyzingOrderIds[selectedOrder.id];
                               const rawAiResult = aiVerifications[selectedOrder.id];
-                              const activeRaw = (rawAiResult && rawAiResult._proof_url === selectedOrder.payment_proof_url && rawAiResult._expected_amount === selectedOrder.total)
-                                ? rawAiResult
-                                : null;
+                              const hasFreshResult = !!(
+                                rawAiResult && 
+                                rawAiResult._proof_url === selectedOrder.payment_proof_url && 
+                                rawAiResult._expected_amount === selectedOrder.total
+                              );
+                              const showLoading = isAnalyzing || (!hasFreshResult && selectedOrder.payment_status !== 'PAID');
 
                               return (
                                 <div className="pt-2 mt-2 border-t border-white/10 space-y-3">
-                                  {isAnalyzing ? (
+                                  {showLoading ? (
                                     <div className="p-3 bg-blue-500/10 border border-blue-500/25 rounded-xl text-blue-400 text-xs flex items-start gap-2.5 animate-pulse">
                                       <RefreshCw size={16} className="shrink-0 mt-0.5 animate-spin text-blue-400" />
                                       <div>
@@ -1455,7 +1433,7 @@ export default function OrdersPage() {
                                         <p className="text-[11px] text-zinc-300 mt-0.5">Sistem sedang menganalisis struk transfer di samping.</p>
                                       </div>
                                     </div>
-                                  ) : (activeRaw?.is_valid || selectedOrder.payment_status === 'PAID') ? (
+                                  ) : hasFreshResult && rawAiResult?.is_valid ? (
                                     <div className="p-3 bg-emerald-500/10 border border-emerald-500/25 rounded-xl text-emerald-400 text-xs flex items-start gap-2.5">
                                       <CheckCircle2 size={16} className="shrink-0 mt-0.5 text-emerald-400" />
                                       <div>
@@ -1463,20 +1441,20 @@ export default function OrdersPage() {
                                         <p className="text-[11px] text-zinc-300 mt-0.5">Nominal sesuai (Rp {selectedOrder.total.toLocaleString('id-ID')}). Silakan konfirmasi untuk memasukkan pesanan ke antrean dapur.</p>
                                       </div>
                                     </div>
-                                  ) : (activeRaw?.is_valid === false || selectedOrder.payment_status === 'PAYMENT_REJECTED' || selectedOrder.payment_status === 'AI_INVALID') ? (
+                                  ) : hasFreshResult && rawAiResult?.is_valid === false ? (
                                     <div className="p-3.5 bg-red-500/10 border border-red-500/25 rounded-xl text-red-400 text-xs flex items-start gap-2.5">
                                       <AlertTriangle size={16} className="shrink-0 mt-0.5 text-red-400" />
                                       <div className="space-y-1 w-full">
                                         <p className="font-bold text-red-300">AI Menolak Otomatis: Bukti Tidak Valid 🚫</p>
-                                        {activeRaw?.issues && activeRaw.issues.length > 0 ? (
+                                        {rawAiResult.issues && rawAiResult.issues.length > 0 ? (
                                           <ul className="text-[11px] text-zinc-300 space-y-1 list-disc list-inside mt-1 leading-relaxed">
-                                            {activeRaw.issues.map((iss, idx) => (
+                                            {rawAiResult.issues.map((iss, idx) => (
                                               <li key={idx} className="text-red-200/90">{iss}</li>
                                             ))}
                                           </ul>
                                         ) : (
                                           <p className="text-[11px] text-zinc-300 mt-0.5 leading-relaxed">
-                                            {activeRaw?.reason || 'Bukti transfer ditolak (nominal tidak sesuai atau waktu transfer kedaluwarsa). Pelanggan diminta upload ulang bukti yang benar.'}
+                                            {rawAiResult.reason || 'Bukti transfer ditolak (nominal tidak sesuai atau waktu transfer kedaluwarsa).'}
                                           </p>
                                         )}
                                       </div>
@@ -1501,7 +1479,7 @@ export default function OrdersPage() {
                               </button>
                               
                               {/* Tombol Tolak hanya muncul jika belum ditolak AI dan belum ada hasil AI */}
-                              {selectedOrder.payment_status !== 'PAYMENT_REJECTED' && selectedOrder.payment_status !== 'AI_INVALID' && !activeRaw && !isAnalyzing && (
+                              {selectedOrder.payment_status !== 'PAYMENT_REJECTED' && selectedOrder.payment_status !== 'AI_INVALID' && !hasFreshResult && !isAnalyzing && (
                                 <button
                                   disabled={updatingId === selectedOrder.id}
                                   onClick={() => rejectPayment(selectedOrder)}
@@ -1583,29 +1561,16 @@ export default function OrdersPage() {
                 const rawAiResult = aiVerifications[selectedOrder.id];
                 const aiErr = aiErrors[selectedOrder.id];
 
-                // Strict validation: rawAiResult is only valid if it matches the current proof URL and total
-                const activeRaw = (rawAiResult && rawAiResult._proof_url === selectedOrder.payment_proof_url && rawAiResult._expected_amount === selectedOrder.total)
-                  ? rawAiResult
-                  : null;
+                // ONLY accept rawAiResult if it was explicitly verified for THIS order's current proof URL and total!
+                const hasFreshResult = !!(
+                  rawAiResult && 
+                  rawAiResult._proof_url === selectedOrder.payment_proof_url && 
+                  rawAiResult._expected_amount === selectedOrder.total
+                );
 
-                // While analyzing, NEVER show previous stale fallback.
-                const aiResult = isAnalyzing ? null : (activeRaw || (
-                  selectedOrder.payment_status === 'PAID' ? {
-                    is_valid: true,
-                    detected_amount: selectedOrder.total,
-                    amount_matches: true,
-                    provider: selectedOrder.method || 'QRIS',
-                    status_text: 'BERHASIL',
-                    reason: 'Bukti transfer valid dan pembayaran telah terkonfirmasi.'
-                  } : (selectedOrder.payment_status === 'PAYMENT_REJECTED' || selectedOrder.payment_status === 'AI_INVALID') ? {
-                    is_valid: false,
-                    detected_amount: null,
-                    amount_matches: false,
-                    provider: selectedOrder.method || 'QRIS',
-                    status_text: 'DITOLAK',
-                    reason: 'Bukti transfer tidak sesuai (melebihi batas waktu 5 menit atau duplikat).'
-                  } : null
-                ));
+                // Show loading if analyzing OR if no fresh verified result exists yet (unless order is already PAID)
+                const showLoading = isAnalyzing || (!hasFreshResult && !aiErr && selectedOrder.payment_status !== 'PAID');
+                const aiResult = (!isAnalyzing && hasFreshResult) ? rawAiResult : null;
 
                 return (
                   <div ref={rightPanelRef} className="w-full md:w-[340px] lg:w-[440px] shrink-0 px-6 py-6 bg-[#0c0c0c] md:border-l border-white/5 print:hidden overflow-y-auto flex flex-col gap-4">
@@ -1614,7 +1579,7 @@ export default function OrdersPage() {
                       <h4 className="font-bold text-sm text-white flex items-center gap-2">
                         <Sparkles size={16} className="text-amber-400" /> Verifikasi AI Pembayaran
                       </h4>
-                      {isAnalyzing ? (
+                      {showLoading ? (
                         <span className="text-[10px] bg-blue-500/10 text-blue-400 px-2.5 py-0.5 rounded-full border border-blue-500/20 font-bold flex items-center gap-1.5 animate-pulse">
                           <RefreshCw size={10} className="animate-spin" /> Menganalisis...
                         </span>
@@ -1647,7 +1612,7 @@ export default function OrdersPage() {
                         />
                         
                         {/* Laser Scan Animation Line when analyzing */}
-                        {isAnalyzing && (
+                        {showLoading && (
                           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-amber-400 to-transparent shadow-[0_0_15px_rgba(251,191,36,0.8)] animate-scan pointer-events-none" />
                         )}
                       </div>
@@ -1670,7 +1635,7 @@ export default function OrdersPage() {
                     </div>
 
                     {/* AI Analysis Breakdown Box */}
-                    {isAnalyzing ? (
+                    {showLoading ? (
                       <div className="rounded-2xl border border-blue-500/20 bg-blue-950/15 p-4 space-y-2.5 animate-pulse">
                         <div className="flex items-center gap-2 text-xs font-bold text-blue-400">
                           <RefreshCw size={14} className="animate-spin text-blue-400" />
