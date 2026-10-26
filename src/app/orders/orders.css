@@ -638,6 +638,50 @@ select.orders-in option {
   color: #fff;
 }
 
+.orders-btn-add-pos {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(245, 176, 65, 0.12);
+  border: 1px solid rgba(245, 176, 65, 0.35);
+  color: var(--amber);
+  font-weight: 700;
+  font-size: 13px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-top: 4px;
+}
+
+.orders-btn-add-pos:hover {
+  background: rgba(245, 176, 65, 0.22);
+  border-color: rgba(245, 176, 65, 0.55);
+  transform: translateY(-1px);
+}
+
+.orders-btn-add-pos:active {
+  transform: scale(0.98);
+}
+
+.orders-add-pos-hint {
+  display: block;
+  font-size: 11px;
+  color: var(--mu);
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+.orders-link-accent {
+  color: var(--amber) !important;
+  font-weight: 700 !important;
+}
+.orders-link-accent:hover {
+  color: #fff !important;
+}
+
 .orders-mf {
   display: flex;
   justify-content: space-between;

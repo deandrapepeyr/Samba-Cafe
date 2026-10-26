@@ -18,7 +18,8 @@ import {
   FileEdit,
   RotateCcw,
   Sparkles,
-  Search
+  Search,
+  Plus
 } from 'lucide-react';
 import './orders.css';
 
@@ -486,19 +487,59 @@ export default function OrdersPage() {
     });
   };
 
-  // Add menu item to draft
-  const handleAddMenuToDraft = (productName: string) => {
-    if (!productName) return;
-    const prod = menuProducts.find(p => p.name === productName);
-    if (!prod) return;
+  // Open and edit this order directly in the full POS interface
+  const handleAddMenuInPos = (order: Order, customItems?: OrderItem[], customName?: string) => {
+    const isPaid = order.paid || (order.method !== 'Bayar Nanti' && order.payment_status !== 'UNPAID');
+    const items = customItems || order.items || [];
+    const itemsTotal = items.reduce((sum, it) => sum + (it.price * it.qty), 0);
+    const origTotal = order.total || itemsTotal;
+    const paidAmt = isPaid ? origTotal : 0;
+    const customerName = (customName !== undefined ? customName : order.customer_name) || '';
 
-    setDraftItems(prev => {
-      const existing = prev.find(i => i.name === prod.name);
-      if (existing) {
-        return prev.map(i => i.name === prod.name ? { ...i, qty: i.qty + 1 } : i);
-      }
-      return [...prev, { name: prod.name, price: prod.price, qty: 1 }];
+    const mappedCart = items.map(it => {
+      const p = menuProducts.find(prod => prod.name.trim().toLowerCase() === it.name.trim().toLowerCase());
+      return {
+        id: p ? p.id : Math.random().toString(),
+        product: {
+          id: p ? p.id : '',
+          name: it.name,
+          price: it.price,
+          category_id: '',
+          image_url: '',
+          is_available: true,
+          is_titipan: false,
+          titipan_name: null,
+        },
+        quantity: it.qty,
+        notes: it.notes || '',
+        isExistingPaid: isPaid,
+      };
     });
+
+    const rawOldItems = items.map(it => ({
+      product_name: it.name,
+      price: it.price,
+      quantity: it.qty,
+      notes: it.notes || '',
+    }));
+
+    try {
+      localStorage.setItem('samba_pos_cart', JSON.stringify(mappedCart));
+      localStorage.setItem('samba_pos_customer', customerName.startsWith('Pelanggan ') ? '' : customerName);
+      localStorage.setItem('samba_pos_edit_mode', 'true');
+      localStorage.setItem('samba_pos_old_items', JSON.stringify(rawOldItems));
+      localStorage.setItem('samba_pos_order_number', order.id);
+      localStorage.setItem('samba_pos_previously_paid', paidAmt.toString());
+      localStorage.setItem('samba_pos_is_orig_paid', isPaid.toString());
+      
+      // Dispatch sync event so /pos updates if already mounted
+      window.dispatchEvent(new CustomEvent('samba-pos-cart-sync', { detail: { action: 'loaded' } }));
+    } catch (e) {
+      console.error('Failed to set localStorage for POS edit:', e);
+    }
+
+    setEditingOrder(null);
+    router.push('/pos');
   };
 
   // Save edited order
@@ -978,6 +1019,14 @@ export default function OrdersPage() {
                         </button>
                         <button
                           type="button"
+                          className="orders-link orders-link-accent"
+                          onClick={() => handleAddMenuInPos(selectedOrder)}
+                          title="Buka pesanan ini di halaman POS untuk menambah menu"
+                        >
+                          + Tambah Menu (POS)
+                        </button>
+                        <button
+                          type="button"
                           className="orders-link"
                           onClick={() => handleOpenEdit(selectedOrder)}
                         >
@@ -1154,24 +1203,20 @@ export default function OrdersPage() {
                 ))
               )}
 
-              {/* Add Menu Select */}
-              <label htmlFor="add-menu-select">Tambah menu</label>
-              <select
-                id="add-menu-select"
-                className="orders-in"
-                defaultValue=""
-                onChange={e => {
-                  handleAddMenuToDraft(e.target.value);
-                  e.target.value = '';
-                }}
+              {/* Add Menu Action - Navigate directly to POS */}
+              <label>Tambah menu</label>
+              <button
+                type="button"
+                onClick={() => handleAddMenuInPos(editingOrder, draftItems, draftCustomerName)}
+                className="orders-btn-add-pos"
+                title="Buka pesanan ini di halaman Kasir (POS) untuk menambah menu"
               >
-                <option value="">Pilih menu...</option>
-                {menuProducts.map(p => (
-                  <option key={p.id} value={p.name}>
-                    {p.name} – Rp {p.price.toLocaleString('id-ID')}
-                  </option>
-                ))}
-              </select>
+                <Plus size={16} className="stroke-[2.5]" />
+                <span>Tambah Menu di Halaman Kasir (POS) →</span>
+              </button>
+              <span className="orders-add-pos-hint">
+                Pilih menu tambahan langsung dari katalog POS lengkap dengan foto, kategori & varian.
+              </span>
 
               {/* Modal Footer Actions */}
               <div className="orders-mf">
