@@ -1,7 +1,20 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { X, Printer, Palette, Utensils } from 'lucide-react';
+import { 
+  X, 
+  Printer, 
+  Palette, 
+  ZoomIn, 
+  ZoomOut, 
+  Sparkles, 
+  Coffee, 
+  Utensils, 
+  Star, 
+  Award, 
+  Flame, 
+  Maximize2 
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 
@@ -27,243 +40,1038 @@ interface BrochureModalProps {
   categories: Category[];
 }
 
+// Urutan kategori yang diinginkan untuk layout menu restoran
+const CATEGORY_ORDER = [
+  'Food',
+  'Snack',
+  'coffee',
+  'Es teh & other',
+  'Minuman',
+  'Pop mie ',
+  'Dessert',
+];
+
+// Label display & icon untuk kategori
+const CATEGORY_CONFIG: Record<string, { label: string; icon: typeof Utensils }> = {
+  'Food': { label: 'MAKANAN UTAMA', icon: Utensils },
+  'Snack': { label: 'SNACK & GORENGAN', icon: Flame },
+  'coffee': { label: 'ANEKA KOPI SPESIAL', icon: Coffee },
+  'Es teh & other': { label: 'TEH & LAINNYA', icon: Sparkles },
+  'Minuman': { label: 'MINUMAN SEGAR', icon: Sparkles },
+  'Pop mie ': { label: 'POP MIE', icon: Flame },
+  'Dessert': { label: 'DESSERT & MANISAN', icon: Award },
+};
+
+// Daftar item favorit untuk diberi tanda bintang / highlight
+const POPULAR_KEYWORDS = [
+  'katsu', 'mix platter', 'dimsum', 'aren', 'cireng', 'cappuccino', 'kentang', 'piscok', 'mie'
+];
+
 export function BrochureModal({ isOpen, onClose, products, categories }: BrochureModalProps) {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
-  const printRef = useRef<HTMLDivElement>(null);
+  const [zoomMode, setZoomMode] = useState<'fit' | '100%'>('fit');
   const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
 
-  const handlePrint = () => {
-    window.print();
-  };
+  // Permanen ukuran kertas & orientasi: A5 Landscape saja
+  const paperSize = 'A5' as const;
+  const orientation = 'landscape' as const;
+  const isLandscape = true;
+  const isA5 = true;
 
-  // Hanya menu asli Samba Cafe (tidak termasuk menu titipan)
+  // Hanya menu asli Samba Cafe (tidak termasuk menu titipan & ciki snack)
   const cafeProducts = products.filter(p => !p.is_titipan && !p.titipan_name);
 
-  const displayCategories = categories.filter(c => 
-    c.id !== '1' && 
-    !c.name.toLowerCase().includes('ciki') && 
-    cafeProducts.some(p => p.category_id === c.id)
-  );
+  const displayCategories = categories
+    .filter(c =>
+      !c.name.toLowerCase().includes('ciki') &&
+      cafeProducts.some(p => p.category_id === c.id)
+    )
+    .sort((a, b) => {
+      const ia = CATEGORY_ORDER.indexOf(a.name);
+      const ib = CATEGORY_ORDER.indexOf(b.name);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    });
 
-  const heroProduct = cafeProducts.find(p => p.name.toLowerCase().includes('katsu') && p.image_url) || cafeProducts.find(p => p.image_url);
+  // Split categories into 3 columns for balanced A5 Landscape restaurant layout
+  const getColumnLayout = (colCount: number = 3) => {
+    const blocks = displayCategories.map(cat => ({
+      cat,
+      items: cafeProducts.filter(p => p.category_id === cat.id),
+    }));
+
+    const cols: typeof blocks[] = Array.from({ length: colCount }, () => []);
+
+    // Ideal grouping for 3-column A5 Landscape restaurant menu hierarchy:
+    // Col 0: Food, Pop Mie, Es Teh
+    // Col 1: Snack, Dessert
+    // Col 2: Kopi, Minuman
+    const PREFERRED_COL: Record<string, number> = {
+      'Food': 0,
+      'Pop mie ': 0,
+      'Pop mie': 0,
+      'Es teh & other': 0,
+      'Snack': 1,
+      'Dessert': 1,
+      'coffee': 2,
+      'Minuman': 2,
+    };
+
+    const unassigned: typeof blocks = [];
+
+    blocks.forEach(block => {
+      const preferred = PREFERRED_COL[block.cat.name];
+      if (preferred !== undefined && preferred < colCount) {
+        cols[preferred].push(block);
+      } else {
+        unassigned.push(block);
+      }
+    });
+
+    if (unassigned.length > 0) {
+      const colLengths = cols.map(c => c.reduce((sum, b) => sum + b.items.length, 0));
+      unassigned.forEach(block => {
+        const minIdx = colLengths.indexOf(Math.min(...colLengths));
+        cols[minIdx].push(block);
+        colLengths[minIdx] += block.items.length;
+      });
+    }
+
+    return cols;
+  };
+
+  const columns = getColumnLayout(3);
+
+  // Dimensi A5 Landscape (210mm × 148mm) pada 96 DPI
+  const targetWidth = 794;
+  const targetHeight = 559;
 
   useEffect(() => {
     const updateScale = () => {
-      if (containerRef.current) {
-        // A5 Landscape width is approx 794px, height is approx 559px
-        const containerWidth = containerRef.current.clientWidth - 32; // subtract padding
-        
-        // Since we now stack 2 pages vertically, we just want to scale to fit width mainly,
-        // or ensure it fits height if window is super wide and short. 
-        // We'll scale to fit width since user can scroll vertically.
-        const targetWidth = 794;
-        
-        let newScale = containerWidth / targetWidth;
-        if (newScale > 1.2) newScale = 1.2; // don't scale up too much on large screens
-        
-        setScale(newScale);
+      if (!containerRef.current) return;
+
+      if (zoomMode === '100%') {
+        setScale(1);
+        return;
       }
+
+      // Hitung dimensi target berdasarkan ukuran kertas dan orientasi
+      const containerWidth = containerRef.current.clientWidth - 20;
+      const containerHeight = containerRef.current.clientHeight - 20;
+
+      const scaleW = containerWidth / targetWidth;
+      const scaleH = containerHeight / targetHeight;
+      let newScale = Math.min(scaleW, scaleH);
+
+      if (newScale > 1.25) newScale = 1.25;
+      if (newScale < 0.35) newScale = 0.35;
+      setScale(newScale);
     };
-    
-    // Slight delay to ensure DOM layout is complete before measuring
-    setTimeout(updateScale, 50);
+
+    const timer = setTimeout(updateScale, 60);
     window.addEventListener('resize', updateScale);
-    return () => window.removeEventListener('resize', updateScale);
-  }, [isOpen]);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', updateScale);
+    };
+  }, [isOpen, zoomMode, targetWidth, targetHeight]);
+
+  const isDark = theme === 'dark';
+
+  // Palette styling
+  const accent = isDark ? '#e0aa3e' : '#b45309';
+  const accentLight = isDark ? '#f6d887' : '#d97706';
+  const bg = isDark ? '#0b0907' : '#fcfaf6';
+  const cardBg = isDark ? 'rgba(26, 21, 16, 0.75)' : 'rgba(255, 255, 255, 0.85)';
+  const heroCardBg = isDark ? 'rgba(18, 14, 11, 0.82)' : 'rgba(255, 255, 255, 0.9)';
+  const textPrimary = isDark ? '#f8f4ec' : '#1a130e';
+  const textSecondary = isDark ? '#ad9e8d' : '#73604f';
+  const textMuted = isDark ? '#7a6e60' : '#9c8c7c';
+  const borderColor = isDark ? 'rgba(224, 170, 62, 0.24)' : 'rgba(180, 83, 9, 0.2)';
+  const leaderDot = isDark ? 'rgba(224, 170, 62, 0.32)' : 'rgba(180, 83, 9, 0.28)';
+
+  const handlePrint = async () => {
+    try {
+      if (document.fonts && document.fonts.ready) {
+        await document.fonts.ready;
+      }
+      const images = Array.from(document.querySelectorAll<HTMLImageElement>('.poster-canvas img'));
+      await Promise.all(
+        images.map(img => {
+          if (img.complete) return Promise.resolve();
+          return new Promise<void>((resolve) => {
+            img.onload = () => resolve();
+            img.onerror = () => resolve();
+          });
+        })
+      );
+    } catch {
+      // Lanjut print bila preloading gagal
+    }
+    window.print();
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-[100vw] sm:max-w-[100vw] md:max-w-[100vw] lg:max-w-[100vw] h-[100vh] w-full p-0 bg-zinc-950 border-none flex flex-col m-0 rounded-none overflow-hidden print:bg-transparent">
-        <DialogTitle className="sr-only">Cetak Brosur Menu</DialogTitle>
-        
-        {/* Top Action Bar */}
-        <div className="flex items-center justify-between p-4 bg-zinc-900 border-b border-white/10 print:hidden z-50 shadow-xl shrink-0">
-          <div className="flex items-center gap-4">
-            <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-              <Printer className="text-primary" size={20} />
-              Brochure Generator (A5 - 2 Pages)
-            </h2>
-            <span className="hidden sm:inline-flex text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-1 rounded-full font-bold">
-              Menu Samba Cafe Saja (Tanpa Titipan)
-            </span>
-          </div>
+      <DialogContent className="max-w-[100vw] sm:max-w-[100vw] md:max-w-[100vw] lg:max-w-[100vw] h-[100vh] w-full p-0 bg-zinc-950 border-none flex flex-col m-0 rounded-none overflow-hidden print:p-0 print:m-0 print:border-none print:shadow-none print:bg-transparent print:static print:transform-none print:translate-none print:top-auto print:left-auto print:overflow-visible">
+        <DialogTitle className="sr-only">Brosur & Poster Menu Restoran Samba Cafe</DialogTitle>
+
+        {/* Top Control Bar */}
+        <div className="print-controls-bar flex flex-wrap items-center justify-between p-3 px-5 bg-zinc-900/95 backdrop-blur border-b border-white/10 print:hidden z-50 shadow-xl shrink-0 gap-3">
           <div className="flex items-center gap-3">
-            <Button 
-              variant="outline" 
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-black font-black text-sm shadow">
+              S
+            </div>
+            <div>
+              <h2 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                <span>Brosur Restoran Samba Cafe</span>
+              </h2>
+              <p className="text-[11px] text-zinc-400 flex items-center gap-2 flex-wrap">
+                <span>Ukuran Cetak: A5 Landscape (210 × 148 mm)</span>
+                <span className="hidden md:inline-flex items-center text-[10px] text-amber-300 bg-amber-400/10 border border-amber-400/20 px-2.5 py-0.5 rounded-full font-medium">
+                  💡 Format otomatis A5 Landscape 1 Halaman Utuh (Tanpa Margin)
+                </span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center flex-wrap gap-2 sm:gap-2.5">
+            {/* Format Badge Tetap (A5 Landscape) */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs font-bold shadow-inner">
+              <Maximize2 size={13} className="rotate-90 text-amber-400" />
+              <span>A5 Landscape</span>
+            </div>
+
+            {/* Fit / 100% Zoom */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setZoomMode(zoomMode === 'fit' ? '100%' : 'fit')}
+              className="border-white/10 bg-zinc-800 text-zinc-100 hover:bg-zinc-700 h-9 rounded-xl text-xs"
+            >
+              {zoomMode === 'fit' ? (
+                <>
+                  <ZoomIn size={14} className="mr-1.5 text-amber-400" />
+                  100% Zoom
+                </>
+              ) : (
+                <>
+                  <ZoomOut size={14} className="mr-1.5 text-amber-400" />
+                  Fit Layar
+                </>
+              )}
+            </Button>
+
+            {/* Theme Toggle */}
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              className="border-white/10 bg-zinc-800 text-zinc-100 hover:bg-zinc-700"
+              className="border-white/10 bg-zinc-800 text-zinc-100 hover:bg-zinc-700 h-9 rounded-xl text-xs"
             >
-              <Palette size={16} className="mr-2 text-primary" />
-              Theme: {theme === 'dark' ? 'Dark Premium' : 'Light Classic'}
+              <Palette size={14} className="mr-1.5 text-amber-400" />
+              {theme === 'dark' ? 'Dark Gold' : 'Light Cream'}
             </Button>
-            <Button 
+
+            {/* Print Button */}
+            <Button
+              size="sm"
               onClick={handlePrint}
-              className="bg-primary text-black hover:bg-primary/90 font-bold"
+              className="bg-amber-400 hover:bg-amber-500 text-black font-extrabold h-9 rounded-xl px-4 text-xs shadow-lg shadow-amber-500/20"
             >
-              <Printer size={16} className="mr-2" />
-              Print / Save PDF
+              <Printer size={15} className="mr-1.5" />
+              Cetak / Simpan PDF
             </Button>
-            <Button variant="ghost" onClick={onClose} className="text-zinc-400 hover:text-white rounded-full w-10 h-10 p-0">
-              <X size={24} />
+
+            {/* Close Button */}
+            <Button
+              variant="ghost"
+              onClick={onClose}
+              className="text-zinc-400 hover:text-white rounded-full w-9 h-9 p-0 ml-1"
+            >
+              <X size={20} />
             </Button>
           </div>
         </div>
 
-        {/* Canvas Container */}
-        <div 
+        {/* Canvas Scroll Area */}
+        <div
           ref={containerRef}
-          className="flex-1 overflow-y-auto p-4 sm:p-8 bg-zinc-950 flex flex-col items-center print:p-0 print:bg-transparent print:block print:overflow-visible relative"
+          className="canvas-scroll-container flex-1 overflow-auto p-2 sm:p-3 bg-zinc-950 flex flex-col items-center justify-start print:p-0 print:bg-transparent print:block print:overflow-visible relative"
         >
-          
           <style dangerouslySetInnerHTML={{__html: `
+            @page {
+              size: 210mm 148mm;
+              margin: 0;
+            }
             @media print {
-              body * { visibility: hidden; }
-              .print-wrapper, .print-wrapper * { visibility: visible; }
-              .print-wrapper { position: absolute; left: 0; top: 0; width: 100%; transform: none !important; }
-              @page { size: A5 landscape; margin: 0; }
-              * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+              html, body {
+                margin: 0 !important;
+                padding: 0 !important;
+                background: ${bg} !important;
+                color: ${textPrimary} !important;
+                overflow: hidden !important;
+                width: 210mm !important;
+                height: 148mm !important;
+                max-width: 210mm !important;
+                max-height: 148mm !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+              /* Sembunyikan semua elemen di luar portal dialog brosur saat cetak */
+              body > *:not([data-slot="dialog-portal"]) {
+                display: none !important;
+              }
+              [data-slot="dialog-overlay"],
+              .print-controls-bar,
+              [data-slot="dialog-close"],
+              button {
+                display: none !important;
+              }
+              /* Pastikan pembungkus dialog Base UI mengisi 100% halaman cetak dari (0,0) */
+              [data-slot="dialog-portal"] {
+                display: block !important;
+                position: static !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 210mm !important;
+                height: 148mm !important;
+                max-width: 210mm !important;
+                max-height: 148mm !important;
+                overflow: hidden !important;
+              }
+              [data-slot="dialog-content"] {
+                display: block !important;
+                position: static !important;
+                top: auto !important;
+                left: auto !important;
+                right: auto !important;
+                bottom: auto !important;
+                inset: auto !important;
+                transform: none !important;
+                translate: none !important;
+                width: 210mm !important;
+                max-width: 210mm !important;
+                height: 148mm !important;
+                max-height: 148mm !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: none !important;
+                background: transparent !important;
+                box-shadow: none !important;
+                overflow: hidden !important;
+              }
+              .canvas-scroll-container {
+                display: block !important;
+                position: static !important;
+                width: 210mm !important;
+                height: 148mm !important;
+                max-width: 210mm !important;
+                max-height: 148mm !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: hidden !important;
+                background: transparent !important;
+              }
+              .print-wrapper {
+                display: block !important;
+                position: static !important;
+                width: 210mm !important;
+                height: 148mm !important;
+                max-width: 210mm !important;
+                max-height: 148mm !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                transform: none !important;
+                translate: none !important;
+                box-sizing: border-box !important;
+                overflow: hidden !important;
+              }
+              .poster-canvas {
+                display: flex !important;
+                flex-direction: row !important;
+                position: relative !important;
+                width: 210mm !important;
+                min-width: 210mm !important;
+                max-width: 210mm !important;
+                height: 148mm !important;
+                min-height: 148mm !important;
+                max-height: 148mm !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                transform: none !important;
+                translate: none !important;
+                box-shadow: none !important;
+                border-radius: 0 !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                page-break-after: avoid !important;
+                break-after: avoid !important;
+                page-break-before: avoid !important;
+                break-before: avoid !important;
+                box-sizing: border-box !important;
+                background: ${bg} !important;
+                color: ${textPrimary} !important;
+                overflow: hidden !important;
+              }
+              .menu-dot-leader {
+                flex: 1;
+                border-bottom: 1.5px dotted ${leaderDot};
+                margin: 0 5px;
+                position: relative;
+                top: -3px;
+              }
+              * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                box-sizing: border-box !important;
+              }
             }
-            .menu-leader {
+            .menu-dot-leader {
               flex: 1;
-              border-bottom: 1.5px dotted ${theme === 'dark' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)'};
-              margin: 0 8px;
+              border-bottom: 1.5px dotted ${leaderDot};
+              margin: 0 5px;
               position: relative;
-              top: -5px;
-            }
-            .a5-canvas {
-              width: 210mm;
-              height: 148mm;
+              top: -3px;
             }
           `}} />
 
-          {/* The Wrapper containing both A5 canvases */}
-          <div 
-            className="print-wrapper w-full max-w-[210mm] flex flex-col gap-10 items-center transition-transform duration-300 ease-out pb-20 print:pb-0" 
-            style={{ transform: `scale(${scale})`, transformOrigin: 'top center' }}
+          {/* Wrapper with interactive scale */}
+          <div
+            className="print-wrapper shrink-0 m-auto print:m-0"
+            style={{ 
+              width: `${Math.round(targetWidth * scale)}px`,
+              height: `${Math.round(targetHeight * scale)}px`,
+              position: 'relative',
+            }}
           >
-            
-            {/* PAGE 1: COVER & BRANDING */}
-            <div 
-              className={`a5-canvas relative shadow-2xl shrink-0 overflow-hidden print:shadow-none ${
-                theme === 'dark' 
-                  ? 'bg-[#151515] text-zinc-200' 
-                  : 'bg-[#f4ebd0] text-[#3e2723]'
-              }`}
+            <div
+              className="poster-canvas relative shadow-2xl shrink-0 overflow-hidden print:shadow-none flex flex-row"
               style={{
-                fontFamily: "'Inter', sans-serif",
-                pageBreakAfter: 'always',
-                breakAfter: 'page'
+                width: `${targetWidth}px`,
+                height: `${targetHeight}px`,
+                transform: `scale(${scale})`,
+                transformOrigin: 'top left',
+                fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+                background: bg,
+                color: textPrimary,
               }}
             >
-              <div className={`w-full h-full p-8 flex flex-col justify-center items-center border-x-[12px] ${theme === 'dark' ? 'border-[#ffb300]/20 bg-[#0d0d0d]' : 'border-[#4e342e]/10 bg-[#fff8e1]'} relative overflow-hidden`}>
-                
-                {/* Decorative border top/bottom */}
-                <div className={`absolute top-0 left-0 w-full h-3 ${theme === 'dark' ? 'bg-[#ffb300]' : 'bg-[#e65100]'}`}></div>
-                <div className={`absolute bottom-0 left-0 w-full h-3 ${theme === 'dark' ? 'bg-[#ffb300]' : 'bg-[#e65100]'}`}></div>
+              {/* Outer decorative gold border line */}
+              <div 
+                className="absolute inset-0 print:inset-[2.5mm] pointer-events-none z-30 transition-all" 
+                style={{ 
+                  border: `2px solid ${borderColor}`,
+                  boxShadow: `inset 0 0 0 1px ${isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.4)'}`
+                }} 
+              />
 
-                <div className="text-center mt-6 relative z-10">
-                  <div className={`inline-flex p-4 rounded-full mb-6 shadow-xl border-4 ${theme === 'dark' ? 'bg-[#1a1a1a] border-[#ffb300]/20' : 'bg-white border-[#e65100]/20'}`}>
-                    <Utensils size={56} className={theme === 'dark' ? 'text-[#ffb300]' : 'text-[#e65100]'} />
-                  </div>
-                  <h1 className="text-6xl font-black tracking-tighter mb-4 leading-none">
-                    SAMBA <br/><span className={theme === 'dark' ? 'text-[#ffb300] italic font-serif' : 'text-[#e65100] italic font-serif'}>CAFE</span>
-                  </h1>
-                  <p className={`text-sm uppercase tracking-[0.4em] font-bold ${theme === 'dark' ? 'text-zinc-500' : 'text-[#5d4037]'}`}>
-                    Premium Taste
-                  </p>
-                </div>
-
-                {heroProduct?.image_url && (
-                  <div className={`w-40 h-40 mx-auto rounded-full overflow-hidden border-[6px] relative shadow-2xl z-10 my-6 ${theme === 'dark' ? 'border-[#ffb300]' : 'border-[#e65100]'}`}>
-                    <img src={heroProduct.image_url} alt="Signature" className="w-full h-full object-cover scale-110" />
-                  </div>
-                )}
-
-                {(() => {
-                  const galleryItems = cafeProducts.filter(p => displayCategories.some(c => c.id === p.category_id) && p.image_url).slice(0, 8);
-                  if (galleryItems.length === 0) return null;
-                  return (
-                    <div className="flex flex-wrap gap-3 justify-center items-center my-4 z-10 w-full max-w-xl">
-                      {galleryItems.map(p => (
-                        <div key={p.id} className={`shrink-0 w-16 h-16 rounded-full overflow-hidden shadow-lg border-2 ${theme === 'dark' ? 'border-[#2a2a2a] shadow-black/50' : 'border-white shadow-[#4e342e]/10'}`}>
-                          <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-
-                <div className="text-center mt-auto mb-2 relative z-10">
-                  <h3 className={`font-black mb-3 text-base uppercase tracking-widest ${theme === 'dark' ? 'text-[#ffb300]' : 'text-[#e65100]'}`}>Lokasi Kami</h3>
-                  <p className={`text-xs leading-relaxed font-bold ${theme === 'dark' ? 'text-zinc-400' : 'text-[#5d4037]'}`}>
-                    Jl. Samba No. 123, Kota Bahagia<br/>
-                    Telp. 0812-3456-7890 &nbsp; | &nbsp; @sambacafe_id
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* PAGE 2: MENU LIST */}
-            <div 
-              className={`a5-canvas relative shadow-2xl shrink-0 overflow-hidden print:shadow-none ${
-                theme === 'dark' 
-                  ? 'bg-[#151515] text-zinc-200' 
-                  : 'bg-[#f4ebd0] text-[#3e2723]'
-              }`}
-              style={{
-                fontFamily: "'Inter', sans-serif"
-              }}
-            >
-              <div className="w-full h-full p-6 sm:p-8 relative flex flex-col overflow-hidden">
-                <div className={`absolute top-0 left-0 w-full h-3 ${theme === 'dark' ? 'bg-[#222]' : 'bg-[#d7ccc8]'}`}></div>
-                <div className={`absolute bottom-0 left-0 w-full h-3 ${theme === 'dark' ? 'bg-[#222]' : 'bg-[#d7ccc8]'}`}></div>
-
-                <div className="text-center mb-6 mt-1">
-                   <h2 className={`text-2xl font-black uppercase tracking-[0.2em] ${theme === 'dark' ? 'text-[#ffb300]' : 'text-[#e65100]'}`}>Daftar Menu</h2>
-                </div>
-
-                <div 
-                  className="flex-1 w-full" 
-                  style={{ 
-                    columnCount: 3, 
-                    columnGap: '2.5rem',
-                    columnRule: `1px solid ${theme === 'dark' ? 'rgba(255, 179, 0, 0.2)' : 'rgba(78, 52, 46, 0.1)'}`
+              {/* ══════════════════════════════════════════════════════════════ */}
+              {/* 1. HERO SECTION (Landscape Sleek Left Sidebar)                 */}
+              {/* ══════════════════════════════════════════════════════════════ */}
+              <div
+                  className="relative overflow-hidden flex flex-col justify-between shrink-0 z-10 w-[25%]"
+                  style={{
+                    borderRight: `1.5px solid ${borderColor}`,
+                    background: isDark 
+                      ? 'linear-gradient(180deg, #120e0a 0%, #0a0806 50%, #120e0a 100%)' 
+                      : 'linear-gradient(180deg, #fdfbf7 0%, #f4eee2 50%, #fdfbf7 100%)',
                   }}
                 >
-                  {displayCategories.map(cat => {
-                    const catProducts = cafeProducts.filter(p => p.category_id === cat.id).slice(0, 25);
-                    return (
-                      <div key={cat.id} className="flex flex-col mb-5" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
-                        <div className={`inline-block py-1 px-3 rounded-full mb-2 self-start border ${theme === 'dark' ? 'border-[#ffb300] text-[#ffb300]' : 'border-[#e65100] text-[#e65100] bg-white'}`}>
-                          <h2 className="text-[11px] font-black uppercase tracking-widest">
-                            {cat.name}
-                          </h2>
-                        </div>
-                        <div className="space-y-1.5 text-[11px]">
-                          {catProducts.map((product) => (
-                            <div key={product.id} className="flex flex-col">
-                              <div className="flex items-end justify-between font-bold">
-                                <span className={`whitespace-nowrap max-w-[150px] overflow-hidden text-ellipsis ${theme === 'dark' ? 'text-zinc-100' : 'text-[#3e2723]'}`}>{product.name}</span>
-                                <div className="menu-leader"></div>
-                                <span className={`${theme === 'dark' ? 'text-[#ffb300]' : 'text-[#e65100]'}`}>
-                                  {product.price / 1000}K
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                  {/* Subtle Warm Amber Glow in Center */}
+                  <div 
+                    className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 pointer-events-none rounded-full blur-3xl opacity-25"
+                    style={{ background: `radial-gradient(circle, ${accent} 0%, transparent 70%)` }}
+                  />
+
+                  {/* Top Section: Brand Identity */}
+                  <div 
+                    className="relative z-20 text-center flex flex-col items-center"
+                    style={{
+                      paddingTop: '16px',
+                      paddingLeft: '10px',
+                      paddingRight: '10px',
+                    }}
+                  >
+                    <div 
+                      className="flex items-center justify-center rounded-full shadow-lg relative mb-1.5"
+                      style={{
+                        width: '46px',
+                        height: '46px',
+                        background: isDark ? 'radial-gradient(circle, #251d14 0%, #120e0a 100%)' : '#ffffff',
+                        border: `1.5px solid ${accent}`,
+                        boxShadow: `0 4px 16px ${isDark ? 'rgba(0,0,0,0.6)' : 'rgba(180,83,9,0.15)'}`,
+                      }}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src="/logo-cropped.png"
+                        alt="Samba Cafe Logo"
+                        className="w-[74%] h-[74%] object-contain"
+                      />
+                    </div>
+
+                    <h1 
+                      style={{
+                        fontSize: '19px',
+                        fontWeight: 900,
+                        letterSpacing: '0.14em',
+                        lineHeight: 1,
+                        margin: 0,
+                        color: textPrimary,
+                      }}
+                    >
+                      SAMBA{' '}
+                      <span style={{ 
+                        color: accent, 
+                        fontStyle: 'italic', 
+                        fontFamily: "'Georgia', serif",
+                      }}>
+                        CAFE
+                      </span>
+                    </h1>
+
+                    <p 
+                      style={{
+                        fontSize: '7.5px',
+                        letterSpacing: '0.24em',
+                        fontWeight: 700,
+                        color: isDark ? accentLight : accent,
+                        textTransform: 'uppercase',
+                        marginTop: '3.5px',
+                        marginBottom: 0,
+                      }}
+                    >
+                      Coffee · Eatery · Comfort
+                    </p>
+
+                    <div className="flex items-center justify-center gap-2 w-24 mt-1.5">
+                      <div style={{ flex: 1, height: '1px', background: `linear-gradient(to right, transparent, ${borderColor})` }} />
+                      <div style={{ width: '3px', height: '3px', background: accent, transform: 'rotate(45deg)' }} />
+                      <div style={{ flex: 1, height: '1px', background: `linear-gradient(to left, transparent, ${borderColor})` }} />
+                    </div>
+                  </div>
+
+                  {/* Center Section: Clean Architectural Photography */}
+                  <div 
+                    className="relative z-20 flex flex-col items-center text-center w-full my-auto"
+                    style={{
+                      paddingLeft: '12px',
+                      paddingRight: '12px',
+                    }}
+                  >
+                    <div 
+                      className="w-full rounded-2xl overflow-hidden relative shadow-xl"
+                      style={{
+                        border: `1px solid ${isDark ? 'rgba(224, 170, 62, 0.35)' : 'rgba(180, 83, 9, 0.25)'}`,
+                        boxShadow: isDark 
+                          ? '0 10px 30px rgba(0,0,0,0.7), 0 0 20px rgba(224,170,62,0.1)' 
+                          : '0 8px 24px rgba(180,83,9,0.12)',
+                      }}
+                    >
+                      <div className="relative w-full overflow-hidden" style={{ height: '146px' }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src="/images/samba_restaurant_hero.jpg"
+                          alt="Suasana Samba Cafe"
+                          className="w-full h-full object-cover"
+                        />
+                        <div 
+                          className="absolute inset-0"
+                          style={{
+                            background: 'linear-gradient(to top, rgba(12,9,7,0.4) 0%, transparent 60%)',
+                          }}
+                        />
                       </div>
-                    );
-                  })}
+                    </div>
+
+                    <div className="mt-2.5 text-center">
+                      <h3 
+                        style={{
+                          fontSize: '8.5px',
+                          fontWeight: 800,
+                          letterSpacing: '0.18em',
+                          color: isDark ? accentLight : accent,
+                          textTransform: 'uppercase',
+                          margin: 0,
+                        }}
+                      >
+                        Cita Rasa &amp; Kehangatan
+                      </h3>
+                      <p 
+                        style={{
+                          fontSize: '7.5px',
+                          color: textSecondary,
+                          lineHeight: 1.4,
+                          marginTop: '2.5px',
+                          marginBottom: 0,
+                          maxWidth: '94%',
+                          marginInline: 'auto',
+                        }}
+                      >
+                        Kopi racikan barista dan hidangan lezat dalam suasana santai bernuansa hangat.
+                      </p>
+                    </div>
+
+                    <div 
+                      className="flex items-center justify-center gap-1.5 mt-2 text-center"
+                      style={{
+                        fontSize: '6.5px',
+                        fontWeight: 700,
+                        letterSpacing: '0.1em',
+                        color: isDark ? 'rgba(248, 244, 236, 0.75)' : 'rgba(26, 19, 14, 0.75)',
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      <span>Specialty Coffee</span>
+                      <span style={{ color: accent }}>•</span>
+                      <span>Fresh Cuisine</span>
+                      <span style={{ color: accent }}>•</span>
+                      <span>Cozy Vibe</span>
+                    </div>
+                  </div>
+
+                  {/* Bottom Section: Clean Footer Badge */}
+                  <div 
+                    className="relative z-20 flex flex-col items-center text-center"
+                    style={{
+                      paddingBottom: '14px',
+                    }}
+                  >
+                    <div 
+                      className="flex items-center gap-1.5"
+                      style={{
+                        fontSize: '7px',
+                        fontWeight: 700,
+                        letterSpacing: '0.14em',
+                        color: isDark ? accentLight : accent,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      <span>✦</span>
+                      <span>100% Halal &amp; Fresh Daily</span>
+                      <span>✦</span>
+                    </div>
+                    <span 
+                      style={{ 
+                        fontSize: '6px', 
+                        color: textMuted, 
+                        marginTop: '2px',
+                        letterSpacing: '0.08em',
+                      }}
+                    >
+                      Selamat Menikmati Hidangan Kami
+                    </span>
+                  </div>
                 </div>
 
-                <div className={`mt-4 mb-0 text-center text-[10px] font-bold tracking-widest uppercase ${theme === 'dark' ? 'text-zinc-600' : 'text-[#8d6e63]'}`}>
-                  Terima Kasih Atas Kunjungan Anda!
+              {/* ══════════════════════════════════════════════════════════════ */}
+              {/* 2. MENU SECTION (Daftar Menu Makanan, Minuman, Kopi & Snack)   */}
+              {/* ══════════════════════════════════════════════════════════════ */}
+              <div 
+                className="flex-1 flex flex-col justify-between relative z-20 h-full"
+                style={{
+                  padding: '18px 12px 8px',
+                  background: bg,
+                }}
+              >
+                {/* Header Menu */}
+                <div 
+                  className="text-center shrink-0"
+                  style={{ marginBottom: '3px' }}
+                >
+                  {/* Small decorative label */}
+                  <div 
+                    style={{
+                      fontSize: '7.5px',
+                      fontWeight: 800,
+                      letterSpacing: '0.24em',
+                      color: accent,
+                      textTransform: 'uppercase',
+                      marginBottom: '1.5px',
+                    }}
+                  >
+                    Culinary Selection &amp; Price List
+                  </div>
+
+                  {/* Main Title */}
+                  <div className="flex items-center justify-center gap-2">
+                    <div style={{ flex: 1, height: '1px', background: `linear-gradient(to right, transparent, ${accent})` }} />
+                    <div style={{
+                      width: '4px',
+                      height: '4px',
+                      background: accent,
+                      transform: 'rotate(45deg)',
+                    }} />
+                    <h2 
+                      style={{
+                        fontSize: '14.5px',
+                        fontWeight: 900,
+                        letterSpacing: '0.12em',
+                        color: textPrimary,
+                        textTransform: 'uppercase',
+                        margin: 0,
+                      }}
+                    >
+                      DAFTAR MENU SPESIAL
+                    </h2>
+                    <div style={{
+                      width: '4px',
+                      height: '4px',
+                      background: accent,
+                      transform: 'rotate(45deg)',
+                    }} />
+                    <div style={{ flex: 1, height: '1px', background: `linear-gradient(to left, transparent, ${accent})` }} />
+                  </div>
+                </div>
+
+                {/* Columns Menu Layout (3 cols in A5 Landscape) */}
+                <div 
+                  className="flex-1 grid grid-cols-3"
+                  style={{
+                    columnGap: '8px',
+                  }}
+                >
+                  {columns.map((col, colIdx) => (
+                    <div key={colIdx} className="flex flex-col gap-2 h-full">
+                      {col.map(({ cat, items }, cardIdx) => {
+                        const isLastCard = cardIdx === col.length - 1;
+                        const conf = CATEGORY_CONFIG[cat.name] || { label: cat.name.toUpperCase(), icon: Sparkles };
+                        const IconComp = conf.icon;
+                        const isFoodCategory = cat.name.toLowerCase().includes('food') || cat.name.toLowerCase().includes('makanan');
+                        const isDessert = cat.name.toLowerCase().includes('dessert');
+                        const isPopMie = cat.name.toLowerCase().includes('pop mie');
+                        const isSnack = cat.name.toLowerCase().includes('snack');
+                        
+                        // Pick signature item for Food category
+                        const signatureProduct = isFoodCategory
+                          ? items.find(p => p.name.toLowerCase().includes('katsu')) || items[0]
+                          : null;
+
+                        // Pick featured sweet item for Dessert category to balance Column 1
+                        const featuredDessert = isDessert
+                          ? items.find(p => p.name.toLowerCase().includes('buko')) || items[0]
+                          : null;
+
+                        const otherProducts = signatureProduct 
+                          ? items.filter(p => p.id !== signatureProduct.id)
+                          : (featuredDessert
+                              ? items.filter(p => p.id !== featuredDessert.id)
+                              : items);
+
+                        // Optimal row vertical padding per category for uniform layout balance
+                        const rowPadding = colIdx === 2
+                          ? '2.1px 0'
+                          : isSnack
+                            ? '2.7px 0'
+                            : isDessert
+                              ? '3.4px 0'
+                              : isPopMie
+                                ? '3.3px 0'
+                                : '3.1px 0';
+
+                        return (
+                          <div 
+                            key={cat.id} 
+                            className={`rounded-xl transition-colors ${isLastCard ? 'flex-1 flex flex-col justify-between' : ''}`}
+                            style={{
+                              padding: '4.5px 7px',
+                              background: isDark ? 'rgba(255,255,255,0.025)' : 'rgba(0,0,0,0.015)',
+                              border: `1.5px solid ${isDark ? 'rgba(224,170,62,0.22)' : 'rgba(180,83,9,0.18)'}`,
+                            }}
+                          >
+                            <div>
+                              {/* Category Header */}
+                              <div 
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  marginBottom: '3px',
+                                  paddingBottom: '2px',
+                                  borderBottom: `1.5px solid ${borderColor}`,
+                                }}
+                              >
+                                <div className="flex items-center gap-1.5">
+                                  <div 
+                                    style={{
+                                      width: '18px',
+                                      height: '18px',
+                                      borderRadius: '5px',
+                                      background: isDark ? 'rgba(224,170,62,0.18)' : 'rgba(180,83,9,0.12)',
+                                      border: `1px solid ${accent}`,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      color: accent,
+                                    }}
+                                  >
+                                    <IconComp size={11} />
+                                  </div>
+                                  <span 
+                                    style={{
+                                      fontSize: '10.5px',
+                                      fontWeight: 900,
+                                      letterSpacing: '0.08em',
+                                      color: isDark ? accentLight : '#92400e',
+                                      textTransform: 'uppercase',
+                                    }}
+                                  >
+                                    {conf.label}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Featured Chef's Signature Card inside Food */}
+                              {signatureProduct && (
+                                <div 
+                                  className="w-full rounded-lg overflow-hidden shadow-md mb-1.5 relative"
+                                  style={{
+                                    background: 'rgba(22, 17, 12, 0.95)',
+                                    border: `1.5px solid ${accent}`,
+                                    boxShadow: '0 3px 10px rgba(0,0,0,0.4)',
+                                  }}
+                                >
+                                  {/* Featured Dish Photo */}
+                                  <div className="relative w-full overflow-hidden" style={{ height: '70px' }}>
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                      src="/images/samba_signature_dish.jpg"
+                                      alt={signatureProduct.name}
+                                      className="w-full h-full object-cover"
+                                    />
+                                    <div 
+                                      className="absolute inset-0"
+                                      style={{ background: 'linear-gradient(to top, rgba(14,11,8,0.92) 0%, transparent 60%)' }}
+                                    />
+                                    <div 
+                                      className="absolute top-1.5 left-1.5 flex items-center gap-1 px-1.5 py-0.5 rounded-full font-black uppercase text-[7px]"
+                                      style={{
+                                        background: 'rgba(0,0,0,0.85)',
+                                        color: accentLight,
+                                        border: `1px solid ${accent}`,
+                                        backdropFilter: 'blur(3px)',
+                                      }}
+                                    >
+                                      <Star size={8.5} className="fill-amber-400 text-amber-400" />
+                                      <span>Chef&apos;s Signature</span>
+                                    </div>
+                                  </div>
+
+                                  {/* Card Content */}
+                                  <div style={{ padding: '4.5px 7px' }}>
+                                    <div className="flex items-center justify-between gap-1.5">
+                                      <span 
+                                        style={{
+                                          fontSize: '10.5px',
+                                          fontWeight: 800,
+                                          color: '#ffffff',
+                                          whiteSpace: 'nowrap',
+                                        }}
+                                      >
+                                        {signatureProduct.name}
+                                      </span>
+                                      <span 
+                                        style={{
+                                          fontSize: '11.5px',
+                                          fontWeight: 900,
+                                          color: accent,
+                                          fontFamily: "'Inter', sans-serif",
+                                          flexShrink: 0,
+                                        }}
+                                      >
+                                        {signatureProduct.price >= 1000
+                                          ? `${(signatureProduct.price / 1000).toFixed(signatureProduct.price % 1000 === 0 ? 0 : 1)}K`
+                                          : `${signatureProduct.price}`}
+                                      </span>
+                                    </div>
+                                    <p 
+                                      style={{
+                                        fontSize: '7.5px',
+                                        color: 'rgba(255,255,255,0.8)',
+                                        marginTop: '2px',
+                                        lineHeight: 1.25,
+                                      }}
+                                    >
+                                      Ayam katsu renyah keemasan berpadu nasi hangat &amp; saus khas Samba.
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Featured Sweet Card inside Dessert */}
+                              {featuredDessert && (
+                                <div 
+                                  className="w-full rounded-lg overflow-hidden shadow-sm mb-1.5"
+                                  style={{
+                                    background: isDark 
+                                      ? 'linear-gradient(135deg, rgba(224,170,62,0.15) 0%, rgba(20,16,12,0.95) 100%)' 
+                                      : '#fffbeb',
+                                    border: `1.5px solid ${accent}`,
+                                    padding: '4px 7px',
+                                  }}
+                                >
+                                  <div className="flex items-center justify-between gap-1.5">
+                                    <div className="flex items-center gap-1 min-w-0">
+                                      <Sparkles size={9} className="text-amber-400 shrink-0" />
+                                      <span 
+                                        style={{
+                                          fontSize: '10px',
+                                          fontWeight: 800,
+                                          color: '#ffffff',
+                                          whiteSpace: 'nowrap',
+                                        }}
+                                      >
+                                        {featuredDessert.name}
+                                      </span>
+                                    </div>
+                                    <span 
+                                      style={{
+                                        fontSize: '11px',
+                                        fontWeight: 900,
+                                        color: accent,
+                                        fontFamily: "'Inter', sans-serif",
+                                        flexShrink: 0,
+                                      }}
+                                    >
+                                      {featuredDessert.price >= 1000
+                                        ? `${(featuredDessert.price / 1000).toFixed(featuredDessert.price % 1000 === 0 ? 0 : 1)}K`
+                                        : `${featuredDessert.price}`}
+                                    </span>
+                                  </div>
+                                  <p 
+                                    style={{
+                                      fontSize: '7.5px',
+                                      color: 'rgba(255,255,255,0.8)',
+                                      marginTop: '1.5px',
+                                      lineHeight: 1.2,
+                                    }}
+                                  >
+                                    Kelapa muda buko &amp; jelly pandan berpadu susu creamy keju.
+                                  </p>
+                                </div>
+                              )}
+
+                              {/* Menu Items List */}
+                              <div className="flex flex-col">
+                                {otherProducts.map((product) => {
+                                  const isPopular = POPULAR_KEYWORDS.some(k => product.name.toLowerCase().includes(k));
+                                  const isLongName = product.name.trim().length > 20;
+
+                                  return (
+                                    <div 
+                                      key={product.id} 
+                                      className="flex items-baseline justify-between group"
+                                      style={{
+                                        padding: rowPadding,
+                                      }}
+                                    >
+                                      <div className="flex items-baseline gap-1 overflow-hidden shrink min-w-0">
+                                        {isPopular && (
+                                          <Star size={8} className="fill-amber-400 text-amber-400 shrink-0 self-center" />
+                                        )}
+                                        <span 
+                                          style={{
+                                            fontSize: isLongName ? '9.2px' : '10.5px',
+                                            fontWeight: isPopular ? 800 : 700,
+                                            color: isDark ? '#ffffff' : '#18181b',
+                                            whiteSpace: 'nowrap',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            letterSpacing: isLongName ? '-0.025em' : '-0.01em',
+                                          }}
+                                        >
+                                          {product.name.trim()}
+                                        </span>
+                                      </div>
+
+                                      <div className="menu-dot-leader" style={{ minWidth: '5px' }} />
+
+                                      <span 
+                                        style={{
+                                          fontSize: '11px',
+                                          fontWeight: 900,
+                                          color: isDark ? accentLight : accent,
+                                          whiteSpace: 'nowrap',
+                                          flexShrink: 0,
+                                          fontFamily: "'Inter', sans-serif",
+                                        }}
+                                      >
+                                        {product.price >= 1000
+                                          ? `${(product.price / 1000).toFixed(product.price % 1000 === 0 ? 0 : 1)}K`
+                                          : `${product.price}`}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Optional subtle footer note inside short categories */}
+                            {isDessert && (
+                              <div 
+                                className="mt-1 pt-0.5 text-center flex items-center justify-center gap-1"
+                                style={{ borderTop: `1px dashed ${borderColor}` }}
+                              >
+                                <span style={{ fontSize: '7px', color: textSecondary, fontWeight: 600 }}>
+                                  ✨ Segar &amp; Manis · Teman Santai Sore
+                                </span>
+                              </div>
+                            )}
+
+                            {isPopMie && (
+                              <div 
+                                className="mt-1 pt-0.5 text-center flex items-center justify-center gap-1"
+                                style={{ borderTop: `1px dashed ${borderColor}` }}
+                              >
+                                <span style={{ fontSize: '7px', color: textSecondary, fontWeight: 600 }}>
+                                  🍜 Seduh Panas · Cepat &amp; Praktis
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Footer Strip */}
+                <div 
+                  className="shrink-0 flex items-center justify-between"
+                  style={{
+                    marginTop: '4px',
+                    paddingTop: '3px',
+                    borderTop: `1px dashed ${borderColor}`,
+                  }}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span 
+                      style={{
+                        fontSize: '7px',
+                        color: textSecondary,
+                        fontWeight: 600,
+                      }}
+                    >
+                      ★ = Menu Rekomendasi Favorit · Harga sudah termasuk pajak
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <span 
+                      className="px-2 py-0.5 rounded text-[7px] font-bold"
+                      style={{
+                        background: isDark ? 'rgba(224,170,62,0.12)' : 'rgba(180,83,9,0.08)',
+                        color: accent,
+                        border: `1px solid ${borderColor}`,
+                      }}
+                    >
+                      Pemesanan di Kasir / Scan QR
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
-
           </div>
         </div>
       </DialogContent>

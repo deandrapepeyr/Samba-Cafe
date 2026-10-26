@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Samba Cafe - Opsi Banner Antrean 2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0c0b09;--panel:#14120e;--card:#191611;--line:rgba(255,255,255,.08);
+  --text:#f3efe6;--muted:#8d877a;--gold:#e8b84b;--gold-ink:#2a1d00;
+  --ok:#34d399;--warn:#f59e0b;--late:#f87171;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:"Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;line-height:1.4}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.wrap{max-width:1180px;margin:0 auto;padding:20px 20px 120px}
+
+.bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.bar h1{margin:0;font-size:16px;font-weight:700;color:var(--gold)}
+.seg{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:4px;gap:2px}
+.seg button{border:0;background:none;color:var(--muted);font-weight:600;padding:9px 16px;border-radius:10px}
+.seg button.on{background:var(--gold);color:var(--gold-ink)}
+.desc{color:var(--muted);font-size:13px;flex-basis:100%}
+
+[data-u="ok"]{--c:var(--ok)}[data-u="warn"]{--c:var(--warn)}[data-u="late"]{--c:var(--late)}
+.timer{font-variant-numeric:tabular-nums;color:var(--c);font-weight:800}
+.track{height:6px;border-radius:9px;background:rgba(255,255,255,.07);overflow:hidden}
+.track i{display:block;height:100%;width:0;border-radius:9px;background:var(--c);transition:width .9s linear}
+.act{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:11px;padding:9px 16px;font-weight:700;background:var(--gold);color:var(--gold-ink);white-space:nowrap;transition:filter .15s,transform .1s}
+.act:hover{filter:brightness(1.08)}.act:active{transform:scale(.96)}
+.act.s2{background:var(--ok);color:#052e1f}
+.chip{display:inline-flex;font-size:12px;font-weight:600;padding:3px 10px;border-radius:99px;background:rgba(255,255,255,.07);color:#cfc9bb;white-space:nowrap}
+.chip.s1{background:rgba(232,184,75,.14);color:var(--gold)}.chip.s2{background:rgba(52,211,153,.14);color:var(--ok)}
+.qty{color:var(--gold);font-weight:700}
+.empty{border:1px dashed var(--line);border-radius:16px;padding:26px;text-align:center;color:var(--muted)}
+.ring{--p:0;width:40px;height:40px;border-radius:50%;background:conic-gradient(var(--c) calc(var(--p)*1%),rgba(255,255,255,.08) 0);display:grid;place-items:center;flex:0 0 auto}
+.ring b{width:32px;height:32px;border-radius:50%;background:var(--card);display:grid;place-items:center;font-size:13px;font-weight:800}
+
+/* ===== D. PIL RINGKAS ===== */
+.pills{display:flex;gap:10px;overflow-x:auto;padding:2px 2px 10px;scrollbar-width:none}
+.pill{flex:0 0 auto;display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:99px;padding:6px 16px 6px 6px;text-align:left}
+.pill:hover{border-color:rgba(232,184,75,.4)}
+.pill.on{border-color:var(--c);background:color-mix(in srgb,var(--c) 10%,var(--card))}
+.pill .t1{font-size:13.5px;font-weight:600;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill .t2{font-size:12px}
+.detail{display:grid;grid-template-columns:1fr auto;gap:8px 24px;background:var(--card);border:1px solid var(--line);border-left:4px solid var(--c);border-radius:16px;padding:16px 20px;align-items:center}
+.detail ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px 22px;font-size:15px;font-weight:500}
+.detail ul li{display:flex;gap:7px}
+.detail .top{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.detail .top b{font-size:20px;font-weight:800}
+.detail .top small{color:var(--muted)}
+
+/* ===== E. BARIS PROGRES ===== */
+.rows{display:grid;gap:8px}
+.r{display:grid;grid-template-columns:54px minmax(0,1.3fr) minmax(150px,1fr) auto;align-items:center;gap:16px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 16px 12px 0;overflow:hidden;position:relative}
+.r::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--c)}
+.r .n{font-size:22px;font-weight:800;text-align:center;padding-left:6px}
+.r .its{min-width:0;font-size:14px}
+.r .its div:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+.r .its small{color:var(--muted);font-size:12px}
+.r .pg{display:grid;gap:6px}
+.r .pg .l{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
+.r .pg .timer{font-size:15px}
+
+/* ===== F. DOCK MENGAMBANG ===== */
+.dock{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 18px);z-index:20;width:min(560px,calc(100vw - 24px))}
+.dock-bar{width:100%;display:flex;align-items:center;gap:12px;background:rgba(28,24,17,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(232,184,75,.35);border-radius:20px;padding:10px 12px 10px 16px;box-shadow:0 12px 40px rgba(0,0,0,.55);text-align:left}
+.dock-bar .dots{display:flex;gap:5px}
+.dock-bar .dots i{width:9px;height:9px;border-radius:50%;background:var(--c)}
+.dock-bar .tx{flex:1;min-width:0;font-weight:700}
+.dock-bar .tx small{display:block;font-weight:500;color:var(--muted);font-size:12px}
+.dock-bar .timer{font-size:18px}
+.dock-sheet{background:rgba(24,21,15,.96);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:20px;padding:10px;margin-bottom:10px;max-height:52vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.55);display:grid;gap:8px}
+.dk{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+.dk .its{min-width:0;font-size:13.5px}
+.dk .its div:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+.dk .its small{color:var(--muted)}
+.dk .timer{font-size:15px}
+
+/* konteks menu */
+.menu{margin-top:22px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.mi{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;min-height:110px;display:flex;flex-direction:column;justify-content:space-between}
+.mi small{color:var(--muted)}.mi h3{margin:3px 0 0;font-size:15px}.mi b{font-size:14px}
+
+@media (max-width:860px){
+  .wrap{padding:16px 14px 120px}.menu{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .r{grid-template-columns:44px minmax(0,1fr) auto;gap:10px}.r .pg{grid-column:2/4;order:4}.r .n{font-size:18px}
+  .detail{grid-template-columns:1fr}
+  .dk{grid-template-columns:auto minmax(0,1fr) auto}.dk .timer{display:none}
+}
+@media (prefers-reduced-motion:reduce){.track i{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar">
+    <h1>Opsi banner antrean (set 2)</h1>
+    <div class="seg" id="seg">
+      <button data-v="pill" class="on">Pil ringkas</button>
+      <button data-v="rows">Baris progres</button>
+      <button data-v="dock">Dock mengambang</button>
+    </div>
+    <div class="desc" id="desc"></div>
+  </div>
+  <div id="stage"></div>
+  <div class="menu" id="menu"></div>
+</div>
+<div id="dockHost"></div>
+
+<script>
+var SLA=10*60000, now=Date.now();
+var STATUS=["Baru masuk","Sedang dibuat","Siap diantar"];
+var ACTION=["Mulai buat","Tandai siap","Selesaikan"];
+var orders=[
+ {id:"order_261012_0001",n:1,t:now-3*60000,pay:"QRIS",st:0,items:[["Rice Bowl Chicken Katsu",1]]},
+ {id:"order_261012_0002",n:2,t:now-7*60000,pay:"QRIS",st:1,items:[["French Fries",1]]},
+ {id:"order_261012_0003",n:3,t:now-12*60000,pay:"QRIS",st:1,items:[["Rice Bowl Chicken Katsu",1],["French Fries",1],["Mix platters (black pepper)",1],["Kopi creamy latte",1]]},
+ {id:"order_261012_0004",n:4,t:now-90*1000,pay:"Tunai",st:0,items:[["Kopi creamy latte",2],["Risol Rogout",1]]}
+];
+var DESC={
+ pill:"Satu baris tipis berisi pil per pesanan, detail hanya terbuka untuk yang dipilih. Paling hemat tempat, menu tetap dominan.",
+ rows:"Satu pesanan satu baris: item, bar progres menuju target 10 menit, dan tombol aksi. Mudah dibandingkan sekilas, cocok untuk layar lebar.",
+ dock:"Antrean tidak memakan tempat sama sekali. Bar kecil di bawah selalu terlihat, ketuk untuk membuka daftar. Cocok untuk tablet dan HP."
+};
+var MENU=[["Snack","Risol Rogout","Rp 15.000"],["Food","Rice Bowl Chicken Katsu","Rp 20.000"],["Snack","French Fries","Rp 15.000"],["Snack","Mix platters","Rp 18.000"],["Coffee","Kopi creamy latte","Rp 6.000"],["Pop mie","Pop mie samba","Rp 10.000"],["Food","Roti mama","Rp 6.000"],["Coffee","Indo kopi mix","Rp 6.000"]];
+var variant="pill", selected=null, dockOpen=false;
+var $=function(id){return document.getElementById(id)};
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function mins(t){return Math.floor((Date.now()-t)/60000)}
+function urg(t){var m=mins(t);return m<5?"ok":m<10?"warn":"late"}
+function clock(t){var s=Math.max(0,Math.floor((Date.now()-t)/1000));return ("0"+Math.floor(s/60)).slice(-2)+":"+("0"+s%60).slice(-2)}
+function hhmm(t){return new Date(t).toLocaleTimeString("id-ID",{hour:"2-digit",minute:"2-digit"}).replace(".",":")}
+function byOld(){return orders.slice().sort(function(a,b){return a.t-b.t})}
+function U(o){return 'data-u="'+urg(o.t)+'" data-ut="'+o.t+'"'}
+function timer(o){return '<span class="timer" data-t="'+o.t+'">'+clock(o.t)+'</span>'}
+function track(o){return '<div class="track"><i data-bar="'+o.t+'"></i></div>'}
+function ring(o){return '<span class="ring" '+U(o)+' data-ring="'+o.t+'"><b>'+o.n+'</b></span>'}
+function btn(o){return '<button class="act s'+o.st+'" data-adv="'+o.id+'">'+ACTION[o.st]+'</button>'}
+function sum(o){return esc(o.items[0][0])+(o.items.length>1?' +'+(o.items.length-1):'')}
+function full(o){return o.items.map(function(i){return i[1]+'× '+i[0]}).join(", ")}
+
+function renderPill(){
+  var l=byOld(); if(!l.length) return '<div class="empty">Belum ada pesanan menunggu.</div>';
+  var cur=l.filter(function(o){return o.id===selected})[0]||l[0]; selected=cur.id;
+  var pills='<div class="pills">'+l.map(function(o){
+    return '<button class="pill'+(o.id===cur.id?' on':'')+'" '+U(o)+' data-pick="'+o.id+'">'+ring(o)+'<span><div class="t1">'+sum(o)+'</div><div class="t2">'+timer(o)+'</div></span></button>';
+  }).join("")+'</div>';
+  var d='<div class="detail" '+U(cur)+'><div><div class="top"><b>#'+cur.n+'</b><span class="chip s'+cur.st+'">'+STATUS[cur.st]+'</span>'+timer(cur)+'<small>'+cur.pay+' · masuk '+hhmm(cur.t)+'</small></div>'+
+    '<ul>'+cur.items.map(function(i){return '<li><span class="qty">'+i[1]+'×</span>'+esc(i[0])+'</li>'}).join("")+'</ul></div>'+btn(cur)+'</div>';
+  return pills+d;
+}
+function renderRows(){
+  var l=byOld(); if(!l.length) return '<div class="empty">Belum ada pesanan menunggu.</div>';
+  return '<div class="rows">'+l.map(function(o){
+    return '<article class="r" '+U(o)+'><div class="n">#'+o.n+'</div><div class="its"><div>'+esc(o.items.map(function(i){return i[1]+'× '+i[0]}).join(" · "))+'</div><small>'+o.pay+' · '+hhmm(o.t)+' · '+STATUS[o.st]+'</small></div>'+
+      '<div class="pg"><div class="l"><span>Target 10 mnt</span>'+timer(o)+'</div>'+track(o)+'</div>'+btn(o)+'</article>';
+  }).join("")+'</div>';
+}
+function renderDock(){
+  var l=byOld(); var host=$("dockHost");
+  if(!l.length){host.innerHTML='<div class="dock"><div class="dock-bar" style="justify-content:center;color:var(--muted)">Antrean kosong</div></div>';return}
+  var o=l[0];
+  var sheet=dockOpen?'<div class="dock-sheet">'+l.map(function(x){
+    return '<article class="dk" '+U(x)+'>'+ring(x)+'<div class="its"><div>'+esc(full(x))+'</div><small>'+x.pay+' · '+STATUS[x.st]+'</small></div>'+timer(x)+btn(x)+'</article>';
+  }).join("")+'</div>':'';
+  host.innerHTML='<div class="dock">'+sheet+'<button class="dock-bar" data-dock="1" '+U(o)+'><span class="dots">'+l.map(function(x){return '<i '+U(x)+'></i>'}).join("")+'</span>'+
+    '<span class="tx">'+l.length+' pesanan menunggu<small>Terlama #'+o.n+' · '+sum(o)+'</small></span>'+timer(o)+'<span class="chip">'+(dockOpen?'Tutup':'Buka')+'</span></button></div>';
+}
+function render(){
+  $("desc").textContent=DESC[variant];
+  $("stage").innerHTML=variant==="pill"?renderPill():variant==="rows"?renderRows():'';
+  if(variant==="dock") renderDock(); else $("dockHost").innerHTML="";
+  tick();
+}
+function tick(){
+  document.querySelectorAll("[data-t]").forEach(function(e){e.textContent=clock(+e.getAttribute("data-t"))});
+  document.querySelectorAll("[data-ut]").forEach(function(e){e.setAttribute("data-u",urg(+e.getAttribute("data-ut")))});
+  document.querySelectorAll("[data-bar]").forEach(function(e){e.style.width=Math.min(100,(Date.now()-(+e.getAttribute("data-bar")))/SLA*100)+"%"});
+  document.querySelectorAll("[data-ring]").forEach(function(e){e.style.setProperty("--p",Math.min(100,(Date.now()-(+e.getAttribute("data-ring")))/SLA*100))});
+}
+setInterval(tick,1000);
+
+$("menu").innerHTML=MENU.map(function(m){return '<div class="mi"><div><small>'+m[0]+'</small><h3>'+m[1]+'</h3></div><b>'+m[2]+'</b></div>'}).join("");
+
+document.addEventListener("click",function(e){
+  var s=e.target.closest("#seg button");
+  if(s){variant=s.getAttribute("data-v");document.querySelectorAll("#seg button").forEach(function(b){b.classList.toggle("on",b===s)});render();return}
+  var a=e.target.closest("[data-adv]");
+  if(a){var id=a.getAttribute("data-adv");orders.forEach(function(o){if(o.id===id)o.st++});orders=orders.filter(function(o){return o.st<3});render();return}
+  var p=e.target.closest("[data-pick]"); if(p){selected=p.getAttribute("data-pick");render();return}
+  if(e.target.closest("[data-dock]")){dockOpen=!dockOpen;render()}
+});
+document.addEventListener("keydown",function(e){if(e.key==="Escape"&&dockOpen){dockOpen=false;render()}});
+render();
+</script>
+</body>
+</html>

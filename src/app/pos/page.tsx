@@ -1,71 +1,38 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { supabase } from '@/lib/supabase';
-import { Search, Plus, Minus, FileEdit, Menu, X, QrCode, Banknote, CheckCircle2, ShoppingCart, LockKeyhole, UserCircle, LogIn, Lock, LogOut, Eye, EyeOff, KeyRound, ShieldCheck, Utensils, Clock, ListPlus, Zap } from 'lucide-react';
+import { Search, QrCode, CheckCircle2, ShoppingCart, LockKeyhole, Flame, ShoppingBag, X, Calculator } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Textarea } from '@/components/ui/textarea';
 import { useAuth, Role } from '@/lib/AuthContext';
-import { OrderQueueContainer } from '@/components/pos/OrderQueueContainer';
-
-export type ProductVariantChoice = {
-  name: string;
-  price: number;
-  stock_id?: string;
-};
-
-export type ProductVariant = {
-  name: string;
-  is_required: boolean;
-  is_multiple?: boolean;
-  choices: ProductVariantChoice[];
-};
-
-export type Product = {
-  id: string;
-  category_id: string;
-  name: string;
-  price: number;
-  image_url: string;
-  is_available: boolean;
-  is_titipan: boolean;
-  titipan_name: string | null;
-  supplier_price?: number;
-  is_quick?: boolean;
-  stock?: number;
-  variants?: ProductVariant[];
-};
-
-export type Category = {
-  id: string;
-  name: string;
-};
-
-type CartItem = {
-  id: string;
-  product: Product;
-  quantity: number;
-  notes?: string;
-  variantChoices?: Record<string, string[]>;
-};
+import { KitchenQueueStrip } from '@/components/pos/KitchenQueueStrip';
+import { useKitchenQueue } from '@/hooks/useKitchenQueue';
+import { ProductGrid } from '@/components/pos/ProductGrid';
+import { CategoryRail, type CategoryRailTab } from '@/components/pos/CategoryRail';
+import { useFavorites } from '@/hooks/useFavorites';
+import { matchCategoryToGroup } from '@/config/categoryGroups';
+import { CartPanel } from '@/components/pos/CartPanel';
+import { VariantModal } from '@/components/pos/VariantModal';
+import { PaymentSheet } from '@/components/pos/PaymentSheet';
+import { ShiftFlow } from '@/components/pos/ShiftFlow';
+import { ActiveOrderModals } from '@/components/pos/ActiveOrderModals';
+import { NoteModal } from '@/components/pos/NoteModal';
+import { FreeItemModal } from '@/components/pos/FreeItemModal';
+import { CalculatorPanel } from '@/components/pos/CalculatorPanel';
+import type { ProductVariantChoice, ProductVariant, Product, Category, CartItem } from '@/types/pos';
+export type { ProductVariantChoice, ProductVariant, Product, Category, CartItem };
 
 export default function POSPage() {
   const pathname = usePathname();
-  const managerDecoyName = typeof window !== 'undefined' ? (localStorage.getItem('samba_manager_decoy_name') || 'budi') : 'budi';
-
-  const cashierProfiles: { name: string; role: Role; label: string; initial: string }[] = [
+  const [cashierProfiles, setCashierProfiles] = useState<{ name: string; role: Role; label: string; initial: string }[]>([
     { name: 'deandra pepe yongker', role: 'cashier', label: 'Kasir', initial: 'D' },
     { name: 'sheera', role: 'cashier', label: 'Kasir', initial: 'S' },
-    { name: managerDecoyName, role: 'cashier', label: 'Kasir', initial: managerDecoyName.charAt(0).toUpperCase() },
-  ];
+  ]);
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -73,7 +40,41 @@ export default function POSPage() {
   const [recipesData, setRecipesData] = useState<{product_id: string, stock_id: string, quantity_required: number}[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
 
-  const [activeCategory, setActiveCategory] = useState('1');
+  const gridContainerRef = useRef<HTMLDivElement>(null);
+  const [activeCategory, setActiveCategory] = useState<string>('all');
+  const { favoriteIds, refreshFavorites } = useFavorites(products);
+  const { orders: kitchenOrders, advanceOrder } = useKitchenQueue();
+  const [isKitchenStripCollapsed, setIsKitchenStripCollapsed] = useState(false);
+
+  // Instantly render products, categories, and last category from cache on client mount
+  useEffect(() => {
+    try {
+      const cachedProds = localStorage.getItem('samba_products_cache');
+      if (cachedProds) {
+        const parsed = JSON.parse(cachedProds);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setProducts(parsed);
+          setIsLoadingData(false);
+        }
+      }
+      const cachedCats = localStorage.getItem('samba_categories_cache');
+      if (cachedCats) {
+        const parsed = JSON.parse(cachedCats);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setCategories(parsed);
+        }
+      }
+      const saved = sessionStorage.getItem('samba_pos_last_category');
+      if (saved) {
+        setActiveCategory(saved);
+      }
+    } catch (e) {}
+  }, []);
+  const [menuTypeFilter, setMenuTypeFilter] = useState<'all' | 'quick' | 'cooked'>('all');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
+  const [isFreeItemModalOpen, setIsFreeItemModalOpen] = useState(false);
+  const [lastRemovedItem, setLastRemovedItem] = useState<CartItem | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   
@@ -88,6 +89,7 @@ export default function POSPage() {
   const [tempNote, setTempNote] = useState('');
 
   // Checkout flow state
+  const [isPaymentSheetOpen, setIsPaymentSheetOpen] = useState(false);
   const [checkoutStep, setCheckoutStep] = useState<'none' | 'method' | 'confirm' | 'success'>('none');
   const [paymentMethod, setPaymentMethod] = useState<'QRIS' | 'Cash' | 'Bayar Nanti' | null>(null);
   const [cashReceived, setCashReceived] = useState<string>('');
@@ -146,10 +148,33 @@ export default function POSPage() {
   
   const [isEditMode, setIsEditMode] = useState(false);
   const [oldCartItems, setOldCartItems] = useState<any[]>([]);
+  const [previouslyPaidAmount, setPreviouslyPaidAmount] = useState<number>(0);
+  const [isOriginalOrderPaid, setIsOriginalOrderPaid] = useState<boolean>(false);
   
   const cartEndRef = useRef<HTMLDivElement>(null);
 
   const [isStateRestored, setIsStateRestored] = useState(false);
+
+  // Screen Wake Lock API (Fase 5c) to keep tablet display awake
+  useEffect(() => {
+    let wakeLock: any = null;
+    const requestWakeLock = async () => {
+      if (typeof navigator !== 'undefined' && 'wakeLock' in navigator && document.visibilityState === 'visible') {
+        try {
+          wakeLock = await (navigator as any).wakeLock.request('screen');
+        } catch (e) {}
+      }
+    };
+    requestWakeLock();
+    const handleVisChange = () => {
+      if (document.visibilityState === 'visible') requestWakeLock();
+    };
+    document.addEventListener('visibilitychange', handleVisChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisChange);
+      if (wakeLock) wakeLock.release().catch(() => {});
+    };
+  }, []);
 
   useEffect(() => {
     if (selectedActiveOrder) {
@@ -205,16 +230,20 @@ export default function POSPage() {
         localStorage.setItem('samba_pos_edit_mode', isEditMode.toString());
         localStorage.setItem('samba_pos_old_items', JSON.stringify(oldCartItems));
         localStorage.setItem('samba_pos_order_number', orderNumber);
+        localStorage.setItem('samba_pos_previously_paid', previouslyPaidAmount.toString());
+        localStorage.setItem('samba_pos_is_orig_paid', isOriginalOrderPaid.toString());
       } else {
         localStorage.removeItem('samba_pos_cart');
         localStorage.removeItem('samba_pos_customer');
         localStorage.removeItem('samba_pos_edit_mode');
         localStorage.removeItem('samba_pos_old_items');
         localStorage.removeItem('samba_pos_order_number');
+        localStorage.removeItem('samba_pos_previously_paid');
+        localStorage.removeItem('samba_pos_is_orig_paid');
         localStorage.removeItem('samba_hybrid_session');
       }
     }
-  }, [cart, customerName, isEditMode, oldCartItems, orderNumber, isStateRestored]);
+  }, [cart, customerName, isEditMode, oldCartItems, orderNumber, previouslyPaidAmount, isOriginalOrderPaid, isStateRestored]);
 
   // Sync cart when returning to /pos from /pos/quick or when storage/route updates
   useEffect(() => {
@@ -224,6 +253,8 @@ export default function POSPage() {
         setCustomerName('');
         setOldCartItems([]);
         setIsEditMode(false);
+        setPreviouslyPaidAmount(0);
+        setIsOriginalOrderPaid(false);
         generateNextOrderId().then(setOrderNumber);
         return;
       }
@@ -249,6 +280,38 @@ export default function POSPage() {
         } else if (!saved) {
           generateNextOrderId().then(setOrderNumber);
         }
+
+        const savedEdit = localStorage.getItem('samba_pos_edit_mode');
+        if (savedEdit === 'true') setIsEditMode(true);
+        else if (savedEdit === 'false') setIsEditMode(false);
+
+        const savedOld = localStorage.getItem('samba_pos_old_items');
+        if (savedOld) {
+          try { setOldCartItems(JSON.parse(savedOld)); } catch(e) {}
+        }
+
+        const savedPrevPaid = localStorage.getItem('samba_pos_previously_paid');
+        const savedIsPaid = localStorage.getItem('samba_pos_is_orig_paid');
+        if (savedPrevPaid !== null && savedPrevPaid !== '') {
+          setPreviouslyPaidAmount(Number(savedPrevPaid) || 0);
+          setIsOriginalOrderPaid(savedIsPaid === 'true');
+        } else if (savedEdit === 'true' && savedOrderNum) {
+          supabase.from('transactions').select('*').eq('id', savedOrderNum).maybeSingle().then(({ data: tx }) => {
+            if (tx) {
+              const isPaid = tx.method !== 'Bayar Nanti' && tx.payment_status !== 'UNPAID';
+              setIsOriginalOrderPaid(isPaid);
+              const paidAmt = isPaid ? (Number(tx.total) || 0) : 0;
+              setPreviouslyPaidAmount(paidAmt);
+              try {
+                localStorage.setItem('samba_pos_previously_paid', paidAmt.toString());
+                localStorage.setItem('samba_pos_is_orig_paid', isPaid.toString());
+              } catch (e) {}
+            }
+          });
+        } else {
+          setPreviouslyPaidAmount(0);
+          setIsOriginalOrderPaid(false);
+        }
       } catch (e) {
         setCart([]);
       }
@@ -266,6 +329,8 @@ export default function POSPage() {
           setCustomerName('');
           setOldCartItems([]);
           setIsEditMode(false);
+          setPreviouslyPaidAmount(0);
+          setIsOriginalOrderPaid(false);
           generateNextOrderId().then(setOrderNumber);
         }
       };
@@ -319,23 +384,77 @@ export default function POSPage() {
   const loadOrderForEdit = (order: any) => {
     setIsEditMode(true);
     setOrderNumber(order.id);
-    setCustomerName(order.customer_name || '');
+    const cName = order.customer_name || order.customerName || '';
+    setCustomerName(cName.startsWith('Pelanggan ') ? '' : cName);
     setPaymentMethod(order.method);
-    
-    if (order.items && products) {
-      setOldCartItems(order.items);
-      const mappedCart: CartItem[] = order.items.map((it: any) => {
+
+    const isPaid = order.method !== 'Bayar Nanti' && order.payment_status !== 'UNPAID' && order.paymentStatus !== 'UNPAID';
+    setIsOriginalOrderPaid(isPaid);
+
+    const items = order.items || [];
+    const itemsTotal = items.reduce((sum: number, it: any) => sum + ((Number(it.price) || 0) * (Number(it.quantity) || 1)), 0);
+    const origTotal = Number(order.total) || itemsTotal;
+    const paidAmt = isPaid ? origTotal : 0;
+    setPreviouslyPaidAmount(paidAmt);
+
+    let mappedCart: CartItem[] = [];
+    if (items && products) {
+      setOldCartItems(items);
+      mappedCart = items.map((it: any) => {
         const p = products.find(prod => prod.name === it.product_name);
         return {
           id: p ? p.id : Math.random().toString(),
           product: p || { id: '', name: it.product_name, price: it.price, category_id: '', image_url: '', is_available: true, is_titipan: false, titipan_name: null },
           quantity: it.quantity,
-          notes: it.notes || ''
+          notes: it.notes || '',
+          isExistingPaid: isPaid
         };
       });
       setCart(mappedCart);
     }
+
+    try {
+      localStorage.setItem('samba_pos_cart', JSON.stringify(mappedCart));
+      localStorage.setItem('samba_pos_customer', cName.startsWith('Pelanggan ') ? '' : cName);
+      localStorage.setItem('samba_pos_edit_mode', 'true');
+      localStorage.setItem('samba_pos_old_items', JSON.stringify(items));
+      localStorage.setItem('samba_pos_order_number', order.id);
+      localStorage.setItem('samba_pos_previously_paid', paidAmt.toString());
+      localStorage.setItem('samba_pos_is_orig_paid', isPaid.toString());
+    } catch (e) {}
+
     setSelectedActiveOrder(null);
+    setIsCartOpen(true);
+  };
+
+  const cancelEdit = async () => {
+    setIsEditMode(false);
+    setCart([]);
+    setOldCartItems([]);
+    setCustomerName('');
+    setPaymentMethod(null);
+    setPreviouslyPaidAmount(0);
+    setIsOriginalOrderPaid(false);
+    localStorage.removeItem('samba_pos_previously_paid');
+    localStorage.removeItem('samba_pos_is_orig_paid');
+    const newId = await generateNextOrderId();
+    setOrderNumber(newId);
+  };
+
+  const handleEditOrderFromQueue = (order: any) => {
+    loadOrderForEdit(order);
+  };
+
+  const handleSelectOrderFromQueue = (order: any) => {
+    setSelectedActiveOrder({
+      id: order.id,
+      customer_name: order.customerName,
+      created_at: order.createdAt,
+      method: order.method,
+      total: order.total,
+      status: order.status,
+      items: order.items,
+    });
   };
 
   useEffect(() => {
@@ -430,9 +549,8 @@ export default function POSPage() {
       ]);
 
       if (categoriesRes.data) {
-        const newCats = [{ id: '1', name: 'All Menu' }, ...categoriesRes.data];
-        setCategories(newCats);
-        try { localStorage.setItem('samba_categories_cache', JSON.stringify(newCats)); } catch(e) {}
+        setCategories(categoriesRes.data);
+        try { localStorage.setItem('samba_categories_cache', JSON.stringify(categoriesRes.data)); } catch(e) {}
       }
       if (stocksRes.data) setStocksData(stocksRes.data);
       if (recipesRes.data) setRecipesData(recipesRes.data);
@@ -441,6 +559,21 @@ export default function POSPage() {
         setProducts(sorted);
         try { localStorage.setItem('samba_products_cache', JSON.stringify(sorted)); } catch(e) {}
       }
+
+      // Fetch cashier profiles from database (Fase 3e)
+      try {
+        const { data: dbUsers } = await supabase.from('users').select('name, role');
+        if (dbUsers && dbUsers.length > 0) {
+          const profiles = dbUsers.map(u => ({
+            name: u.name,
+            role: (u.role as Role) || 'cashier',
+            label: u.role === 'manager' ? 'Manajer' : 'Kasir',
+            initial: (u.name || 'K').charAt(0).toUpperCase()
+          }));
+          setCashierProfiles(profiles);
+        }
+      } catch (e) {}
+
       setIsLoadingData(false);
 
       if (userName) {
@@ -473,6 +606,11 @@ export default function POSPage() {
           if (tx) {
             setCustomerName(tx.customer_name || '');
             setPaymentMethod(tx.method);
+            const isPaid = tx.method !== 'Bayar Nanti' && tx.payment_status !== 'UNPAID';
+            setIsOriginalOrderPaid(isPaid);
+            const paidAmt = isPaid ? (Number(tx.total) || 0) : 0;
+            setPreviouslyPaidAmount(paidAmt);
+
             const { data: items } = await supabase.from('transaction_items').select('*').eq('transaction_id', editId);
             if (items && productsRes.data) {
               setOldCartItems(items);
@@ -482,7 +620,8 @@ export default function POSPage() {
                   id: p ? p.id : Math.random().toString(),
                   product: p || { id: '', name: it.product_name, price: it.price, category_id: '', image_url: '', is_available: true, is_titipan: false, titipan_name: null },
                   quantity: it.quantity,
-                  notes: it.notes || ''
+                  notes: it.notes || '',
+                  isExistingPaid: isPaid
                 };
               });
               setCart(mappedCart);
@@ -502,7 +641,8 @@ export default function POSPage() {
             if (savedCustomer) setCustomerName(savedCustomer);
             
             const savedEditMode = localStorage.getItem('samba_pos_edit_mode');
-            if (savedEditMode === 'true') setIsEditMode(true);
+            const isEdit = savedEditMode === 'true';
+            if (isEdit) setIsEditMode(true);
             
             const savedOldItems = localStorage.getItem('samba_pos_old_items');
             if (savedOldItems) setOldCartItems(JSON.parse(savedOldItems));
@@ -510,6 +650,15 @@ export default function POSPage() {
             const savedOrderNum = localStorage.getItem('samba_pos_order_number');
             if (savedOrderNum && savedCart) {
               setOrderNumber(savedOrderNum);
+              if (isEdit) {
+                const { data: tx } = await supabase.from('transactions').select('*').eq('id', savedOrderNum).maybeSingle();
+                if (tx) {
+                  const isPaid = tx.method !== 'Bayar Nanti' && tx.payment_status !== 'UNPAID';
+                  setIsOriginalOrderPaid(isPaid);
+                  const paidAmt = isPaid ? (Number(tx.total) || 0) : 0;
+                  setPreviouslyPaidAmount(paidAmt);
+                }
+              }
             } else {
               generateNextOrderId().then(setOrderNumber);
             }
@@ -613,29 +762,15 @@ export default function POSPage() {
         .maybeSingle();
 
       // Fetch manager account from database to ensure exact name sync
-      const { data: managerUser } = await supabase
-        .from('users')
-        .select('name')
-        .eq('role', 'manager')
-        .maybeSingle();
-
-      const managerName = managerUser?.name || 'Budi Santoso (Manager)';
-
       let isCorrect = false;
       let finalRole: Role = selectedProfile.role;
       let finalName: string = selectedProfile.name;
 
-      const nameLower = selectedProfile.name.toLowerCase();
-
-      // Stealth Manager Login Check
-      if ((nameLower.includes('sonic') || nameLower.includes('manager')) && profilePasswordInput === 'admin123') {
+      // TODO (Security): Replace plain text password verification with hashed PINs (e.g. bcrypt / Argon2) and Supabase Auth session
+      if (userData && userData.password && userData.password.trim() === profilePasswordInput.trim()) {
         isCorrect = true;
-        finalRole = 'manager';
-        finalName = managerName;
-      } else if (userData && userData.password.trim() === profilePasswordInput.trim()) {
-        isCorrect = true;
-        finalRole = userData.role as Role;
-        finalName = userData.name;
+        finalRole = (userData.role as Role) || selectedProfile.role;
+        finalName = userData.name || selectedProfile.name;
       }
 
       setIsVerifyingPassword(false);
@@ -687,6 +822,11 @@ export default function POSPage() {
       setActiveShift(data);
       setIsStartShiftDialogOpen(false);
       setStartingCashInput('');
+      setActiveCategory('favorit');
+      try {
+        sessionStorage.setItem('samba_pos_last_category', 'favorit');
+      } catch (e) {}
+      refreshFavorites();
     } else {
       alert("Failed to start shift: " + error?.message);
     }
@@ -787,20 +927,219 @@ export default function POSPage() {
   const isPageLoading = isLoading || isCheckingShift;
   const isLocked = !isPageLoading && (!role || !activeShift);
 
-  const filteredProducts = products.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = searchQuery.trim() !== '' ? true : (activeCategory === '1' || p.category_id === activeCategory);
-    // POS utama hanya tampilkan produk yang perlu dimasak (bukan cepat saji)
-    const isNotQuick = !p.is_quick;
-    return matchesCategory && matchesSearch && isNotQuick;
-  });
+  const railTabs = useMemo<CategoryRailTab[]>(() => {
+    const tabs: CategoryRailTab[] = [];
 
-  // Hanya tampilkan tab kategori yang punya setidaknya 1 produk yang dimasak (!is_quick)
-  const cookedProducts = products.filter(p => !p.is_quick);
-  const visibleCategories = categories.filter(cat => {
-    if (cat.id === '1') return true; // "All Menu" selalu tampil
-    return cookedProducts.some(p => p.category_id === cat.id);
-  });
+    const matchesFilter = (p: Product) => {
+      if (menuTypeFilter === 'quick') return Boolean(p.is_quick);
+      if (menuTypeFilter === 'cooked') return !p.is_quick;
+      return true;
+    };
+
+    // 1. Tab Semua Menu (All Menu)
+    const totalMatching = products.filter(matchesFilter).length;
+    tabs.push({
+      id: 'all',
+      label: 'Semua Menu',
+      count: totalMatching,
+    });
+
+    // 2. Tab Favorit
+    const favoriteCount = products.filter(p => favoriteIds.includes(p.id) && matchesFilter(p)).length;
+    if (favoriteIds.length > 0) {
+      tabs.push({
+        id: 'favorit',
+        label: 'Favorit',
+        count: favoriteCount,
+      });
+    }
+
+    // Urutan kategori terstruktur: makanan terlebih dahulu, kemudian minuman, camilan & dessert
+    const preferredOrder = [
+      'cat_food',      // Food
+      'cat_snack',     // Snack
+      'yea8kgefo',     // Pop mie
+      '5v2cqlisz',     // Roti
+      '897p3xwtf',     // Ciki snack
+      'dj8dix8v4',     // coffee
+      '8fe2l22ge',     // Es teh & other
+      'cat_minuman',   // Minuman
+      'cat_dessert',   // Dessert
+    ];
+
+    const sortedCategories = [...categories].sort((a, b) => {
+      const idxA = preferredOrder.indexOf(a.id);
+      const idxB = preferredOrder.indexOf(b.id);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    // 3. Kategori dari database dengan hitungan produk
+    sortedCategories.forEach(cat => {
+      if (cat.id === '1' || cat.id === 'all' || cat.id === 'favorit') return;
+      const count = products.filter(p => p.category_id === cat.id && matchesFilter(p)).length;
+      const trimmed = cat.name.trim();
+      const formattedLabel = trimmed.toLowerCase() === 'coffee' ? 'Coffee' : trimmed;
+      tabs.push({
+        id: cat.id,
+        label: formattedLabel,
+        count: count,
+      });
+    });
+
+    return tabs;
+  }, [categories, products, favoriteIds, menuTypeFilter]);
+
+  const filteredProducts = useMemo(() => {
+    const result = products.filter(p => {
+      // 1. Search Query: jika search aktif, cari di semua menu dan abaikan kategori
+      if (searchQuery.trim() !== '') {
+        const matchesSearch = p.name.toLowerCase().includes(searchQuery.trim().toLowerCase());
+        let matchesType = true;
+        if (menuTypeFilter === 'quick') matchesType = Boolean(p.is_quick);
+        else if (menuTypeFilter === 'cooked') matchesType = !p.is_quick;
+        return matchesSearch && matchesType;
+      }
+
+      // 2. Filter Tipe Menu (Semua | Siap Ambil | Dimasak)
+      let matchesType = true;
+      if (menuTypeFilter === 'quick') matchesType = Boolean(p.is_quick);
+      else if (menuTypeFilter === 'cooked') matchesType = !p.is_quick;
+      if (!matchesType) return false;
+
+      // 3. Filter Kategori Rail
+      if (activeCategory === 'all' || activeCategory === '1') {
+        return true;
+      }
+      if (activeCategory === 'favorit') {
+        return favoriteIds.includes(p.id);
+      }
+
+      return p.category_id === activeCategory;
+    });
+
+    // Urutkan favorit berdasarkan rank penjualan (30 hari terakhir) jika tab favorit aktif
+    if (activeCategory === 'favorit' && searchQuery.trim() === '') {
+      result.sort((a, b) => favoriteIds.indexOf(a.id) - favoriteIds.indexOf(b.id));
+    }
+
+    return result;
+  }, [products, searchQuery, menuTypeFilter, activeCategory, favoriteIds]);
+
+  const handleSelectCategory = (tabId: string) => {
+    // Fleksibel: jika tab yang diklik sudah aktif (selain 'all'), klik lagi akan toggle kembali ke 'all'
+    const targetId = activeCategory === tabId && tabId !== 'all' ? 'all' : tabId;
+
+    // Jika kategori yang dipilih belum punya produk pada filter tipe menu saat ini,
+    // otomatis ubah filter tipe menu ke 'all' agar kasir tidak terkunci di tampilan kosong
+    if (targetId !== 'all' && targetId !== 'favorit') {
+      const hasUnderCurrentFilter = products.some(p => {
+        if (p.category_id !== targetId) return false;
+        if (menuTypeFilter === 'quick') return Boolean(p.is_quick);
+        if (menuTypeFilter === 'cooked') return !p.is_quick;
+        return true;
+      });
+      if (!hasUnderCurrentFilter) {
+        setMenuTypeFilter('all');
+      }
+    }
+
+    setActiveCategory(targetId);
+    try {
+      sessionStorage.setItem('samba_pos_last_category', targetId);
+    } catch (e) {}
+    gridContainerRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+  };
+
+  const handleSelectMenuType = (type: 'all' | 'quick' | 'cooked') => {
+    setMenuTypeFilter(type);
+    gridContainerRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+  };
+
+  const handleResetFilter = () => {
+    setMenuTypeFilter('all');
+    setSearchQuery('');
+    setActiveCategory('all');
+    try {
+      sessionStorage.setItem('samba_pos_last_category', 'all');
+    } catch (e) {}
+    gridContainerRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+  };
+
+  const handleRepeatLastOrder = async () => {
+    try {
+      const { data: lastTx, error: txError } = await supabase
+        .from('transactions')
+        .select('id, customer_name')
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (txError || !lastTx || lastTx.length === 0) {
+        alert("Belum ada riwayat pesanan sebelumnya.");
+        return;
+      }
+
+      const { data: items, error: itemsError } = await supabase
+        .from('transaction_items')
+        .select('*')
+        .eq('transaction_id', lastTx[0].id);
+
+      if (itemsError || !items || items.length === 0) {
+        alert("Pesanan sebelumnya tidak memiliki item.");
+        return;
+      }
+
+      const repeatedCart: CartItem[] = items.map((it: any) => {
+        const matched = products.find(p => p.name === it.product_name);
+        return {
+          id: matched ? matched.id : `repeat_${it.id}`,
+          product: matched || {
+            id: `repeat_${it.id}`,
+            category_id: '',
+            name: it.product_name,
+            price: it.price,
+            image_url: '',
+            is_available: true,
+            is_titipan: false,
+            titipan_name: null,
+            is_quick: false,
+          },
+          quantity: it.quantity,
+          notes: it.notes || '',
+        };
+      });
+
+      setCart(repeatedCart);
+      if (lastTx[0].customer_name) {
+        setCustomerName(lastTx[0].customer_name);
+      }
+      setToastMessage({
+        title: "Pesanan Terakhir Dimuat",
+        desc: `${items.length} item berhasil ditambahkan ke keranjang`,
+        variant: 'success'
+      });
+      setTimeout(() => setToastMessage(null), 3000);
+    } catch (err: any) {
+      alert("Gagal memuat pesanan terakhir: " + (err.message || ''));
+    }
+  };
+
+  const handleAddFreeItem = (name: string, price: number, isQuick: boolean, notes: string) => {
+    const freeProduct: Product = {
+      id: `custom_${Date.now()}`,
+      category_id: 'custom',
+      name: name,
+      price: price,
+      image_url: '',
+      is_available: true,
+      is_titipan: false,
+      titipan_name: null,
+      is_quick: isQuick,
+    };
+    addToCart(freeProduct, notes, 0, {});
+  };
 
   const handleProductClick = (product: Product) => {
     if (isLocked) {
@@ -849,25 +1188,37 @@ export default function POSPage() {
         );
       }
       const productWithAddonPrice = { ...product, price: product.price + addonPrice };
-      return [...prev, { id: cartItemId, product: productWithAddonPrice, quantity: 1, notes, variantChoices }];
+      return [...prev, { id: cartItemId, product: productWithAddonPrice, quantity: 1, notes, variantChoices, isExistingPaid: false }];
     });
     setIsCartOpen(true);
     setIsOptionsModalOpen(false);
   };
 
   const updateQuantity = (id: string, delta: number) => {
-    setCart(prev => prev.map(item => {
-      if (item.id === id) {
-        const newQuantity = Math.max(0, item.quantity + delta);
-        const maxStock = getProductStock(item.product.id);
-        if (delta > 0 && maxStock !== null && newQuantity > maxStock) {
-          alert(`Maksimal stok yang tersedia hanya ${maxStock}`);
-          return item;
-        }
-        return { ...item, quantity: newQuantity };
+    setCart(prev => {
+      const target = prev.find(item => item.id === id);
+      if (target && target.quantity + delta <= 0) {
+        setLastRemovedItem(target);
+        setToastMessage({
+          title: `Item Dihapus`,
+          desc: `${target.product.name} dihapus. Klik untuk batalkan (Urungkan).`,
+          variant: 'alert'
+        });
+        setTimeout(() => setToastMessage(null), 5000);
       }
-      return item;
-    }).filter(item => item.quantity > 0));
+      return prev.map(item => {
+        if (item.id === id) {
+          const newQuantity = Math.max(0, item.quantity + delta);
+          const maxStock = getProductStock(item.product.id);
+          if (delta > 0 && maxStock !== null && newQuantity > maxStock) {
+            alert(`Maksimal stok yang tersedia hanya ${maxStock}`);
+            return item;
+          }
+          return { ...item, quantity: newQuantity };
+        }
+        return item;
+      }).filter(item => item.quantity > 0);
+    });
   };
 
   const openNoteDialog = (item: CartItem) => {
@@ -899,7 +1250,15 @@ export default function POSPage() {
   const finalizeTransaction = async (methodOverride?: 'QRIS' | 'Cash' | 'Bayar Nanti' | null, isBackground: boolean = true, cashOverride?: number) => {
     const actualMethod = methodOverride !== undefined ? methodOverride : paymentMethod;
     const finalCashReceived = cashOverride !== undefined ? cashOverride : (cashReceived ? parseInt(cashReceived.replace(/\./g, '')) : null);
-    const changeAmount = (actualMethod === 'Cash' && finalCashReceived) ? finalCashReceived - total : 0;
+    
+    // Tagihan yang harus dibayar saat ini (jika order sebelumnya sudah lunas, hanya hitung menu tambahan baru)
+    const effectiveAmountDue = (isEditMode && previouslyPaidAmount > 0)
+      ? Math.max(0, total - previouslyPaidAmount)
+      : total;
+
+    const changeAmount = (actualMethod === 'Cash' && finalCashReceived)
+      ? Math.max(0, finalCashReceived - effectiveAmountDue)
+      : 0;
     
     setIsProcessingCheckout(true);
     
@@ -909,13 +1268,22 @@ export default function POSPage() {
       setOrderNumber(transactionId);
     }
 
+    let totalCashReceived: number | null = null;
+    if (actualMethod === 'Cash') {
+      if (isEditMode && previouslyPaidAmount > 0) {
+        totalCashReceived = previouslyPaidAmount + (finalCashReceived || effectiveAmountDue);
+      } else {
+        totalCashReceived = finalCashReceived;
+      }
+    }
+
     const transaction = {
       id: transactionId,
       method: actualMethod,
       total: total,
       cashier_name: userName || 'Unknown',
-      status: (actualMethod === 'Bayar Nanti') ? 'preparing' : (isAllQuickFood ? 'completed' : 'preparing'),
-      cash_received: actualMethod === 'Cash' ? finalCashReceived : null,
+      status: isEditMode ? 'preparing' : ((actualMethod === 'Bayar Nanti') ? 'preparing' : (isAllQuickFood ? 'completed' : 'preparing')),
+      cash_received: totalCashReceived,
       customer_name: customerName || null,
       payment_status: actualMethod === 'QRIS' ? 'PENDING_VERIFICATION' : (actualMethod === 'Bayar Nanti' ? 'UNPAID' : 'PAID')
     };
@@ -1061,7 +1429,7 @@ export default function POSPage() {
       setTimeout(() => setToastMessage(null), 8000);
     } else {
       setToastMessage({
-        title: 'Pembayaran Berhasil! ✅',
+        title: isEditMode && previouslyPaidAmount > 0 ? 'Menu Tambahan Berhasil Ditambahkan! ✅' : 'Pembayaran Berhasil! ✅',
         desc: `Order #${orderNumber} (${actualMethod}) telah dicatat.`,
         variant: 'success'
       });
@@ -1073,12 +1441,15 @@ export default function POSPage() {
 
   const completeAndNewOrder = async () => {
     setCart([]);
+    setIsPaymentSheetOpen(false);
     setCheckoutStep('none');
     setPaymentMethod(null);
     setCashReceived('');
     setCustomerName('');
     setIsEditMode(false);
     setOldCartItems([]);
+    setPreviouslyPaidAmount(0);
+    setIsOriginalOrderPaid(false);
     setIsMobileCartSheetOpen(false);
 
     try {
@@ -1087,6 +1458,8 @@ export default function POSPage() {
       localStorage.removeItem('samba_pos_edit_mode');
       localStorage.removeItem('samba_pos_old_items');
       localStorage.removeItem('samba_pos_order_number');
+      localStorage.removeItem('samba_pos_previously_paid');
+      localStorage.removeItem('samba_pos_is_orig_paid');
       localStorage.removeItem('samba_hybrid_session');
       localStorage.setItem('samba_cart_cleared_at', Date.now().toString());
 
@@ -1112,6 +1485,9 @@ export default function POSPage() {
     }
 
     setRefreshActiveOrdersTrigger(prev => prev + 1);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('samba-refresh-active-orders'));
+    }
 
     const newId = await generateNextOrderId();
     setOrderNumber(newId);
@@ -1119,6 +1495,9 @@ export default function POSPage() {
 
   const subtotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
   const total = subtotal;
+  const amountDue = (isEditMode && previouslyPaidAmount > 0)
+    ? Math.max(0, total - previouslyPaidAmount)
+    : total;
   const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const isAllQuickFood = cart.length > 0 && cart.every(item => item.product.is_quick === true);
 
@@ -1158,318 +1537,40 @@ export default function POSPage() {
   };
 
   const renderCartContent = () => (
-    <>
-      <div className="p-4 xl:p-6 border-b border-border flex items-center justify-between">
-        <div>
-          <h2 className="text-xl xl:text-2xl font-bold">Current Order</h2>
-          <div className="flex items-center gap-2 mt-1 text-muted-foreground text-sm">
-            <span>Order #{orderNumber}</span>
-            {isPageLoading ? (
-              <>
-                <span>•</span>
-                <span className="text-muted-foreground italic flex items-center gap-1 text-xs">
-                  Checking status...
-                </span>
-              </>
-            ) : userName && role ? (
-              <>
-                <span>•</span>
-                <span className="text-foreground font-semibold">Kasir: {userName}</span>
-              </>
-            ) : (
-              <>
-                <span>•</span>
-                <span className="text-amber-500 font-semibold flex items-center gap-1">
-                  <LockKeyhole size={14} /> Belum Login
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="flex-1 p-4 overflow-y-auto scrollbar-thin scrollbar-thumb-border">
-        {isPageLoading ? (
-          <div className="h-full flex flex-col items-center justify-center text-muted-foreground mt-12 gap-3">
-            <p className="text-xs">Checking shift status...</p>
-          </div>
-        ) : isLocked ? (
-          <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-4 text-muted-foreground mt-8">
-            <div className="w-16 h-16 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center justify-center">
-              <LockKeyhole size={32} />
-            </div>
-            <div>
-              <h3 className="font-bold text-foreground text-lg">Fitur POS Terkunci</h3>
-              <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-                {role ? `Kasir (${userName}) belum membuka shift. Silakan masukkan uang modal awal untuk mulai.` : 'Silakan Log In kasir untuk mulai menginput pesanan.'}
-              </p>
-            </div>
-          </div>
-        ) : cart.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-muted-foreground mt-20">
-            <p>Your cart is empty</p>
-          </div>
-        ) : (
-          <div className="space-y-4 pb-32 lg:pb-0">
-            {cart.map(item => (
-              <div key={item.id} className="flex flex-col gap-2 p-3 bg-background rounded-xl border border-border">
-                <div className="flex justify-between">
-                  <span className="font-medium line-clamp-1">{item.product.name}</span>
-                  <span className="font-medium whitespace-nowrap ml-2">Rp {(item.product.price * item.quantity).toLocaleString('id-ID')}</span>
-                </div>
-                
-                {item.notes && (
-                  <p className="text-xs text-primary bg-primary/10 p-1.5 rounded-md italic">
-                    Note: {item.notes}
-                  </p>
-                )}
-                
-                <div className="flex items-center justify-between mt-2">
-                  <button 
-                    onClick={() => openNoteDialog(item)}
-                    className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 text-xs"
-                  >
-                    <FileEdit size={14} /> Add Note
-                  </button>
-                  
-                  <div className="flex items-center gap-3 bg-muted rounded-lg p-1">
-                    <button 
-                      onClick={() => updateQuantity(item.id, -1)}
-                      className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-background transition-colors text-foreground"
-                    >
-                      <Minus size={14} />
-                    </button>
-                    <span className="w-4 text-center font-medium">{item.quantity}</span>
-                    <button 
-                      onClick={() => updateQuantity(item.id, 1)}
-                      className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-background transition-colors text-foreground"
-                    >
-                      <Plus size={14} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-            <div ref={cartEndRef} />
-          </div>
-        )}
-      </div>
-
-      <div className="p-4 xl:p-6 bg-zinc-950 border-t border-white/5 mt-auto relative shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.5)]">
-        <div className="space-y-4 mb-6 relative z-10">
-          <div className="bg-zinc-900/40 rounded-xl p-4 border border-white/5 space-y-3">
-            <div className="flex justify-between text-zinc-400 text-sm">
-              <span>Subtotal</span>
-              <span>Rp {subtotal.toLocaleString('id-ID')}</span>
-            </div>
-            <div className="flex justify-between text-zinc-400 text-sm">
-              <span>Tax & Service</span>
-              <span>Rp 0</span>
-            </div>
-            <Separator className="bg-white/10" />
-            <div className="flex justify-between text-2xl font-bold text-zinc-100 items-center pt-1">
-              <span>Total</span>
-              <span className="text-primary tracking-tight">Rp {total.toLocaleString('id-ID')}</span>
-            </div>
-          </div>
-
-          {/* Tombol Tambah Menu Cepat Saji (Hybrid) - tampil di desktop & mobile */}
-          {!isLocked && cart.length > 0 && (
-            <button
-              onClick={handleGoToHybridQuick}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl border border-dashed border-amber-500/40 bg-amber-500/10 text-amber-400 hover:bg-amber-500 hover:text-zinc-950 hover:border-amber-500 transition-all text-xs font-bold shadow-sm active:scale-98 cursor-pointer"
-            >
-              <Zap size={15} className="fill-amber-400/40" />
-              + Tambah Menu Cepat Saji (Hybrid)
-            </button>
-          )}
-        </div>
-        {isPageLoading ? (
-          <Button className="w-full h-14 rounded-xl text-lg font-bold bg-zinc-800 text-zinc-500 border border-white/5" disabled>
-            Memuat Status...
-          </Button>
-        ) : isLocked ? (
-          <Button 
-            className="w-full h-14 rounded-xl text-lg font-bold bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white border border-amber-500/20 hover:border-amber-500 transition-all duration-300 shadow-lg shadow-amber-500/10"
-            onClick={handleLockActionClick}
-          >
-            <LockKeyhole size={20} className="mr-2" /> {role ? 'Buka Shift Kasir' : 'Log In Kasir'}
-          </Button>
-        ) : cart.length > 0 ? (
-          <div className="space-y-4 md:hidden">
-            <Input 
-              id="customer-name-input-mobile"
-              placeholder="Nama Customer (Opsional)" 
-              value={customerName}
-              onChange={e => setCustomerName(e.target.value)}
-              className="bg-zinc-900/50 border-white/10 h-11 focus-visible:ring-primary placeholder:text-zinc-500 transition-all"
-            />
-            
-            {paymentMethod === 'Cash' ? (
-              <div className="space-y-3 animate-in fade-in zoom-in-95 duration-200">
-                <div className="flex items-center justify-between px-1">
-                  <span className="text-sm font-bold text-zinc-300">Pilih Nominal Tunai</span>
-                  <button onClick={() => setPaymentMethod(null)} className="text-xs text-rose-400 hover:text-rose-300 font-bold px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 rounded-lg transition-colors">Batal</button>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {getQuickCashSuggestions(total).map((val) => (
-                    <button
-                      key={val}
-                      type="button"
-                      onClick={() => {
-                        setCashReceived(val.toString());
-                        finalizeTransaction('Cash', true, val);
-                      }}
-                      className={`p-3 rounded-2xl text-sm font-bold transition-all duration-300 border shadow-sm ${
-                        parseInt(cashReceived.replace(/\./g, '') || '0') === val
-                          ? 'bg-primary text-primary-foreground border-primary scale-95'
-                          : 'bg-zinc-900 text-zinc-200 border-white/10 hover:bg-zinc-800 hover:border-primary/50'
-                      }`}
-                    >
-                      {val === total ? 'Uang Pas' : `Rp ${val.toLocaleString('id-ID')}`}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                <div className="grid grid-cols-3 gap-3">
-                  <button 
-                    onClick={() => finalizeTransaction('QRIS', true)}
-                    className="bg-blue-500/10 hover:bg-blue-500 text-blue-500 hover:text-white border border-blue-500/20 p-3 rounded-2xl font-bold flex flex-col items-center justify-center gap-1.5 transition-all group"
-                  >
-                    <QrCode size={22} className="group-hover:scale-110 transition-transform" />
-                    <span className="text-xs">QRIS</span>
-                  </button>
-                  
-                  <button 
-                    onClick={() => setPaymentMethod('Cash')}
-                    className="bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white border border-emerald-500/20 p-3 rounded-2xl font-bold flex flex-col items-center justify-center gap-1.5 transition-all group"
-                  >
-                    <Banknote size={22} className="group-hover:scale-110 transition-transform" />
-                    <span className="text-xs">Tunai</span>
-                  </button>
-
-                  <button 
-                    onClick={() => {
-                      if (!customerName) {
-                        setIsHutangNameDialogOpen(true);
-                        return;
-                      }
-                      finalizeTransaction('Bayar Nanti', true);
-                    }}
-                    className="bg-amber-500/10 hover:bg-amber-500 text-amber-500 hover:text-white border border-amber-500/20 p-3 rounded-2xl font-bold flex flex-col items-center justify-center gap-1.5 transition-all group"
-                  >
-                    <Clock size={22} className="group-hover:scale-110 transition-transform" />
-                    <span className="text-xs">Hutang</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <Button 
-            className="w-full h-14 rounded-xl text-lg font-bold bg-zinc-800/50 text-zinc-600 border border-white/5"
-            disabled
-          >
-            Pilih Menu Dahulu
-          </Button>
-        )}
-      </div>
-    </>
+    <CartPanel
+      orderNumber={orderNumber}
+      isPageLoading={isPageLoading}
+      userName={userName}
+      role={role}
+      isLocked={isLocked}
+      cart={cart}
+      subtotal={subtotal}
+      total={total}
+      amountDue={amountDue}
+      previouslyPaidAmount={previouslyPaidAmount}
+      isOriginalOrderPaid={isOriginalOrderPaid}
+      cartEndRef={cartEndRef}
+      customerName={customerName}
+      setCustomerName={setCustomerName}
+      paymentMethod={paymentMethod}
+      setPaymentMethod={setPaymentMethod}
+      cashReceived={cashReceived}
+      setCashReceived={setCashReceived}
+      openNoteDialog={openNoteDialog}
+      updateQuantity={updateQuantity}
+      handleGoToHybridQuick={handleGoToHybridQuick}
+      handleLockActionClick={handleLockActionClick}
+      finalizeTransaction={finalizeTransaction}
+      getQuickCashSuggestions={getQuickCashSuggestions}
+      setIsHutangNameDialogOpen={setIsHutangNameDialogOpen}
+      onOpenPaymentSheet={() => setIsPaymentSheetOpen(true)}
+      onDirectSave={() => finalizeTransaction(paymentMethod || 'Cash')}
+      isEditMode={isEditMode}
+      onCancelEdit={cancelEdit}
+    />
   );
 
-  const renderCheckoutFAB = () => {
-    if (isPageLoading || isLocked || cart.length === 0) return null;
 
-    return (
-      <div className="hidden md:flex absolute bottom-6 left-1/2 -translate-x-1/2 z-40 bg-zinc-900/90 backdrop-blur-xl p-3 rounded-[2rem] border border-white/10 shadow-2xl items-center gap-3 animate-in slide-in-from-bottom-8">
-        <div className="bg-zinc-950/50 rounded-2xl p-1.5 flex items-center gap-2 pr-4 shrink-0 border border-white/5">
-           <div className="bg-primary/20 text-primary w-10 h-10 rounded-xl flex items-center justify-center font-bold">
-             {cartItemCount}
-           </div>
-           <div className="flex flex-col">
-             <span className="text-xs text-zinc-400">Total</span>
-             <span className="text-sm font-bold text-primary">Rp {total.toLocaleString('id-ID')}</span>
-           </div>
-        </div>
-
-        <Input 
-          id="customer-name-input-desktop"
-          placeholder="Nama Cust..." 
-          value={customerName}
-          onChange={e => setCustomerName(e.target.value)}
-          className="w-32 bg-zinc-900 border-white/10 h-11 focus-visible:ring-primary placeholder:text-zinc-500 rounded-xl transition-all"
-        />
-
-        {/* Tombol Tambah Menu Cepat Saji (Hybrid) pada Floating Bar */}
-        <button
-          onClick={handleGoToHybridQuick}
-          className="h-11 px-3.5 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-400 hover:bg-amber-500 hover:text-zinc-950 transition-all font-bold text-xs flex items-center gap-1.5 whitespace-nowrap shadow-sm active:scale-95 cursor-pointer"
-          title="Tambah menu cepat saji (minuman, snack, dll)"
-        >
-          <Zap size={15} className="fill-amber-400/40" />
-          <span>+ Cepat Saji</span>
-        </button>
-
-        <div className="h-8 w-px bg-white/10 mx-1" />
-
-        {paymentMethod === 'Cash' ? (
-          <div className="flex items-center gap-2">
-            <button onClick={() => setPaymentMethod(null)} className="h-11 px-3 text-xs text-rose-400 hover:bg-rose-500/10 rounded-xl font-bold transition-colors">Batal</button>
-            <div className="flex items-center gap-2 overflow-x-auto max-w-[400px] scrollbar-hide">
-              {getQuickCashSuggestions(total).map((val) => (
-                <button
-                  key={val}
-                  onClick={() => {
-                    setCashReceived(val.toString());
-                    finalizeTransaction('Cash', true, val);
-                  }}
-                  className={`h-11 px-4 rounded-xl text-sm font-bold whitespace-nowrap transition-all duration-300 border ${
-                    parseInt(cashReceived.replace(/\./g, '') || '0') === val
-                      ? 'bg-primary text-primary-foreground border-primary scale-95'
-                      : 'bg-zinc-800 text-zinc-200 border-white/5 hover:bg-zinc-700'
-                  }`}
-                >
-                  {val === total ? 'Pas' : (val >= 1000 ? `${val/1000}k` : val)}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={() => finalizeTransaction('QRIS', true)}
-              className="bg-blue-500/10 hover:bg-blue-500 text-blue-500 hover:text-white border border-blue-500/20 h-11 px-5 rounded-xl font-bold flex items-center gap-2 transition-all group"
-            >
-              <QrCode size={18} className="group-hover:scale-110 transition-transform" />
-              <span>QRIS</span>
-            </button>
-            <button 
-              onClick={() => setPaymentMethod('Cash')}
-              className="bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white border border-emerald-500/20 h-11 px-5 rounded-xl font-bold flex items-center gap-2 transition-all group"
-            >
-              <Banknote size={18} className="group-hover:scale-110 transition-transform" />
-              <span>Tunai</span>
-            </button>
-            <button 
-              onClick={() => {
-                if (!customerName) {
-                  setIsHutangNameDialogOpen(true);
-                  return;
-                }
-                finalizeTransaction('Bayar Nanti', true);
-              }}
-              className="bg-amber-500/10 hover:bg-amber-500 text-amber-500 hover:text-white border border-amber-500/20 h-11 px-4 rounded-xl font-bold flex items-center gap-2 transition-all group"
-            >
-              <Clock size={18} className="group-hover:scale-110 transition-transform" />
-              <span className="hidden xl:inline">Hutang</span>
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  };
 
   return (
     <MainLayout 
@@ -1497,325 +1598,213 @@ export default function POSPage() {
     >
       <div className="flex h-full w-full">
         {/* Main Content */}
-        <div className="flex-1 flex flex-col min-w-0 bg-background/50 h-full overflow-y-auto">
-          {isLocked && (
-            <div className="px-4 md:px-6 pt-4">
-              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-2.5 text-sm font-medium text-amber-500">
-                <LockKeyhole size={18} className="shrink-0 text-amber-500" />
-                <span>{role ? `Shift belum dibuka untuk ${userName}. Silakan buka shift pada tombol kanan bawah untuk mulai transaksi.` : 'Fitur POS Terkunci. Silakan Log In kasir untuk membuka shift & transaksi.'}</span>
-              </div>
-            </div>
-          )}
+        <div className="flex-1 flex flex-col min-w-0 bg-background/50 h-full overflow-hidden">
+          <header className="px-4 md:px-6 py-3 sticky top-0 z-30 bg-[#0b0a08]/90 backdrop-blur-xl border-b border-white/10 shrink-0">
+            <div className="flex flex-wrap md:flex-nowrap items-center justify-between gap-3 w-full">
+              {/* Left group: Search Pill & Segmented Filter */}
+              <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                {/* Search Pill Button */}
+                {isSearchOpen ? (
+                  <div className="relative flex items-center min-w-[180px] max-w-xs flex-1 animate-in fade-in zoom-in-95 duration-150">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-400" size={16} />
+                    <Input
+                      autoFocus
+                      className="pl-9 pr-8 h-10 bg-zinc-900 border-amber-500/40 text-xs text-zinc-100 focus-visible:ring-1 focus-visible:ring-amber-500 rounded-xl"
+                      placeholder="Ketik nama menu..."
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery('');
+                        setIsSearchOpen(false);
+                      }}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-100 p-0.5 rounded-md"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsSearchOpen(true)}
+                    className="flex items-center gap-2 h-10 px-3.5 rounded-xl bg-zinc-900/80 hover:bg-zinc-800 border border-white/10 hover:border-amber-500/30 text-xs text-zinc-400 hover:text-zinc-200 transition-all active:scale-95 shadow-sm shrink-0"
+                  >
+                    <Search size={15} className="text-zinc-400" />
+                    <span>{searchQuery ? `"${searchQuery}"` : "Cari menu..."}</span>
+                  </button>
+                )}
 
-          <header className="px-4 md:px-6 py-3.5 sticky top-0 z-30 bg-[#0b0a08]/85 backdrop-blur-xl border-b border-white/10">
-            <div className="flex flex-wrap md:flex-nowrap items-center gap-3 w-full">
-              {/* Search Bar */}
-              <div className="relative flex-1 min-w-[180px] group">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-primary transition-colors" size={18} />
-                <Input 
-                  className="pl-10 h-11 bg-zinc-900/60 border-white/10 text-sm focus-visible:ring-1 focus-visible:ring-primary rounded-2xl transition-all shadow-inner hover:bg-zinc-900/80"
-                  placeholder="Cari menu..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-
-              {/* Order Queue Header Chips */}
-              <OrderQueueContainer className="max-w-full md:max-w-[48%]" />
-
-              {/* Action Buttons */}
-              <div className="flex items-center gap-2 shrink-0">
+                {/* Calculator Button (Fase 4a) */}
                 <button
-                  onClick={handleGoToHybridQuick}
-                  className="h-11 px-4 border border-amber-500/20 text-amber-400 hover:bg-amber-500 hover:text-zinc-950 transition-all duration-300 gap-2 rounded-2xl text-sm font-bold bg-amber-500/10 hover:border-amber-500 shadow-sm flex items-center justify-center cursor-pointer"
-                  title={cart.length > 0 ? "Tambah Cepat Saji (Hybrid Order)" : "POS Cepat Saji"}
+                  type="button"
+                  onClick={() => setIsCalculatorOpen(true)}
+                  className="h-10 w-10 rounded-xl bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-amber-400 border border-white/10 hover:border-amber-500/30 flex items-center justify-center transition-all active:scale-95 shadow-sm shrink-0"
+                  title="Kalkulator Kasir"
                 >
-                  <Zap size={16} className={activeShift ? "fill-amber-400/40 text-amber-400" : ""} />
-                  <span className="hidden sm:inline">
-                    {cart.length > 0 ? "+ Cepat Saji" : "Cepat saji"}
-                  </span>
+                  <Calculator size={16} />
                 </button>
 
-                {/* Desktop Cart Toggle */}
-                <Button 
-                  variant="outline" 
-                  className={`flex items-center gap-2 h-11 px-4 rounded-2xl border-white/10 bg-zinc-900/50 hover:bg-zinc-800 hover:border-primary/50 transition-all duration-300 ${cart.length === 0 ? 'opacity-60 cursor-not-allowed' : ''}`} 
-                  onClick={() => {
-                    if (cart.length > 0) {
-                      setIsCartOpen(!isCartOpen);
-                    }
-                  }}
-                  disabled={cart.length === 0}
-                  title={cart.length === 0 ? "Keranjang masih kosong" : (isCartOpen ? "Sembunyikan Keranjang" : "Buka Keranjang")}
-                >
-                  <ShoppingCart size={18} className={cartItemCount > 0 ? 'text-primary' : ''} />
-                  <span className="hidden lg:inline">{isCartOpen && cart.length > 0 ? 'Tutup Keranjang' : 'Keranjang'}</span>
-                  {cartItemCount > 0 && (
-                    <div className="bg-primary text-primary-foreground text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-lg shadow-primary/20">
-                      {cartItemCount}
-                    </div>
-                  )}
-                </Button>
+                {/* Segmented Filter Pills: Semua / Siap Ambil / Dimasak */}
+                <div className="flex items-center bg-zinc-900/90 p-1 rounded-xl border border-white/10 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectMenuType('all')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      menuTypeFilter === 'all'
+                        ? 'bg-amber-500 text-zinc-950 shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    Semua
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectMenuType('quick')}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      menuTypeFilter === 'quick'
+                        ? 'bg-amber-500 text-zinc-950 shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    <ShoppingBag size={12} />
+                    <span>Siap Ambil</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectMenuType('cooked')}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      menuTypeFilter === 'cooked'
+                        ? 'bg-orange-500 text-white shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    <Flame size={12} />
+                    <span>Dimasak</span>
+                  </button>
+                </div>
               </div>
+
+              {/* Kitchen Queue Counter Badge (Direct Link to /orders) */}
+              {kitchenOrders.length > 0 && (
+                <Link
+                  href="/orders"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/25 active:scale-95 text-amber-400 font-mono text-xs font-bold shrink-0 transition-all cursor-pointer"
+                  title={`Buka halaman Pesanan (${kitchenOrders.length} antrean aktif)`}
+                >
+                  <Flame size={13} className="fill-amber-400 text-amber-400 animate-pulse" />
+                  <span>{kitchenOrders.length} Dapur</span>
+                </Link>
+              )}
             </div>
           </header>
 
-        <div className="px-4 md:px-6 pt-4 pb-2 w-full max-w-[100vw] overflow-hidden shrink-0">
+          {/* Antrean Dapur Strip (Horizontal Queue Cards) */}
+          <KitchenQueueStrip
+            orders={kitchenOrders}
+            products={products}
+            onAdvance={advanceOrder}
+            onEditOrder={handleEditOrderFromQueue}
+            onSelectOrder={handleSelectOrderFromQueue}
+            isCollapsed={isKitchenStripCollapsed}
+            onToggleCollapse={() => setIsKitchenStripCollapsed(prev => !prev)}
+          />
+
           {pendingQrOrders.length > 0 && (
-            <div className="mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4 shadow-lg shadow-amber-500/5">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center animate-pulse shrink-0">
-                  <QrCode size={20} />
+            <div className="px-4 md:px-6 pt-4 pb-2 w-full max-w-[100vw] overflow-hidden shrink-0">
+              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4 shadow-lg shadow-amber-500/5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center animate-pulse shrink-0">
+                    <QrCode size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-amber-500 text-sm md:text-base">Pesanan Mandiri (QR) Valid Masuk!</h3>
+                    <p className="text-xs md:text-sm text-zinc-400">Ada {pendingQrOrders.length} pesanan terverifikasi AI yang siap dikonfirmasi kasir.</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-bold text-amber-500 text-sm md:text-base">Pesanan Mandiri (QR) Valid Masuk!</h3>
-                  <p className="text-xs md:text-sm text-zinc-400">Ada {pendingQrOrders.length} pesanan terverifikasi AI yang siap dikonfirmasi kasir.</p>
-                </div>
+                <Link href="/orders" className="w-full sm:w-auto bg-amber-500 hover:bg-amber-400 text-black font-bold h-10 px-6 rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-amber-500/20 transition-transform active:scale-95">
+                  Cek Pesanan
+                </Link>
               </div>
-              <Link href="/orders" className="w-full sm:w-auto bg-amber-500 hover:bg-amber-400 text-black font-bold h-10 px-6 rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-amber-500/20 transition-transform active:scale-95">
-                Cek Pesanan
-              </Link>
             </div>
           )}
 
-          {/* Active Order Details Dialog */}
-          <Dialog open={!!selectedActiveOrder} onOpenChange={() => setSelectedActiveOrder(null)}>
-            <DialogContent className="bg-zinc-950 border-white/10 text-zinc-100 sm:max-w-4xl md:max-w-5xl w-[95vw] rounded-2xl max-h-[85vh] overflow-y-auto">
-              {selectedActiveOrder && (
-                <>
-                  <DialogHeader className="flex flex-row items-start justify-between pr-8">
-                    <div>
-                      <DialogTitle className="text-2xl font-bold flex items-center gap-2">
-                        {selectedActiveOrder.customer_name ? selectedActiveOrder.customer_name : `Order #${selectedActiveOrder.id.split('_').pop()}`}
-                      </DialogTitle>
-                      {selectedActiveOrder.customer_name && (
-                        <DialogDescription className="font-mono text-zinc-400 text-sm mt-1">
-                          #{selectedActiveOrder.id.startsWith('order_') ? selectedActiveOrder.id.split('_').pop() : selectedActiveOrder.id}
-                        </DialogDescription>
-                      )}
-                    </div>
-                    
-                    <button 
-                      onClick={() => loadOrderForEdit(selectedActiveOrder)}
-                      className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-2 shadow-lg shadow-blue-500/20 transition-all active:scale-95"
-                    >
-                      <Plus size={16} strokeWidth={3} /> Tambah Menu
-                    </button>
-                  </DialogHeader>
+          <ActiveOrderModals
+            selectedActiveOrder={selectedActiveOrder}
+            setSelectedActiveOrder={setSelectedActiveOrder}
+            loadOrderForEdit={loadOrderForEdit}
+            products={products}
+            checkedItems={checkedItems}
+            toggleCheckItem={toggleCheckItem}
+            paymentModalOrder={paymentModalOrder}
+            setPaymentModalOrder={setPaymentModalOrder}
+            confirmCompleteOrder={confirmCompleteOrder}
+            setConfirmCompleteOrder={setConfirmCompleteOrder}
+            updateOrderStatus={updateOrderStatus}
+          />
 
-                  <div className="space-y-5 py-2">
-                    <div className="flex justify-between text-base text-zinc-400 pb-3 border-b border-white/5">
-                      <span>{new Date(selectedActiveOrder.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
-                      <span className="font-bold text-emerald-400">{selectedActiveOrder.method}</span>
-                    </div>
-                    
-                    <div className="space-y-4">
-                      <h4 className="font-bold text-sm text-zinc-300 uppercase tracking-wider">Daftar Pesanan</h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {selectedActiveOrder.items?.map((item: any, i: number) => {
-                          const p = products.find(prod => prod.name === item.product_name);
-                          const isQuick = p?.is_quick;
-                          return (
-                            <button 
-                              key={i} 
-                              onClick={() => toggleCheckItem(i)}
-                              className={`flex justify-between items-center gap-4 p-4 rounded-xl border text-left transition-all ${
-                                checkedItems[i] 
-                                  ? 'bg-emerald-500/10 border-emerald-500/30' 
-                                  : 'bg-white/5 border-white/5 hover:bg-white/10'
-                              }`}
-                            >
-                              <div className="flex flex-col gap-1.5 flex-1">
-                                <span className={`font-bold text-lg flex items-center gap-2 ${checkedItems[i] ? 'text-emerald-400 line-through opacity-70' : 'text-zinc-100'}`}>
-                                  {checkedItems[i] ? <CheckCircle2 size={18} className="text-emerald-500 shrink-0" /> : <div className="w-[18px] h-[18px] rounded-full border-2 border-zinc-600 shrink-0" />}
-                                  {item.quantity}x {item.product_name}
-                                </span>
-                                {item.notes && <span className={`text-sm font-medium whitespace-pre-wrap ${checkedItems[i] ? 'text-emerald-500/50 line-through' : 'text-amber-500'}`}>{item.notes}</span>}
-                              </div>
-                              {isQuick ? (
-                                <span className={`shrink-0 text-xs font-bold px-2 py-1 rounded-md border ${checkedItems[i] ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20'}`}>Siap Saji</span>
-                              ) : (
-                                <span className={`shrink-0 text-xs font-bold px-2 py-1 rounded-md border ${checkedItems[i] ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-amber-500/10 text-amber-500 border-amber-500/20'}`}>Dimasak</span>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
+          {/* Rail + Grid Layout */}
+          <div className="flex-1 flex min-h-0 overflow-hidden">
+            <CategoryRail
+              activeTab={searchQuery.trim() !== '' ? null : activeCategory}
+              onSelectTab={handleSelectCategory}
+              tabs={railTabs}
+              isLoading={isLoadingData || (isPageLoading && products.length === 0)}
+            />
 
-                    <div className="pt-4 border-t border-white/5 flex justify-end">
-                      <Button
-                        onClick={() => {
-                          const order = selectedActiveOrder;
-                          setSelectedActiveOrder(null);
-                          if (order.method === 'Bayar Nanti') {
-                            setPaymentModalOrder(order);
-                          } else {
-                            setConfirmCompleteOrder(order);
-                          }
-                        }}
-                        className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
-                      >
-                        <CheckCircle2 size={16} className="mr-1.5" />
-                        {selectedActiveOrder.method === 'Bayar Nanti' ? 'Lunasi & Selesaikan' : 'Selesaikan Pesanan'}
-                      </Button>
-                    </div>
+            <div ref={gridContainerRef} className="flex-1 overflow-y-auto min-w-0">
+              {isLocked ? (
+                <div className="flex-1 flex flex-col items-center justify-center p-8 text-center min-h-[480px]">
+                  <div className="w-20 h-20 rounded-3xl bg-amber-500/10 border border-amber-500/20 text-amber-500 flex items-center justify-center mb-5 shadow-2xl shadow-amber-500/10 animate-in zoom-in-95">
+                    <LockKeyhole size={36} />
                   </div>
-                </>
-              )}
-            </DialogContent>
-          </Dialog>
-
-          {/* Quick Payment Modal */}
-          <Dialog open={!!paymentModalOrder} onOpenChange={() => setPaymentModalOrder(null)}>
-            <DialogContent className="bg-zinc-950 border-white/10 text-zinc-100 max-w-sm rounded-2xl">
-              <DialogHeader>
-                <DialogTitle className="text-xl font-bold">Pilih Pembayaran</DialogTitle>
-                <DialogDescription className="text-zinc-400">
-                  Selesaikan pesanan <span className="font-mono text-white">#{paymentModalOrder?.id.split('_').pop()}</span> dengan:
-                </DialogDescription>
-              </DialogHeader>
-              <div className="flex gap-3 mt-4">
-                <button 
-                  onClick={() => {
-                    updateOrderStatus(paymentModalOrder.id, 'completed', 'Cash (Lunas)');
-                    setPaymentModalOrder(null);
-                  }}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-emerald-500/20 flex flex-col items-center gap-2 transition-transform active:scale-95"
-                >
-                  <Banknote size={24} />
-                  CASH
-                </button>
-                <button 
-                  onClick={() => {
-                    updateOrderStatus(paymentModalOrder.id, 'completed', 'QRIS');
-                    setPaymentModalOrder(null);
-                  }}
-                  className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-500/20 flex flex-col items-center gap-2 transition-transform active:scale-95"
-                >
-                  <QrCode size={24} />
-                  QRIS
-                </button>
-              </div>
-            </DialogContent>
-          </Dialog>
-
-          {/* Konfirmasi Selesai Dialog (1-click confirmation) */}
-          <Dialog open={!!confirmCompleteOrder} onOpenChange={() => setConfirmCompleteOrder(null)}>
-            <DialogContent className="bg-zinc-950 border-white/10 text-zinc-100 max-w-sm rounded-2xl">
-              <DialogHeader>
-                <DialogTitle className="text-xl font-bold flex items-center gap-2">
-                  <CheckCircle2 className="text-emerald-500" size={22} />
-                  Selesaikan Pesanan?
-                </DialogTitle>
-                <DialogDescription className="text-zinc-400 pt-2 text-sm">
-                  Pesanan <span className="font-mono text-white font-bold">#{confirmCompleteOrder?.id.split('_').pop()}</span>
-                  {confirmCompleteOrder?.customer_name && <span> atas nama <span className="text-amber-400 font-semibold">{confirmCompleteOrder.customer_name}</span></span>} akan ditandai selesai dan dikeluarkan dari antrean.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter className="flex sm:justify-end gap-2 mt-4">
-                <Button variant="outline" onClick={() => setConfirmCompleteOrder(null)} className="border-white/10 hover:bg-white/5">
-                  Batal
-                </Button>
-                <Button 
-                  onClick={() => {
-                    if (confirmCompleteOrder) {
-                      updateOrderStatus(confirmCompleteOrder.id, 'completed');
-                      setConfirmCompleteOrder(null);
-                    }
-                  }}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
-                >
-                  Ya, Selesaikan
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          <div className="flex w-full overflow-x-auto snap-x snap-mandatory scrollbar-hide bg-zinc-900/40 p-1.5 rounded-2xl border border-white/5 shadow-inner gap-1">
-            {visibleCategories.map(cat => (
-              <button
-                key={cat.id}
-                onClick={() => setActiveCategory(cat.id)}
-                className={`px-5 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all duration-300 snap-start shrink-0 ${
-                  activeCategory === cat.id 
-                    ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20 scale-[1.02]' 
-                    : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/5'
-                }`}
-              >
-                {cat.name}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Product Grid */}
-        <div className="p-4 md:p-6 shrink-0">
-            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 pb-32">
-              {filteredProducts.map(product => {
-                const cartItem = cart.find(c => c.product.id === product.id);
-                const qtyInCart = cartItem ? cartItem.quantity : 0;
-                const isUnavailable = isStockEmpty(product);
-                
-                return (
-                  <div 
-                    key={product.id}
-                    onClick={() => {
-                      if (isUnavailable) return;
-                      handleProductClick(product);
-                    }}
-                    className={`group relative border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between h-[120px] select-none ${
-                      isUnavailable
-                        ? 'bg-zinc-900/40 border-zinc-700/50 opacity-70 cursor-not-allowed shadow-none'
-                        : isLocked
-                        ? 'bg-zinc-900/40 border-white/5 opacity-90 cursor-pointer hover:border-amber-500/50'
-                        : `bg-zinc-900/40 cursor-pointer ${qtyInCart > 0 ? 'border-primary/50 bg-primary/10' : 'border-white/5 hover:border-white/20 hover:bg-zinc-800/60'} hover:-translate-y-1`
-                    }`}
+                  <h2 className="text-2xl sm:text-3xl font-black text-zinc-100 font-serif tracking-tight">
+                    Sistem Kasir Terkunci
+                  </h2>
+                  <p className="text-zinc-400 text-sm max-w-sm mt-2 leading-relaxed">
+                    {role
+                      ? `Shift aktif belum dibuka untuk ${userName}. Buka shift dan masukkan modal awal untuk mulai transaksi.`
+                      : 'Silakan masuk dengan profil kasir Anda untuk membuka shift dan mulai menginput pesanan.'}
+                  </p>
+                  <Button
+                    onClick={handleLockActionClick}
+                    className="mt-6 h-13 px-8 rounded-2xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black text-base shadow-xl shadow-amber-500/25 active:scale-95 transition-all cursor-pointer"
                   >
-                    <div>
-                      <div className="flex justify-between items-start mb-2">
-                         <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider truncate pr-2">
-                           {categories.find(c => c.id === product.category_id)?.name || 'MENU'}
-                         </span>
-                         <div className="flex items-center gap-1.5 shrink-0">
-                           {product.variants && product.variants.length > 0 && !isUnavailable && (
-                             <div className="text-[9px] text-primary/80 bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded-md flex items-center gap-1 font-bold">
-                               <ListPlus size={10} /> OPSI
-                             </div>
-                           )}
-                           {qtyInCart > 0 && (
-                             <div className="bg-primary text-primary-foreground text-[10px] font-bold px-2 py-0.5 rounded-full">
-                               {qtyInCart}x
-                             </div>
-                           )}
-                         </div>
-                      </div>
-                      <h3 className={`text-[13px] md:text-sm font-bold line-clamp-2 leading-tight ${isUnavailable ? 'text-zinc-400' : qtyInCart > 0 ? 'text-primary' : 'text-zinc-200 group-hover:text-white'}`}>
-                        {product.name}
-                      </h3>
-                    </div>
-                    
-                    <div className="flex justify-between items-end mt-2">
-                      <p className={`text-sm font-bold ${isUnavailable ? 'text-zinc-500' : qtyInCart > 0 ? 'text-zinc-200' : 'text-zinc-400'}`}>
-                        Rp {product.price.toLocaleString('id-ID')}
-                      </p>
-                      <span className={`text-[11px] font-bold ${!isUnavailable ? 'text-emerald-500' : 'text-rose-400/90 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-md uppercase tracking-wider'}`}>
-                        {getStockString(product)}
-                      </span>
-                    </div>
-
-                    {isLocked && !isUnavailable && (
-                      <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-md text-amber-400 p-1.5 rounded-lg border border-amber-500/30 z-20">
-                        <LockKeyhole size={14} />
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                    <LockKeyhole size={18} className="mr-2" />
+                    {role ? 'Buka Shift Kasir' : 'Pilih Profil & Buka Shift'}
+                  </Button>
+                </div>
+              ) : (
+                <ProductGrid
+                  products={filteredProducts}
+                  categories={categories}
+                  cart={cart}
+                  isLocked={isLocked}
+                  onProductClick={handleProductClick}
+                  getStockString={getStockString}
+                  isStockEmpty={isStockEmpty}
+                  onRepeatLastOrder={handleRepeatLastOrder}
+                  onOpenFreeItem={() => setIsFreeItemModalOpen(true)}
+                  onResetFilter={handleResetFilter}
+                  isLoading={isLoadingData || (isPageLoading && products.length === 0)}
+                />
+              )}
             </div>
-        </div>
+          </div>
         
-        {renderCheckoutFAB()}
+        <PaymentSheet
+          isOpen={isPaymentSheetOpen}
+          onOpenChange={setIsPaymentSheetOpen}
+          total={amountDue}
+          totalOrderAmount={total}
+          previouslyPaidAmount={isEditMode ? previouslyPaidAmount : 0}
+          orderNumber={orderNumber}
+          customerName={customerName}
+          setCustomerName={setCustomerName}
+          finalizeTransaction={finalizeTransaction}
+          isProcessingCheckout={isProcessingCheckout}
+        />
       </div>
 
       {/* Mobile Floating Cart Bar */}
@@ -1826,18 +1815,18 @@ export default function POSPage() {
                 <div className="bg-primary-foreground/20 px-3 py-1.5 rounded-xl font-bold text-sm">
                   {cartItemCount} Item
                 </div>
-                <span className="font-bold text-sm">My Orders</span>
+                <span className="font-bold text-sm">Pesanan Saya</span>
               </div>
               <div className="flex items-center gap-3">
                 <div className="font-bold text-lg">
-                  Rp {total.toLocaleString('id-ID')}
+                  Rp {(isEditMode && previouslyPaidAmount > 0 ? amountDue : total).toLocaleString('id-ID')}
                 </div>
                 <ShoppingCart size={20} />
               </div>
             </SheetTrigger>
             <SheetContent side="bottom" className="h-[85vh] p-0 bg-card border-t border-border rounded-t-3xl flex flex-col z-[100] outline-none">
               <SheetHeader className="p-0 border-b border-border sr-only">
-                <SheetTitle>Current Order</SheetTitle>
+                <SheetTitle>Pesanan Aktif</SheetTitle>
               </SheetHeader>
               <div className="w-12 h-1.5 bg-border rounded-full mx-auto mt-3 shrink-0" />
               {renderCartContent()}
@@ -1845,526 +1834,100 @@ export default function POSPage() {
         </Sheet>
       </div>
 
-      {/* Desktop Cart Sidebar */}
-      {(isCartOpen && cart.length > 0) && (
-        <div className="hidden lg:flex w-72 xl:w-80 border-l border-border bg-card flex-col h-full shrink-0 transition-all duration-300">
-          {renderCartContent()}
-        </div>
-      )}
+      {/* Permanent Desktop/Tablet Landscape Cart */}
+      <div className="hidden lg:flex w-[360px] xl:w-[380px] border-l border-white/10 bg-zinc-950 flex-col h-full shrink-0">
+        {renderCartContent()}
+      </div>
+
+      {/* Free Item Modal */}
+      <FreeItemModal
+        isOpen={isFreeItemModalOpen}
+        onOpenChange={setIsFreeItemModalOpen}
+        onAddFreeItem={handleAddFreeItem}
+      />
 
       {/* Product Options Modal */}
-      <Dialog open={isOptionsModalOpen} onOpenChange={setIsOptionsModalOpen}>
-        <DialogContent className="bg-zinc-950 border-white/10 sm:max-w-lg max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-3xl shadow-2xl">
-          <div className="px-6 pt-6 pb-4 border-b border-white/5 bg-zinc-900/40 relative">
-            <h2 className="text-2xl font-bold text-zinc-100 pr-8">{selectedProductForOptions?.name}</h2>
-            <p className="text-sm text-zinc-400 mt-1">
-              Sesuaikan pesanan dengan pilihan varian dan topping di bawah ini.
-            </p>
-          </div>
-          
-          <ScrollArea className="flex-1 px-6 py-4 bg-zinc-950">
-            {selectedProductForOptions?.variants?.map((variant, idx) => {
-              const isRequired = variant.is_required;
-              return (
-                <div key={idx} className="mb-8 last:mb-2 animate-in fade-in slide-in-from-bottom-2" style={{animationDelay: `${idx * 100}ms`}}>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-1.5 h-5 rounded-full ${isRequired ? 'bg-primary' : 'bg-amber-500'}`}></div>
-                      <h4 className="font-bold text-zinc-100 uppercase tracking-wider text-sm">{variant.name}</h4>
-                    </div>
-                    {isRequired ? (
-                      <span className="text-[10px] font-bold bg-primary/10 text-primary border border-primary/20 px-2.5 py-1 rounded-md uppercase tracking-wider">Wajib Pilih 1</span>
-                    ) : (
-                      <span className="text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2.5 py-1 rounded-md uppercase tracking-wider">Opsional</span>
-                    )}
-                  </div>
-                  
-                  <div className={`grid gap-3 ${variant.choices.length > 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                    {variant.choices.map((choice, cIdx) => {
-                      const stock = choice.stock_id ? stocksData.find(s => s.id === choice.stock_id) : null;
-                      const displayPrice = stock ? (stock.sell_price || 0) : (choice.price || 0);
-                      const displayName = stock ? (stock.name || choice.name) : choice.name;
-                      const isSelected = selectedVariantChoices[variant.name]?.includes(displayName);
-                      return (
-                        <div 
-                          key={cIdx} 
-                          onClick={() => {
-                            setSelectedVariantChoices(prev => {
-                              const current = prev[variant.name] || [];
-                              if (variant.is_required || !variant.is_multiple) {
-                                // Single Select (Required OR Optional but not multi)
-                                if (!variant.is_required && current.includes(displayName)) {
-                                  // Deselect if optional and already selected
-                                  return { ...prev, [variant.name]: [] };
-                                }
-                                return { ...prev, [variant.name]: [displayName] };
-                              } else {
-                                // Multi Select (Optional & is_multiple=true)
-                                if (current.includes(displayName)) {
-                                  return { ...prev, [variant.name]: current.filter(c => c !== displayName) };
-                                } else {
-                                  return { ...prev, [variant.name]: [...current, displayName] };
-                                }
-                              }
-                            });
-                          }}
-                          className={`relative flex flex-col justify-center p-4 rounded-2xl border-2 transition-all duration-200 cursor-pointer select-none overflow-hidden group min-h-[80px]
-                            ${isSelected 
-                              ? isRequired 
-                                ? 'bg-primary/10 border-primary text-primary' 
-                                : 'bg-amber-500/10 border-amber-500 text-amber-500' 
-                              : 'bg-zinc-900/60 border-transparent hover:border-white/10 hover:bg-zinc-800 text-zinc-300'
-                            }`}
-                        >
-                          {isSelected && (
-                            <div className={`absolute top-0 right-0 w-8 h-8 rounded-bl-2xl flex items-center justify-center
-                              ${isRequired ? 'bg-primary text-zinc-950' : 'bg-amber-500 text-zinc-950'}
-                            `}>
-                              <CheckCircle2 size={16} className="text-current" />
-                            </div>
-                          )}
-                          
-                          <div className="flex items-start justify-between gap-2 z-10">
-                            <span className={`font-bold leading-tight ${isSelected ? (isRequired ? 'text-primary' : 'text-amber-500') : 'text-zinc-200 group-hover:text-white'}`}>
-                              {displayName}
-                            </span>
-                            
-                            {/* Checkbox / Radio Visual */}
-                            <div className={`shrink-0 w-5 h-5 flex items-center justify-center border-2 transition-colors mt-0.5
-                              ${!variant.is_multiple ? 'rounded-full' : 'rounded-md'}
-                              ${isSelected 
-                                ? (isRequired ? 'border-primary' : 'border-amber-500') 
-                                : 'border-zinc-600 group-hover:border-zinc-400'
-                              }
-                            `}>
-                              {isSelected && (
-                                <div className={`w-2.5 h-2.5 ${!variant.is_multiple ? (isRequired ? 'bg-primary' : 'bg-amber-500') + ' rounded-full' : 'bg-amber-500 rounded-sm'}`} />
-                              )}
-                            </div>
-                          </div>
-                          
-                          {displayPrice > 0 && (
-                            <div className={`text-sm font-bold mt-2 z-10 ${isSelected ? (isRequired ? 'text-primary/80' : 'text-amber-500/80') : 'text-zinc-500'}`}>
-                              +Rp {displayPrice.toLocaleString('id-ID')}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </ScrollArea>
-          
-          <div className="px-6 py-5 border-t border-white/5 bg-zinc-900/80 flex items-center justify-between gap-4">
-            <Button variant="outline" className="h-14 px-8 rounded-2xl border-white/10 hover:bg-white/5 text-zinc-300 font-bold transition-all hover:scale-[1.02]" onClick={() => setIsOptionsModalOpen(false)}>
-              Batal
-            </Button>
-            <Button 
-              className="flex-1 h-14 rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90 gap-2 font-bold shadow-lg shadow-primary/20 text-base transition-all hover:scale-[1.02]"
-              onClick={() => {
-                if (!selectedProductForOptions) return;
-                
-                const missingRequired = selectedProductForOptions.variants?.find(v => v.is_required && (!selectedVariantChoices[v.name] || selectedVariantChoices[v.name].length === 0));
-                if (missingRequired) {
-                  alert(`Harap pilih opsi pada grup: ${missingRequired.name}`);
-                  return;
-                }
-                
-                let addonPrice = 0;
-                let notesArr: string[] = [];
-                let selectedChoices: Record<string, string[]> = {};
-                
-                selectedProductForOptions.variants?.forEach(v => {
-                  const choices = selectedVariantChoices[v.name] || [];
-                  if (choices.length > 0) {
-                    notesArr.push(`${v.name}: ${choices.join(', ')}`);
-                    selectedChoices[v.name] = choices;
-                    choices.forEach(cName => {
-                      const cObj = v.choices.find(c => {
-                        const stock = c.stock_id ? stocksData.find(s => s.id === c.stock_id) : null;
-                        const displayName = stock ? (stock.name || c.name) : c.name;
-                        return displayName === cName;
-                      });
-                      if (cObj) {
-                        const stock = cObj.stock_id ? stocksData.find(s => s.id === cObj.stock_id) : null;
-                        const displayPrice = stock ? (stock.sell_price || 0) : (cObj.price || 0);
-                        addonPrice += displayPrice;
-                      }
-                    });
-                  }
-                });
-                
-                addToCart(selectedProductForOptions, notesArr.join(' | '), addonPrice, selectedChoices);
-              }}
-            >
-              <ShoppingCart size={20} />
-              Tambahkan ke Pesanan
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <VariantModal
+        isOpen={isOptionsModalOpen}
+        onOpenChange={setIsOptionsModalOpen}
+        product={selectedProductForOptions}
+        stocksData={stocksData}
+        selectedVariantChoices={selectedVariantChoices}
+        setSelectedVariantChoices={setSelectedVariantChoices}
+        onAddToCart={addToCart}
+      />
 
       {/* Add Note Dialog */}
-      <Dialog open={isNoteDialogOpen} onOpenChange={setIsNoteDialogOpen}>
-        <DialogContent className="bg-card border-border sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Add Note to Item</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            <Textarea 
-              placeholder="e.g. Less sugar, extra ice, takeaway..." 
-              value={tempNote}
-              onChange={(e) => setTempNote(e.target.value)}
-              className="bg-background border-border"
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsNoteDialogOpen(false)}>Cancel</Button>
-            <Button onClick={saveNote} className="bg-primary text-primary-foreground hover:bg-primary/90">Save Note</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <NoteModal
+        isOpen={isNoteDialogOpen}
+        onOpenChange={setIsNoteDialogOpen}
+        tempNote={tempNote}
+        setTempNote={setTempNote}
+        onSaveNote={saveNote}
+      />
 
-      {/* Select Cashier Profile Dialog */}
-      <Dialog open={isSelectCashierOpen} onOpenChange={setIsSelectCashierOpen}>
-        <DialogContent className="bg-card border-border sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-xl flex items-center gap-2">
-              <UserCircle className="text-primary" size={24} />
-              Pilih Profile Kasir
-            </DialogTitle>
-            <DialogDescription>
-              Pilih profile kasir Anda untuk membuka shift dan mulai menginput pesanan.
-            </DialogDescription>
-          </DialogHeader>
+      <ShiftFlow
+        cashierProfiles={cashierProfiles}
+        isSelectCashierOpen={isSelectCashierOpen}
+        setIsSelectCashierOpen={setIsSelectCashierOpen}
+        handleSelectProfile={handleSelectProfile}
+        isPasswordDialogOpen={isPasswordDialogOpen}
+        setIsPasswordDialogOpen={setIsPasswordDialogOpen}
+        selectedProfile={selectedProfile}
+        profilePasswordError={profilePasswordError}
+        showProfilePassword={showProfilePassword}
+        setShowProfilePassword={setShowProfilePassword}
+        profilePasswordInput={profilePasswordInput}
+        setProfilePasswordInput={setProfilePasswordInput}
+        handleVerifyPassword={handleVerifyPassword}
+        isVerifyingPassword={isVerifyingPassword}
+        isStartShiftDialogOpen={isStartShiftDialogOpen}
+        setIsStartShiftDialogOpen={setIsStartShiftDialogOpen}
+        userName={userName}
+        startingCashInput={startingCashInput}
+        setStartingCashInput={setStartingCashInput}
+        handleStartShift={handleStartShift}
+        isEndShiftDialogOpen={isEndShiftDialogOpen}
+        setIsEndShiftDialogOpen={setIsEndShiftDialogOpen}
+        activeShift={activeShift}
+        expectedCash={expectedCash}
+        endingCashInput={endingCashInput}
+        setEndingCashInput={setEndingCashInput}
+        handleEndShift={handleEndShift}
+        isShiftSummaryOpen={isShiftSummaryOpen}
+        setIsShiftSummaryOpen={setIsShiftSummaryOpen}
+        shiftSummary={shiftSummary}
+        logout={logout}
+      />
 
-          <div className="py-4 space-y-3">
-            {cashierProfiles.map((profile) => (
-              <button
-                key={profile.name}
-                onClick={() => handleSelectProfile(profile)}
-                className="w-full p-4 rounded-xl bg-muted/40 hover:bg-primary/10 border border-border hover:border-primary/50 transition-all flex items-center justify-between group text-left"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-full bg-primary/20 border border-primary/30 text-primary font-bold text-lg flex items-center justify-center group-hover:scale-105 transition-transform">
-                    {profile.initial}
-                  </div>
-                  <div>
-                    <p className="font-bold text-foreground group-hover:text-primary transition-colors">{profile.name}</p>
-                    <p className="text-xs text-muted-foreground">{profile.label}</p>
-                  </div>
-                </div>
-                <span className="text-xs px-3 py-1.5 rounded-full bg-primary/10 text-primary font-semibold group-hover:bg-primary group-hover:text-primary-foreground transition-colors flex items-center gap-1">
-                  <LogIn size={14} /> Log In
-                </span>
-              </button>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Profile Password Verification Dialog */}
-      <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
-        <DialogContent className="bg-card border-border sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-xl flex items-center gap-2">
-              <KeyRound className="text-primary" size={24} />
-              Verifikasi Password Kasir
-            </DialogTitle>
-            <DialogDescription>
-              Masukkan password untuk mengonfirmasi identitas Anda sebelum membuka shift.
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedProfile && (
-            <div className="py-4 space-y-4">
-              {/* Selected Profile Badge */}
-              <div className="flex items-center gap-3 p-3.5 bg-muted/50 rounded-xl border border-border">
-                <div className="w-12 h-12 rounded-full bg-primary/20 border border-primary/30 text-primary font-bold text-xl flex items-center justify-center">
-                  {selectedProfile.name.charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <p className="font-bold text-foreground">{selectedProfile.name}</p>
-                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold uppercase tracking-wider">
-                    {selectedProfile.role}
-                  </span>
-                </div>
-              </div>
-
-              {profilePasswordError && (
-                <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-xl text-xs font-semibold text-destructive animate-in fade-in">
-                  ⚠️ {profilePasswordError}
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">Password / PIN Kasir</label>
-                <div className="relative">
-                  <Input
-                    type={showProfilePassword ? 'text' : 'password'}
-                    placeholder="Masukkan password..."
-                    value={profilePasswordInput}
-                    onChange={(e) => setProfilePasswordInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleVerifyPassword();
-                    }}
-                    autoFocus
-                    className="h-12 pr-10 text-base bg-background border-border"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowProfilePassword(!showProfilePassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {showProfilePassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter className="flex-row justify-between gap-2">
-            <Button variant="outline" className="flex-1" onClick={() => setIsPasswordDialogOpen(false)}>
-              Batal
-            </Button>
-            <Button
-              onClick={handleVerifyPassword}
-              disabled={isVerifyingPassword || !profilePasswordInput}
-              className="flex-1 bg-primary text-primary-foreground font-bold"
-            >
-              {isVerifyingPassword ? 'Memverifikasi...' : 'Verifikasi & Lanjut ➔'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Checkout Step Dialog */}
-      <Dialog open={checkoutStep === 'method' || checkoutStep === 'confirm'} onOpenChange={(open) => !open && setCheckoutStep('none')}>
-        <DialogContent className="bg-card border-border sm:max-w-md max-h-[90vh] overflow-y-auto">
-          {checkoutStep === 'method' && (
-            <>
-              <DialogHeader>
-                <DialogTitle>Select Payment Method</DialogTitle>
-                <DialogDescription>Total Amount: <span className="font-bold text-primary">Rp {total.toLocaleString('id-ID')}</span></DialogDescription>
-              </DialogHeader>
-              <div className="grid grid-cols-3 gap-3 py-4">
-                <button 
-                  onClick={() => {
-                    setPaymentMethod('QRIS');
-                    finalizeTransaction('QRIS', true);
-                  }}
-                  className="p-3 sm:p-4 rounded-2xl bg-background border border-border hover:border-primary flex flex-col items-center justify-center gap-2 transition-all group"
-                >
-                  <div className="p-2 sm:p-3 bg-blue-500/10 text-blue-500 rounded-xl group-hover:scale-110 transition-transform">
-                    <QrCode size={24} />
-                  </div>
-                  <span className="font-bold text-xs sm:text-sm text-center">QRIS</span>
-                </button>
-                <button 
-                  onClick={() => setPaymentMethod('Cash')}
-                  className="p-3 sm:p-4 rounded-2xl bg-background border border-border hover:border-primary flex flex-col items-center justify-center gap-2 transition-all group"
-                >
-                  <div className="p-2 sm:p-3 bg-green-500/10 text-green-500 rounded-xl group-hover:scale-110 transition-transform">
-                    <Banknote size={24} />
-                  </div>
-                  <span className="font-bold text-xs sm:text-sm text-center">Cash</span>
-                </button>
-                <button 
-                  onClick={() => setPaymentMethod('Bayar Nanti')}
-                  className="p-3 sm:p-4 rounded-2xl bg-background border border-border hover:border-amber-500 flex flex-col items-center justify-center gap-2 transition-all group"
-                >
-                  <div className="p-2 sm:p-3 bg-amber-500/10 text-amber-500 rounded-xl group-hover:scale-110 transition-transform">
-                    <Clock size={24} />
-                  </div>
-                  <span className="font-bold text-xs sm:text-sm text-center">Nanti</span>
-                </button>
-              </div>
-
-              {/* Inline Payment Details */}
-              {paymentMethod && (
-                <div className="pt-2 space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                  
-                  <div className="space-y-1.5 text-left bg-zinc-900/40 p-4 rounded-2xl border border-white/5">
-                    <label className="text-xs font-semibold text-zinc-400 flex justify-between items-center">
-                      <span>Nama Customer {paymentMethod === 'Bayar Nanti' ? <span className="text-red-500">*</span> : <span className="font-normal">(Opsional)</span>}</span>
-                      {!isAllQuickFood && paymentMethod !== 'Bayar Nanti' && (
-                        <span className="text-[10px] text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full">Dianjurkan (Ada antrian masak)</span>
-                      )}
-                    </label>
-                    <Input 
-                      placeholder="Masukkan nama customer..." 
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      className={`bg-zinc-900/80 border h-12 text-base rounded-xl focus-visible:ring-1 transition-all shadow-inner ${
-                        paymentMethod === 'Bayar Nanti' && !customerName 
-                          ? 'border-red-500/50 focus-visible:ring-red-500' 
-                          : 'border-white/10 focus-visible:ring-primary focus-visible:border-primary/50'
-                      }`}
-                      autoFocus={!isAllQuickFood}
-                    />
-                  </div>
-
-                  {paymentMethod === 'Cash' && (
-                    <div className="space-y-3 bg-background p-4 rounded-2xl border border-border">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Uang Diterima (Rp)</label>
-                        <Input 
-                          placeholder="0" 
-                          value={cashReceived ? parseInt(cashReceived).toLocaleString('id-ID') : ''}
-                          onChange={(e) => {
-                            const rawValue = e.target.value.replace(/\./g, '');
-                            if (/^\d*$/.test(rawValue)) {
-                              setCashReceived(rawValue);
-                            }
-                          }}
-                          autoFocus
-                          className="bg-card border-border text-lg font-bold h-12"
-                        />
-                      </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        {getQuickCashSuggestions(total).map((val) => (
-                          <button
-                            key={val}
-                            type="button"
-                            onClick={() => setCashReceived(val.toString())}
-                            className={`p-2 rounded-xl text-xs font-semibold transition-all duration-300 border ${
-                              parseInt(cashReceived.replace(/\./g, '') || '0') === val
-                                ? 'bg-primary text-primary-foreground border-primary'
-                                : 'bg-zinc-900 text-zinc-300 border-white/5 hover:bg-zinc-800'
-                            }`}
-                          >
-                            {val === total ? 'Uang Pas' : `Rp ${val.toLocaleString('id-ID')}`}
-                          </button>
-                        ))}
-                      </div>
-                      {cashReceived && parseInt(cashReceived.replace(/\./g, '')) >= total && (
-                        <div className="bg-green-500/10 text-green-500 p-3 rounded-lg border border-green-500/20 text-center font-bold text-lg animate-in fade-in slide-in-from-bottom-2">
-                          Kembalian: Rp {(parseInt(cashReceived.replace(/\./g, '')) - total).toLocaleString('id-ID')}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {paymentMethod === 'QRIS' && (
-                    <div className="bg-blue-500/5 border border-blue-500/20 rounded-2xl p-4 text-center space-y-2">
-                      <QrCode size={32} className="text-blue-500 mx-auto" />
-                      <p className="text-sm font-medium text-zinc-300">Pastikan customer sudah scan & bayar via <span className="text-blue-400 font-bold">GoPay/QRIS</span></p>
-                      <p className="text-xs text-zinc-500">Cek notifikasi GoPay Merchant sebelum konfirmasi</p>
-                    </div>
-                  )}
-                  {paymentMethod === 'Bayar Nanti' && (
-                    <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-4 space-y-3">
-                      <div className="text-center space-y-2">
-                        <Clock size={32} className="text-amber-500 mx-auto" />
-                        <p className="text-sm font-medium text-zinc-300">Catat pesanan sekarang, bayar nanti.</p>
-                      </div>
-                    </div>
-                  )}
-                  <div className="flex gap-3 pt-2">
-                    <Button variant="outline" className="flex-1" onClick={() => { setCheckoutStep('none'); setPaymentMethod(null); }}>Batal</Button>
-                    <Button 
-                      onClick={handleCheckoutProcess} 
-                      className={`flex-1 font-bold ${
-                        paymentMethod === 'QRIS' ? 'bg-blue-600 hover:bg-blue-500 text-white' : 
-                        paymentMethod === 'Bayar Nanti' ? 'bg-amber-600 hover:bg-amber-500 text-white' :
-                        'bg-primary text-primary-foreground hover:bg-primary/90'
-                      }`}
-                      disabled={isProcessingCheckout || (paymentMethod === 'Cash' && (!cashReceived || parseInt(cashReceived.replace(/\./g, '')) < total)) || (paymentMethod === 'Bayar Nanti' && !customerName)}
-                    >
-                      {isProcessingCheckout ? 'Processing...' : 
-                        paymentMethod === 'QRIS' ? '✓ Konfirmasi Lunas' : 
-                        paymentMethod === 'Bayar Nanti' ? '📝 Catat Hutang' :
-                        '💵 Bayar Cash'}
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-
-          {checkoutStep === 'confirm' && (
-            <>
-              <DialogHeader>
-                <DialogTitle>Confirm Payment ({paymentMethod})</DialogTitle>
-                <DialogDescription>Order #{orderNumber} • Total: <span className="font-bold text-primary">Rp {total.toLocaleString('id-ID')}</span></DialogDescription>
-              </DialogHeader>
-              <div className="py-4 space-y-4">
-                {paymentMethod === 'QRIS' && (
-                  <div className="flex flex-col items-center justify-center p-6 bg-background rounded-2xl border border-border space-y-3">
-                    <div className="p-4 rounded-xl bg-blue-500/10 text-blue-500">
-                      <QrCode size={64} />
-                    </div>
-                    <p className="text-sm font-medium text-center">Tampilkan gambar QRIS kepada pelanggan.</p>
-                  </div>
-                )}
-
-                {paymentMethod === 'Cash' && (
-                  <div className="space-y-4 bg-background p-4 rounded-2xl border border-border">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Uang Diterima (Rp)</label>
-                      <Input 
-                        placeholder="0" 
-                        value={cashReceived ? parseInt(cashReceived).toLocaleString('id-ID') : ''}
-                        onChange={(e) => {
-                          const rawValue = e.target.value.replace(/\./g, '');
-                          if (/^\d*$/.test(rawValue)) {
-                            setCashReceived(rawValue);
-                          }
-                        }}
-                        className="bg-card border-border text-lg font-bold h-12"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-2">
-                      {getQuickCashSuggestions(total).map((val) => (
-                        <button
-                          key={val}
-                          type="button"
-                          onClick={() => {
-                            setCashReceived(val.toString());
-                            finalizeTransaction('Cash', true, val);
-                          }}
-                          className={`p-3 rounded-2xl text-sm font-bold transition-all duration-300 border shadow-sm ${
-                            parseInt(cashReceived.replace(/\./g, '') || '0') === val
-                              ? 'bg-primary text-primary-foreground border-primary scale-95'
-                              : 'bg-zinc-900 text-zinc-200 border-white/10 hover:bg-zinc-800 hover:border-primary/50'
-                          }`}
-                        >
-                          {val === total ? 'Uang Pas' : `Rp ${val.toLocaleString('id-ID')}`}
-                        </button>
-                      ))}
-                    </div>
-
-                    {cashReceived && parseInt(cashReceived.replace(/\./g, '')) >= total && (
-                      <div className="bg-green-500/10 text-green-500 p-3 rounded-lg border border-green-500/20 text-center font-bold text-lg mt-4 animate-in fade-in slide-in-from-bottom-2">
-                        Kembalian: Rp {(parseInt(cashReceived.replace(/\./g, '')) - total).toLocaleString('id-ID')}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-              <DialogFooter className="flex-row sm:justify-between gap-3">
-                <Button variant="outline" className="flex-1" onClick={() => setCheckoutStep('method')}>Back</Button>
-                <Button 
-                  onClick={handleCheckoutProcess} 
-                  className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
-                  disabled={isProcessingCheckout || (paymentMethod === 'Cash' && (!cashReceived || parseInt(cashReceived.replace(/\./g, '')) < total))}
-                >
-                  {isProcessingCheckout ? "Processing..." : (paymentMethod === 'QRIS' ? "Tampilkan QRIS" : "Complete Payment")}
-                </Button>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Calculator Panel (Fase 4) */}
+      <CalculatorPanel
+        isOpen={isCalculatorOpen}
+        onOpenChange={setIsCalculatorOpen}
+        onUseAsFreeItem={amt => {
+          handleAddFreeItem('Item Tambahan', amt, true, '');
+        }}
+      />
 
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-6 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-[300] animate-in slide-in-from-top-10 fade-in duration-300">
           <div 
             className={`${toastMessage.variant === 'alert' ? 'bg-primary border-primary shadow-[0_10px_40px_rgba(234,179,8,0.4)] text-primary-foreground' : 'bg-emerald-500 border-emerald-400 shadow-[0_10px_40px_rgba(16,185,129,0.3)] text-zinc-950'} px-4 py-3 sm:px-6 sm:py-4 rounded-2xl border flex items-center gap-3 sm:gap-4 cursor-pointer w-full sm:w-auto sm:min-w-[320px]`} 
-            onClick={() => setToastMessage(null)}
+            onClick={() => {
+              if (lastRemovedItem && toastMessage.title.includes('Dihapus')) {
+                setCart(prev => [...prev, lastRemovedItem]);
+                setLastRemovedItem(null);
+                setToastMessage({
+                  title: 'Dibatalkan',
+                  desc: 'Item dikembalikan ke keranjang.',
+                  variant: 'success'
+                });
+                setTimeout(() => setToastMessage(null), 2000);
+              } else {
+                setToastMessage(null);
+              }
+            }}
           >
             <div className={`${toastMessage.variant === 'alert' ? 'bg-primary-foreground/10' : 'bg-zinc-950/10'} p-2 rounded-full shrink-0`}>
               <CheckCircle2 size={24} className={toastMessage.variant === 'alert' ? 'text-primary-foreground' : 'text-zinc-950'} />
@@ -2376,242 +1939,7 @@ export default function POSPage() {
           </div>
         </div>
       )}
-
-      {/* Start Shift Dialog */}
-      <Dialog 
-        open={isStartShiftDialogOpen} 
-        onOpenChange={setIsStartShiftDialogOpen}
-      >
-        <DialogContent 
-          className="bg-card border-border sm:max-w-md"
-          showCloseButton={false}
-        >
-          <DialogHeader>
-            <DialogTitle>Buka Kasir ({selectedProfile?.name || userName || 'Kasir'})</DialogTitle>
-            <DialogDescription>Masukkan jumlah modal awal/kembalian di laci kasir.</DialogDescription>
-          </DialogHeader>
-          <div className="py-6">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Modal Awal (Rp)</label>
-              <Input 
-                autoFocus
-                placeholder="Contoh: 100.000"
-                value={startingCashInput ? parseInt(startingCashInput).toLocaleString('id-ID') : ''}
-                onChange={(e) => {
-                  const rawValue = e.target.value.replace(/\./g, '');
-                  if (/^\d*$/.test(rawValue)) {
-                    setStartingCashInput(rawValue);
-                  }
-                }}
-                className="h-12 text-lg font-bold"
-              />
-            </div>
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setIsStartShiftDialogOpen(false)}>
-              Batal
-            </Button>
-            <Button onClick={() => handleStartShift()} disabled={!startingCashInput} className="bg-primary text-primary-foreground hover:bg-primary/90 font-bold">
-              Buka Shift Kasir
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* End Shift Dialog */}
-      <Dialog open={isEndShiftDialogOpen} onOpenChange={setIsEndShiftDialogOpen}>
-        <DialogContent className="bg-card border-border sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Tutup Shift Kasir ({userName})</DialogTitle>
-            <DialogDescription>
-              Hitung total uang fisik penjualan tunai yang ada di laci kasir untuk menutup shift.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="bg-muted p-3.5 rounded-xl space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Modal Awal Kasir:</span>
-                <span className="font-medium">Rp {activeShift?.starting_cash.toLocaleString('id-ID')}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Estimasi Uang Tunai di Laci (Sistem):</span>
-                <span className="font-bold text-primary">Rp {expectedCash.toLocaleString('id-ID')}</span>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Uang Hasil Penjualan Tunai di Laci (Fisik)</label>
-              <Input
-                autoFocus
-                placeholder="Masukkan jumlah uang fisik di laci"
-                value={endingCashInput ? parseInt(endingCashInput).toLocaleString('id-ID') : ''}
-                onChange={(e) => {
-                  const rawValue = e.target.value.replace(/\./g, '');
-                  if (/^\d*$/.test(rawValue)) {
-                    setEndingCashInput(rawValue);
-                  }
-                }}
-                className="h-12 text-lg font-bold bg-background border-border"
-              />
-              <p className="text-xs text-muted-foreground">Masukkan total fisik uang hasil penjualan tunai (di luar modal awal).</p>
-            </div>
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setIsEndShiftDialogOpen(false)}>
-              Batal
-            </Button>
-            <Button
-              onClick={handleEndShift}
-              disabled={!endingCashInput}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-bold"
-            >
-              Konfirmasi Tutup Shift
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Shift Summary Dialog */}
-      <Dialog open={isShiftSummaryOpen} onOpenChange={setIsShiftSummaryOpen}>
-        <DialogContent className="bg-card border-border sm:max-w-md text-center" showCloseButton={false}>
-          <div className="py-6 flex flex-col items-center">
-            <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mb-4 border-4 border-primary/30">
-              <CheckCircle2 size={32} className="text-primary" />
-            </div>
-            <h2 className="text-2xl font-bold mb-2">Shift Berhasil Ditutup!</h2>
-            <p className="text-muted-foreground mb-6">Terima kasih atas kerja kerasmu hari ini.</p>
-            
-            {shiftSummary && (
-              <div className="w-full bg-muted p-4 rounded-xl space-y-3 text-left">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Modal Awal:</span>
-                  <span className="font-medium">Rp {shiftSummary.starting.toLocaleString('id-ID')}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Uang Hasil (Sistem):</span>
-                  <span className="font-medium">Rp {shiftSummary.expectedRevenue.toLocaleString('id-ID')}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Uang Hasil (Aktual/Fisik):</span>
-                  <span className="font-medium">Rp {shiftSummary.actualRevenue.toLocaleString('id-ID')}</span>
-                </div>
-                <Separator className="my-2 border-border" />
-                <div className="flex justify-between font-bold text-lg">
-                  <span>Selisih Hasil:</span>
-                  <span className={shiftSummary.difference < 0 ? "text-destructive" : shiftSummary.difference > 0 ? "text-green-500" : "text-primary"}>
-                    {shiftSummary.difference > 0 ? '+' : ''}Rp {shiftSummary.difference.toLocaleString('id-ID')}
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-          <DialogFooter className="sm:justify-center">
-            <Button className="w-full h-12 font-bold" onClick={() => {
-              setIsShiftSummaryOpen(false);
-              logout();
-            }}>
-              Log Out Kasir
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
       </div>
-      {/* QRIS Modal Premium */}
-      <Dialog open={isQRISModalOpen} onOpenChange={setIsQRISModalOpen}>
-        <DialogContent className="sm:max-w-[420px] p-0 bg-background/95 backdrop-blur-xl border border-white/10 rounded-[2rem] overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]">
-          <div className="relative p-8">
-            {/* Ambient Background Glow */}
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-32 bg-primary/20 blur-[60px] pointer-events-none" />
-            
-            <DialogHeader className="space-y-1 p-0 text-center mb-8 relative z-10">
-              <div className="w-14 h-14 bg-gradient-to-br from-primary/20 to-primary/5 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-primary/20 shadow-inner">
-                <QrCode size={28} className="text-primary" />
-              </div>
-              <DialogTitle className="font-extrabold text-white text-2xl tracking-tight">Bayar dengan QRIS</DialogTitle>
-              <DialogDescription className="text-sm text-muted-foreground mt-2">
-                Pembayaran menggunakan QRIS Statis GoPay Merchant. Arahkan pelanggan untuk men-scan QRIS di bawah ini.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="flex flex-col items-center space-y-6 relative z-10">
-              {/* QR Code Container */}
-              <div className="bg-white p-2 rounded-2xl shadow-[0_0_30px_rgba(255,255,255,0.1)] relative group w-full max-w-[280px] mx-auto flex items-center justify-center overflow-hidden border border-white/20">
-                <img 
-                  src="/qris-static.jpg" 
-                  alt="QRIS Samba Cafe" 
-                  className="w-full h-auto object-contain rounded-xl shadow-sm" 
-                  onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400?text=QRIS+Samba+Cafe'; }} 
-                />
-              </div>
-
-              {/* Total Tagihan */}
-              <div className="text-center w-full bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl py-5 px-6 shadow-inner animate-pulse">
-                <p className="text-xs text-amber-500 font-bold uppercase tracking-[0.1em] mb-1">⚠️ Pastikan Pelanggan Input Nominal:</p>
-                <p className="text-4xl font-black text-primary tracking-tight">Rp {total.toLocaleString('id-ID')}</p>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex flex-col gap-3 mt-8 relative z-10">
-              <Button 
-                onClick={handleQRISPaymentSuccess} 
-                className="w-full h-14 bg-primary hover:bg-primary/90 text-white font-bold text-lg rounded-xl transition-all border-none shadow-lg shadow-primary/20"
-                disabled={isProcessingCheckout}
-              >
-                {isProcessingCheckout ? "Processing..." : "Tutup & Tunggu Pembayaran"}
-              </Button>
-              <Button 
-                onClick={() => setIsQRISModalOpen(false)} 
-                className="w-full h-12 bg-destructive/10 hover:bg-destructive/20 text-destructive font-bold text-sm rounded-xl transition-all border border-destructive/20"
-                disabled={isProcessingCheckout}
-              >
-                Batalkan Pembayaran
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Input Nama Hutang Dialog */}
-      <Dialog open={isHutangNameDialogOpen} onOpenChange={setIsHutangNameDialogOpen}>
-        <DialogContent className="bg-card border-border sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Nama Customer (Kasbon)</DialogTitle>
-            <DialogDescription>
-              Silakan masukkan nama customer untuk melanjutkan transaksi kasbon.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <Input 
-              autoFocus
-              placeholder="Masukkan nama customer..." 
-              value={customerName}
-              onChange={e => setCustomerName(e.target.value)}
-              className="bg-background border-border h-12 text-lg focus-visible:ring-primary"
-              onKeyDown={e => {
-                if (e.key === 'Enter' && customerName.trim() !== '') {
-                  setIsHutangNameDialogOpen(false);
-                  finalizeTransaction('Bayar Nanti', true);
-                }
-              }}
-            />
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setIsHutangNameDialogOpen(false)}>Batal</Button>
-            <Button 
-              className="bg-amber-500 hover:bg-amber-600 text-white font-bold" 
-              onClick={() => {
-                if (!customerName) return;
-                setIsHutangNameDialogOpen(false);
-                finalizeTransaction('Bayar Nanti', true);
-              }}
-              disabled={!customerName}
-            >
-              Lanjutkan
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </MainLayout>
   );
 }

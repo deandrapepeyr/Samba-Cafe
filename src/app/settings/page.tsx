@@ -676,7 +676,7 @@ export default function SettingsPage() {
                           onClick={() => setIsBrochureOpen(true)}
                         >
                           <Printer size={16} className="mr-2 text-primary" />
-                          Cetak Brosur A4
+                          Cetak Menu (A5 Landscape)
                         </Button>
                         <Button 
                           variant="outline"
@@ -702,7 +702,7 @@ export default function SettingsPage() {
                           onClick={() => setIsBrochureOpen(true)}
                         >
                           <Printer size={16} className="mr-2 text-primary" />
-                          Cetak Brosur A4
+                          Cetak Menu (A5 Landscape)
                         </Button>
                       </>
                     ) : (

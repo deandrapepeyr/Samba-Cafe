@@ -53,6 +53,10 @@ function QuickPOSContent() {
   const searchParams = useSearchParams();
   const isHybrid = searchParams.get('hybrid') === '1';
 
+  useEffect(() => {
+    router.replace('/pos');
+  }, [router]);
+
   const [products, setProducts] = useState<Product[]>([]);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);

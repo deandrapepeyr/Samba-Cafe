@@ -3,10 +3,10 @@
   "short_name": "Samba Cafe",
   "description": "Smart Point of Sale system for Samba Cafe",
   "start_url": "/pos",
-  "display": "standalone",
+  "display": "fullscreen",
   "background_color": "#0a0a0a",
   "theme_color": "#facc15",
-  "orientation": "any",
+  "orientation": "landscape-primary",
   "icons": [
     {
       "src": "/icon-192x192.png",
