@@ -22,7 +22,8 @@ import {
   Plus,
   AlertTriangle,
   XCircle,
-  ShieldCheck
+  ShieldCheck,
+  Clock
 } from 'lucide-react';
 import './orders.css';
 
@@ -1586,7 +1587,7 @@ export default function OrdersPage() {
           </div>
         )}
 
-        {/* ================= AI QR PAYMENT VERIFICATION MODAL ================= */}
+        {/* ================= AI QR PAYMENT VERIFICATION MODAL (REDESIGNED & RESPONSIVE) ================= */}
         {isAiModalOpen && selectedOrder && selectedOrder.payment_proof_url && (() => {
           const isAnalyzing = !!analyzingOrderIds[selectedOrder.id];
           const rawAiResult = aiVerifications[selectedOrder.id];
@@ -1599,217 +1600,329 @@ export default function OrdersPage() {
           const showLoading = isAnalyzing || (!hasFreshResult && !aiErr && selectedOrder.payment_status !== 'PAID');
           const aiResult = (!isAnalyzing && hasFreshResult) ? rawAiResult : null;
 
+          const detectedAmount = aiResult?.detected_amount != null ? Number(aiResult.detected_amount) : null;
+          const amountDiff = detectedAmount != null ? detectedAmount - selectedOrder.total : null;
+          const orderTimeStr = selectedOrder.createdAt 
+            ? new Date(selectedOrder.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB'
+            : '-';
+          const receiptTimeStr = [aiResult?.transaction_time, aiResult?.transaction_date].filter(Boolean).join(' ') || '-';
+
           return (
             <div
-              className="orders-mask"
+              className="ai-modal-overlay"
               onClick={e => {
                 if (e.target === e.currentTarget) setIsAiModalOpen(false);
               }}
             >
               <div
-                className="orders-modal max-w-2xl w-full"
+                className="ai-modal-container"
                 role="dialog"
                 aria-modal="true"
                 onClick={e => e.stopPropagation()}
               >
-                {/* Modal Header */}
-                <div className="orders-mh">
-                  <div>
-                    <h2 className="flex items-center gap-2 text-xl font-bold text-white">
-                      <Sparkles size={18} className="text-amber-400" />
-                      <span>Verifikasi AI & Bukti Pembayaran</span>
-                    </h2>
-                    <p className="text-xs text-zinc-400 mt-1">
-                      {selectedOrder.customer_name} · Total: <span className="text-amber-400 font-bold">Rp {selectedOrder.total.toLocaleString('id-ID')}</span>
-                    </p>
+                {/* 1. STICKY MODAL HEADER */}
+                <div className="ai-modal-header">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-amber-400 shrink-0 shadow-lg shadow-amber-500/10">
+                      <Sparkles size={20} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                          Audit Pembayaran QR & Struk
+                        </h2>
+                        <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-white/5 border border-white/10 text-zinc-300">
+                          Antrean #{selectedOrder.id.slice(0, 4)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-zinc-400 truncate mt-0.5">
+                        Pemesan: <span className="text-white font-medium">{selectedOrder.customer_name || 'Pelanggan'}</span> • Pesanan dibuat: <span className="text-zinc-300">{orderTimeStr}</span>
+                      </p>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    className="orders-x"
-                    onClick={() => setIsAiModalOpen(false)}
-                    aria-label="Tutup"
-                  >
-                    ×
-                  </button>
+
+                  <div className="flex items-center gap-3 shrink-0">
+                    <div className="hidden sm:flex flex-col items-end px-3 py-1.5 rounded-xl bg-black/40 border border-white/10">
+                      <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Total Tagihan</span>
+                      <span className="text-sm font-extrabold text-amber-400 font-mono">
+                        Rp {selectedOrder.total.toLocaleString('id-ID')}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="w-9 h-9 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white flex items-center justify-center transition-colors text-lg cursor-pointer"
+                      onClick={() => setIsAiModalOpen(false)}
+                      aria-label="Tutup"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
                 </div>
 
-                {/* Modal Body: Two Column (Receipt Photo on Left, AI Breakdown on Right) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-3">
-                  {/* Left Column: Struk Preview with Laser Scanner & Fullscreen option */}
-                  <div className="flex flex-col gap-2">
-                    <div 
-                      onClick={() => setViewProofUrl(selectedOrder.payment_proof_url || null)}
-                      className="w-full h-80 rounded-2xl border border-white/10 bg-zinc-950 p-2 relative overflow-hidden flex items-center justify-center group cursor-pointer shadow-inner"
-                      title="Klik untuk memperbesar struk full screen"
-                    >
-                      <img 
-                        src={selectedOrder.payment_proof_url} 
-                        alt="Bukti Transfer" 
-                        className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105" 
-                      />
-                      {showLoading && (
-                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-amber-400 to-transparent shadow-[0_0_15px_rgba(251,191,36,0.9)] animate-scan pointer-events-none" />
-                      )}
-                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 text-xs text-white font-semibold">
-                        <Eye size={18} />
-                        <span>Klik untuk Layar Penuh</span>
+                {/* 2. SCROLLABLE MODAL BODY */}
+                <div className="ai-modal-body">
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                    
+                    {/* LEFT COLUMN: Receipt Preview + Interactive Actions (col-span-5 on lg) */}
+                    <div className="lg:col-span-5 flex flex-col items-center gap-2.5 w-full">
+                      <div 
+                        onClick={() => setViewProofUrl(selectedOrder.payment_proof_url || null)}
+                        className="w-full max-w-[300px] h-[300px] sm:h-[330px] rounded-2xl border border-white/15 bg-zinc-950 p-2 relative overflow-hidden flex items-center justify-center group cursor-pointer shadow-2xl transition-all duration-300 hover:border-amber-400/40"
+                        title="Klik untuk melihat bukti layar penuh (HD)"
+                      >
+                        <img 
+                          src={selectedOrder.payment_proof_url} 
+                          alt="Bukti Transfer" 
+                          className="w-full h-full object-contain rounded-xl transition-transform duration-300 group-hover:scale-[1.03]" 
+                        />
+
+                        {/* Scanner Laser Beam Animation */}
+                        {showLoading && (
+                          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-amber-400 to-transparent shadow-[0_0_20px_rgba(251,191,36,0.95)] animate-scan pointer-events-none" />
+                        )}
+
+                        {/* Floating Fullscreen Hint Pill */}
+                        <div className="absolute bottom-2.5 inset-x-2.5 py-1.5 px-3 rounded-xl bg-black/75 backdrop-blur-md border border-white/15 flex items-center justify-center gap-2 text-xs font-semibold text-white shadow-lg transition-transform duration-200 group-hover:bg-amber-500 group-hover:text-black">
+                          <Eye size={13} />
+                          <span>Klik Zoom Layar Penuh</span>
+                        </div>
+                      </div>
+
+                      {/* Photo Sub-bar */}
+                      <div className="w-full max-w-[300px] flex items-center justify-between gap-2 px-1">
+                        <span className="text-[11px] text-zinc-400 flex items-center gap-1.5 font-medium truncate">
+                          <CreditCard size={13} className="text-zinc-500 shrink-0" />
+                          <span className="truncate">{aiResult?.provider || 'QRIS / M-Banking'}</span>
+                        </span>
+
+                        <button
+                          type="button"
+                          disabled={isAnalyzing}
+                          onClick={() => verifyProofWithAi(selectedOrder, true)}
+                          className="px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 border border-amber-500/25 font-bold text-xs flex items-center gap-1.5 transition-all disabled:opacity-40 cursor-pointer shadow-sm shrink-0"
+                        >
+                          <RefreshCw size={12} className={isAnalyzing ? 'animate-spin' : ''} />
+                          <span>Pindai Ulang AI</span>
+                        </button>
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between text-xs px-1">
-                      <span className="text-zinc-500 text-[11px]">Klik foto untuk zoom</span>
-                      <button
-                        type="button"
-                        disabled={isAnalyzing}
-                        onClick={() => verifyProofWithAi(selectedOrder, true)}
-                        className="text-amber-400 hover:text-amber-300 font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-40 cursor-pointer text-xs"
-                      >
-                        <RefreshCw size={12} className={isAnalyzing ? 'animate-spin' : ''} />
-                        <span>Pindai Ulang AI</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Right Column: AI Checklist & Verification Details */}
-                  <div className="flex flex-col justify-between gap-3">
-                    {/* Status Banner */}
-                    <div>
+                    {/* RIGHT COLUMN: AI Audit Results & Redesigned Fields (col-span-7 on lg) */}
+                    <div className="lg:col-span-7 flex flex-col gap-3 w-full">
+                      
+                      {/* VERDICT SUMMARY BANNER */}
                       {showLoading ? (
-                        <div className="p-3 rounded-xl bg-blue-950/20 border border-blue-500/20 text-blue-300 space-y-1">
-                          <div className="flex items-center gap-1.5 text-xs font-bold text-blue-400">
-                            <RefreshCw size={13} className="animate-spin" />
-                            <span>Gemini AI sedang membaca struk...</span>
+                        <div className="p-3 rounded-xl bg-blue-950/30 border border-blue-500/30 text-blue-200 space-y-1 shadow-lg shadow-blue-500/5">
+                          <div className="flex items-center gap-2 text-xs font-bold text-blue-400">
+                            <RefreshCw size={14} className="animate-spin text-blue-400" />
+                            <span>Gemini AI Sedang Menganalisis Bukti...</span>
                           </div>
-                          <p className="text-[11px] text-zinc-400 leading-snug">
-                            Mencocokkan nominal transfer, tanggal/jam transaksi, dan mendeteksi keaslian struk.
+                          <p className="text-[11px] text-blue-300/80 leading-relaxed">
+                            Membaca nominal transfer, mencocokkan waktu transaksi dengan toleransi 5 menit, dan memverifikasi keaslian struk.
                           </p>
                         </div>
                       ) : aiResult ? (
                         aiResult.is_valid ? (
-                          <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/30 text-emerald-300 flex items-center gap-2">
-                            <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+                          <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/35 text-emerald-200 flex items-start gap-2.5 shadow-lg shadow-emerald-500/5">
+                            <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 mt-0.5">
+                              <CheckCircle2 size={16} />
+                            </div>
                             <div className="text-xs">
-                              <span className="font-bold">Bukti Sesuai & Valid AI!</span>
-                              <p className="text-[11px] text-emerald-200/80">Nominal dan waktu transfer cocok dengan tagihan toko.</p>
+                              <span className="font-extrabold text-white text-xs sm:text-sm">Bukti Pembayaran Terverifikasi Valid!</span>
+                              <p className="text-[11px] text-emerald-300/90 mt-0.5 leading-relaxed">
+                                Nominal Rp {detectedAmount?.toLocaleString('id-ID')} cocok 100% dengan total belanja dan transfer dilakukan tepat waktu.
+                              </p>
                             </div>
                           </div>
                         ) : (
-                          <div className="p-3 rounded-xl bg-red-950/30 border border-red-500/30 text-red-300 flex items-center gap-2">
-                            <AlertTriangle size={16} className="text-red-400 shrink-0" />
+                          <div className="p-3 rounded-xl bg-red-950/40 border border-red-500/35 text-red-200 flex items-start gap-2.5 shadow-lg shadow-red-500/5">
+                            <div className="w-7 h-7 rounded-lg bg-red-500/20 border border-red-500/30 flex items-center justify-center text-red-400 shrink-0 mt-0.5">
+                              <AlertTriangle size={16} />
+                            </div>
                             <div className="text-xs">
-                              <span className="font-bold">Bukti Meragukan / Perlu Cek Kasir</span>
-                              <p className="text-[11px] text-red-200/80">Ditemukan ketidakcocokan pada nominal atau batas waktu transfer.</p>
+                              <span className="font-extrabold text-white text-xs sm:text-sm">Bukti Meragukan • Perlu Verifikasi Kasir</span>
+                              <p className="text-[11px] text-red-300/90 mt-0.5 leading-relaxed">
+                                Ditemukan ketidaksesuaian nominal atau batas waktu transfer. Kasir dapat memeriksa foto struk dan menentukan status.
+                              </p>
                             </div>
                           </div>
                         )
                       ) : aiErr ? (
-                        <div className="p-3 rounded-xl bg-amber-950/20 border border-amber-500/20 text-amber-300 text-xs">
-                          <span className="font-bold flex items-center gap-1.5"><AlertTriangle size={13} /> AI Belum Merespons</span>
-                          <p className="text-[11px] text-zinc-400 mt-1">{aiErr}. Kasir dapat memverifikasi foto bukti secara visual.</p>
+                        <div className="p-3 rounded-xl bg-amber-950/30 border border-amber-500/30 text-amber-200 text-xs">
+                          <span className="font-bold flex items-center gap-1.5 text-amber-300">
+                            <AlertTriangle size={13} /> AI Belum Merespons
+                          </span>
+                          <p className="text-zinc-400 mt-1 leading-relaxed text-[11px]">
+                            {aiErr}. Kasir dapat memverifikasi foto bukti secara visual atau mengklik &quot;Pindai Ulang AI&quot;.
+                          </p>
                         </div>
                       ) : null}
+
+                      {/* REDESIGNED COMPARISON FIELDS */}
+                      <div className="space-y-2.5">
+                        
+                        {/* FIELD 1: NOMINAL COMPARISON (SPLIT DUAL BOX) */}
+                        <div className="p-3 rounded-xl bg-[#18181c] border border-white/10 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] uppercase tracking-wider font-bold text-zinc-400 flex items-center gap-1.5">
+                              <Banknote size={13} className="text-amber-400" />
+                              1. Kesesuaian Nominal Tagihan
+                            </span>
+                            {aiResult?.checklist?.amount_check?.passed ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center gap-1">
+                                <CheckCircle2 size={11} /> Sesuai (100%)
+                              </span>
+                            ) : detectedAmount != null ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/15 border border-red-500/30 text-red-400 flex items-center gap-1">
+                                <XCircle size={11} /> {amountDiff && amountDiff < 0 ? `Kurang Rp ${Math.abs(amountDiff).toLocaleString('id-ID')}` : 'Tidak Sesuai'}
+                              </span>
+                            ) : (
+                              <span className="text-zinc-500 text-xs">-</span>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className="p-2 rounded-lg bg-black/40 border border-white/5">
+                              <span className="text-[10px] text-zinc-400 block font-medium">Tagihan Toko</span>
+                              <span className="text-xs sm:text-sm font-extrabold text-white font-mono mt-0.5 block">
+                                Rp {selectedOrder.total.toLocaleString('id-ID')}
+                              </span>
+                            </div>
+
+                            <div className={`p-2 rounded-lg border ${
+                              aiResult?.checklist?.amount_check?.passed 
+                                ? 'bg-emerald-950/20 border-emerald-500/30' 
+                                : 'bg-red-950/20 border-red-500/30'
+                            }`}>
+                              <span className="text-[10px] text-zinc-400 block font-medium">Nominal di Struk</span>
+                              <span className={`text-xs sm:text-sm font-extrabold font-mono mt-0.5 block ${
+                                aiResult?.checklist?.amount_check?.passed ? 'text-emerald-400' : 'text-red-400'
+                              }`}>
+                                {detectedAmount != null ? `Rp ${detectedAmount.toLocaleString('id-ID')}` : (aiResult?.checklist?.amount_check?.detail || 'Tidak terbaca')}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* FIELD 2: TIME COMPARISON & TOLERANCE (SPLIT DUAL BOX) */}
+                        <div className="p-3 rounded-xl bg-[#18181c] border border-white/10 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] uppercase tracking-wider font-bold text-zinc-400 flex items-center gap-1.5">
+                              <Clock size={13} className="text-amber-400" />
+                              2. Waktu Transfer & Batas Toleransi
+                            </span>
+                            {aiResult?.checklist?.time_check?.passed ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center gap-1">
+                                <CheckCircle2 size={11} /> Tepat Waktu (≤ 5 Menit)
+                              </span>
+                            ) : aiResult ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center gap-1">
+                                <AlertTriangle size={11} /> Melebihi Batas Waktu
+                              </span>
+                            ) : (
+                              <span className="text-zinc-500 text-xs">-</span>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className="p-2 rounded-lg bg-black/40 border border-white/5">
+                              <span className="text-[10px] text-zinc-400 block font-medium">Waktu Pesanan</span>
+                              <span className="text-xs font-bold text-zinc-200 mt-0.5 block">
+                                {orderTimeStr}
+                              </span>
+                            </div>
+
+                            <div className={`p-2 rounded-lg border ${
+                              aiResult?.checklist?.time_check?.passed 
+                                ? 'bg-emerald-950/20 border-emerald-500/30' 
+                                : 'bg-amber-950/20 border-amber-500/30'
+                            }`}>
+                              <span className="text-[10px] text-zinc-400 block font-medium">Waktu Struk</span>
+                              <span className={`text-xs font-bold mt-0.5 block ${
+                                aiResult?.checklist?.time_check?.passed ? 'text-emerald-400' : 'text-amber-400'
+                              }`}>
+                                {receiptTimeStr}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* FIELD 3 & 4: STATUS & KEASLIAN (2 COLUMNS) */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          
+                          {/* Status Transaksi */}
+                          <div className="p-2.5 rounded-xl bg-[#18181c] border border-white/10 flex items-center justify-between">
+                            <div>
+                              <span className="text-[10px] uppercase tracking-wider font-bold text-zinc-400 block">
+                                3. Status Transaksi
+                              </span>
+                              <span className="text-[11px] text-zinc-500 mt-0.5 block">Keterangan struk</span>
+                            </div>
+
+                            <span className={`px-2 py-0.5 rounded-lg text-[11px] font-extrabold flex items-center gap-1 ${
+                              aiResult?.checklist?.status_check?.passed 
+                                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' 
+                                : 'bg-red-500/15 text-red-400 border border-red-500/30'
+                            }`}>
+                              {aiResult?.checklist?.status_check?.passed ? (
+                                <><CheckCircle2 size={12} /> Berhasil</>
+                              ) : (
+                                <><XCircle size={12} /> {aiResult?.status_text || 'Gagal'}</>
+                              )}
+                            </span>
+                          </div>
+
+                          {/* Keaslian Bukti */}
+                          <div className="p-2.5 rounded-xl bg-[#18181c] border border-white/10 flex items-center justify-between">
+                            <div>
+                              <span className="text-[10px] uppercase tracking-wider font-bold text-zinc-400 block">
+                                4. Keaslian Bukti
+                              </span>
+                              <span className="text-[11px] text-zinc-500 mt-0.5 block">Anti-duplikasi & fraud</span>
+                            </div>
+
+                            <span className="px-2 py-0.5 rounded-lg text-[11px] font-extrabold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                              <ShieldCheck size={12} /> Asli (Baru)
+                            </span>
+                          </div>
+                        </div>
+
+                      </div>
+
+                      {/* ISSUES BREAKDOWN (ONLY IF INVALID) */}
+                      {aiResult && !aiResult.is_valid && (
+                        <div className="p-3 rounded-xl bg-red-950/25 border border-red-500/25 text-red-200 text-xs space-y-1">
+                          <span className="font-bold text-red-300 flex items-center gap-1.5 text-xs">
+                            <AlertTriangle size={12} className="text-red-400" /> Rincian Masalah yang Dideteksi AI:
+                          </span>
+                          <ul className="space-y-0.5 pl-4 list-disc text-[11px] text-red-200/90 leading-relaxed">
+                            {aiResult.issues && aiResult.issues.length > 0 ? (
+                              aiResult.issues.map((iss: string, idx: number) => (
+                                <li key={idx}>{iss.includes('Lewat') ? iss.replace(/\(Lewat.*?\)/, '').trim() : iss}</li>
+                              ))
+                            ) : (
+                              <li>{aiResult.reason || 'Nominal atau waktu transfer tidak sesuai.'}</li>
+                            )}
+                          </ul>
+                        </div>
+                      )}
                     </div>
 
-                    {/* Parameter Checklist */}
-                    {aiResult && (
-                      <div className="space-y-2 text-xs">
-                        {/* 1. Nominal */}
-                        <div className="flex items-center justify-between p-2 rounded-xl bg-black/40 border border-white/5">
-                          <span className="text-zinc-400 font-medium">Nominal Struk</span>
-                          <div className="flex items-center gap-1.5 font-mono font-bold">
-                            <span className={aiResult.checklist?.amount_check?.passed ? 'text-emerald-400' : 'text-red-400'}>
-                              {aiResult.detected_amount 
-                                ? `Rp ${Number(aiResult.detected_amount).toLocaleString('id-ID')}` 
-                                : (aiResult.checklist?.amount_check?.detail || '-')}
-                            </span>
-                            {aiResult.checklist?.amount_check?.passed ? (
-                              <CheckCircle2 size={13} className="text-emerald-400" />
-                            ) : (
-                              <XCircle size={13} className="text-red-400" />
-                            )}
-                          </div>
-                        </div>
-
-                        {/* 2. Waktu */}
-                        <div className="flex items-center justify-between p-2 rounded-xl bg-black/40 border border-white/5">
-                          <span className="text-zinc-400 font-medium">Waktu Transfer</span>
-                          <div className="flex items-center gap-1.5 font-mono font-bold">
-                            <span className={aiResult.checklist?.time_check?.passed ? 'text-emerald-400' : 'text-amber-400'}>
-                              {([aiResult.transaction_time, aiResult.transaction_date].filter(Boolean).join(' ') || (aiResult.checklist?.time_check?.passed ? 'Tepat Waktu' : 'Lewat Batas'))}
-                            </span>
-                            {aiResult.checklist?.time_check?.passed ? (
-                              <CheckCircle2 size={13} className="text-emerald-400" />
-                            ) : (
-                              <AlertTriangle size={13} className="text-amber-400" />
-                            )}
-                          </div>
-                        </div>
-
-                        {/* 3. Status Struk */}
-                        <div className="flex items-center justify-between p-2 rounded-xl bg-black/40 border border-white/5">
-                          <span className="text-zinc-400 font-medium">Status Transaksi</span>
-                          <span className={`font-bold flex items-center gap-1 ${
-                            aiResult.checklist?.status_check?.passed ? 'text-emerald-400' : 'text-red-400'
-                          }`}>
-                            {aiResult.checklist?.status_check?.passed ? (
-                              <><CheckCircle2 size={13} className="text-emerald-400" /> Berhasil</>
-                            ) : (
-                              <><XCircle size={13} className="text-red-400" /> Gagal</>
-                            )}
-                          </span>
-                        </div>
-
-                        {/* 4. Keaslian */}
-                        <div className="flex items-center justify-between p-2 rounded-xl bg-black/40 border border-white/5">
-                          <span className="text-zinc-400 font-medium">Keaslian Bukti</span>
-                          <span className={`font-bold flex items-center gap-1 ${
-                            aiResult.checklist?.fraud_check?.passed ? 'text-emerald-400' : 'text-red-400'
-                          }`}>
-                            {aiResult.checklist?.fraud_check?.passed ? (
-                              <><CheckCircle2 size={13} className="text-emerald-400" /> Asli (Bukan Duplikat)</>
-                            ) : (
-                              <><XCircle size={13} className="text-red-400" /> Duplikat</>
-                            )}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Issues List if Invalid */}
-                    {aiResult && !aiResult.is_valid && (
-                      <div className="p-2.5 rounded-xl bg-red-950/30 border border-red-500/20 text-red-200 text-xs space-y-1">
-                        <span className="font-bold text-red-300 flex items-center gap-1.5">
-                          <AlertTriangle size={12} className="text-red-400" /> Masalah Terdeteksi:
-                        </span>
-                        <ul className="space-y-0.5 pl-4 list-disc text-[11px] text-red-200/90 leading-tight">
-                          {aiResult.issues && aiResult.issues.length > 0 ? (
-                            aiResult.issues.map((iss: string, idx: number) => (
-                              <li key={idx}>{iss.includes('Lewat') ? iss.replace(/\(Lewat.*?\)/, '').trim() : iss}</li>
-                            ))
-                          ) : (
-                            <li>{aiResult.reason || 'Nominal atau waktu transfer tidak sesuai.'}</li>
-                          )}
-                        </ul>
-                      </div>
-                    )}
-
-                    <p className="text-[10px] text-zinc-500 leading-tight">
-                      💡 Kasir dapat memeriksa foto bukti dan menekan tombol konfirmasi di bawah untuk memproses pesanan ke dapur.
-                    </p>
                   </div>
                 </div>
 
-                {/* Modal Footer Actions */}
-                <div className="orders-mf pt-3 border-t border-white/10 gap-2">
+                {/* 3. STICKY MODAL FOOTER ACTIONS (GUARANTEED VISIBLE ALWAYS) */}
+                <div className="ai-modal-footer">
                   <button
                     type="button"
-                    className="orders-link text-zinc-400 hover:text-white"
+                    className="ai-modal-close-btn px-4 py-2.5 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
                     onClick={() => setIsAiModalOpen(false)}
                   >
                     Tutup
                   </button>
 
-                  <div className="flex gap-2">
+                  <div className="ai-modal-actions flex items-center gap-2.5">
                     <button
                       type="button"
                       disabled={isUpdatingStatus}
@@ -1817,9 +1930,10 @@ export default function OrdersPage() {
                         await rejectPaymentProof(selectedOrder);
                         setIsAiModalOpen(false);
                       }}
-                      className="px-4 py-2.5 rounded-xl text-xs font-bold text-red-400 hover:text-white bg-red-500/10 hover:bg-red-600 border border-red-500/20 disabled:opacity-50 transition-all flex items-center gap-1.5 cursor-pointer"
+                      className="px-4 py-2.5 rounded-xl text-xs font-bold text-red-400 hover:text-white bg-red-500/10 hover:bg-red-600 border border-red-500/25 disabled:opacity-50 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
                     >
-                      <X size={15} /> Tolak Bukti
+                      <X size={15} />
+                      <span>Tolak Bukti</span>
                     </button>
 
                     <button
@@ -1829,17 +1943,19 @@ export default function OrdersPage() {
                         await confirmPaymentAndAcceptOrder(selectedOrder);
                         setIsAiModalOpen(false);
                       }}
-                      className="px-5 py-2.5 rounded-xl text-xs font-extrabold text-white bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 disabled:opacity-50 transition-all flex items-center gap-2 shadow-lg shadow-emerald-500/20 cursor-pointer"
+                      className="px-5 py-2.5 rounded-xl text-xs font-extrabold text-white bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 disabled:opacity-50 transition-all flex items-center gap-2 shadow-lg shadow-emerald-500/25 cursor-pointer"
                     >
                       <CheckCircle2 size={16} />
                       <span>{isUpdatingStatus ? 'Memproses...' : 'Konfirmasi & Terima Pesanan'}</span>
                     </button>
                   </div>
                 </div>
+
               </div>
             </div>
           );
         })()}
+
 
         {/* ================= PAYMENT PROOF LIGHTBOX MODAL ================= */}
         {viewProofUrl && (

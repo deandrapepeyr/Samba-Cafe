@@ -786,3 +786,99 @@ select.orders-in option {
     transition: none !important;
   }
 }
+
+/* ================= AI VERIFICATION MODAL REDESIGN ================= */
+.ai-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 110;
+  animation: aiModalFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes aiModalFadeIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.ai-modal-container {
+  width: min(960px, 95vw);
+  max-height: min(94vh, 900px);
+  display: flex;
+  flex-direction: column;
+  background: #121215;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 28px;
+  box-shadow: 0 32px 80px -10px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  color: #fff;
+}
+
+.ai-modal-header {
+  padding: 14px 24px;
+  background: #16161a;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.ai-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 24px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.ai-modal-body::-webkit-scrollbar {
+  width: 6px;
+}
+.ai-modal-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+}
+
+.ai-modal-footer {
+  padding: 16px 24px;
+  background: #141417;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .ai-modal-header {
+    padding: 12px 16px;
+  }
+  .ai-modal-body {
+    padding: 14px 16px;
+  }
+  .ai-modal-footer {
+    padding: 12px 16px;
+    flex-direction: column-reverse;
+    gap: 8px;
+  }
+  .ai-modal-footer .ai-modal-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1.5fr;
+    gap: 8px;
+  }
+  .ai-modal-footer .ai-modal-close-btn {
+    width: 100%;
+    text-align: center;
+    padding: 8px;
+  }
+}
