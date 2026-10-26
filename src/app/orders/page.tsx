@@ -1957,33 +1957,46 @@ export default function OrdersPage() {
         })()}
 
 
-        {/* ================= PAYMENT PROOF LIGHTBOX MODAL ================= */}
+        {/* ================= PAYMENT PROOF LIGHTBOX MODAL (Z-[150] ON TOP OF AI MODAL) ================= */}
         {viewProofUrl && (
           <div
-            className="orders-mask"
+            className="fixed inset-0 z-[150] flex flex-col items-center justify-center p-4 bg-black/90 backdrop-blur-md"
             onClick={() => setViewProofUrl(null)}
           >
-            <div
-              className="orders-modal max-w-lg text-center"
+            {/* Top Close & Title Bar */}
+            <div className="absolute top-4 inset-x-4 max-w-4xl mx-auto flex items-center justify-between pointer-events-none z-10">
+              <span className="px-3.5 py-1.5 rounded-full bg-black/70 border border-white/15 text-xs font-bold text-white backdrop-blur pointer-events-auto flex items-center gap-2 shadow-lg">
+                <Eye size={14} className="text-amber-400" />
+                <span>Foto Struk Layar Penuh (HD)</span>
+              </span>
+
+              <button
+                type="button"
+                className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 text-white flex items-center justify-center border border-white/20 shadow-2xl transition-all pointer-events-auto cursor-pointer"
+                onClick={() => setViewProofUrl(null)}
+                aria-label="Tutup Zoom"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Centered Image */}
+            <div 
+              className="max-h-[82vh] max-w-[90vw] flex items-center justify-center p-2"
               onClick={e => e.stopPropagation()}
             >
-              <div className="orders-mh">
-                <h2>Bukti Transfer</h2>
-                <button
-                  type="button"
-                  className="orders-x"
-                  onClick={() => setViewProofUrl(null)}
-                >
-                  ×
-                </button>
-              </div>
-              <div className="mt-3 rounded-xl overflow-hidden border border-white/20 max-h-[70vh] flex items-center justify-center bg-black">
-                <img
-                  src={viewProofUrl}
-                  alt="Bukti Transfer"
-                  className="max-h-[65vh] w-auto object-contain"
-                />
-              </div>
+              <img
+                src={viewProofUrl}
+                alt="Bukti Transfer HD"
+                className="max-h-[80vh] max-w-full w-auto object-contain rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.9)] border border-white/20 bg-zinc-950"
+              />
+            </div>
+
+            {/* Bottom Hint */}
+            <div className="mt-2 pointer-events-none">
+              <span className="text-[11px] text-zinc-400 bg-black/60 px-3 py-1 rounded-full border border-white/10 backdrop-blur">
+                Klik di luar foto atau tombol silang untuk kembali ke detail verifikasi
+              </span>
             </div>
           </div>
         )}
