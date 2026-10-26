@@ -19,7 +19,10 @@ import {
   RotateCcw,
   Sparkles,
   Search,
-  Plus
+  Plus,
+  AlertTriangle,
+  XCircle,
+  ShieldCheck
 } from 'lucide-react';
 import './orders.css';
 
@@ -82,6 +85,13 @@ export default function OrdersPage() {
   
   // Proof viewer modal state
   const [viewProofUrl, setViewProofUrl] = useState<string | null>(null);
+
+  // AI Verification State
+  const [aiVerifications, setAiVerifications] = useState<Record<string, any>>({});
+  const [analyzingOrderIds, setAnalyzingOrderIds] = useState<Record<string, boolean>>({});
+  const [aiErrors, setAiErrors] = useState<Record<string, string>>({});
+  const aiVerifiedIdsRef = useRef<Set<string>>(new Set());
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   // Toast state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -465,6 +475,163 @@ export default function OrdersPage() {
     if (error) {
       console.error('Failed to update payment status:', error);
       fetchOrders(false);
+    }
+  };
+
+  // Purge any legacy AI cache from localStorage on load
+  useEffect(() => {
+    try {
+      Object.keys(localStorage).forEach(k => {
+        if (k.startsWith('samba_ai_res_')) {
+          localStorage.removeItem(k);
+        }
+      });
+    } catch (e) {}
+  }, []);
+
+  // AI Verification trigger for order detail
+  const verifyProofWithAi = async (order: Order, force = false) => {
+    if (!order.payment_proof_url) return;
+    if (!force && (aiVerifications[order.id] || analyzingOrderIds[order.id])) return;
+
+    setAnalyzingOrderIds(prev => ({ ...prev, [order.id]: true }));
+    setAiErrors(prev => {
+      const copy = { ...prev };
+      delete copy[order.id];
+      return copy;
+    });
+
+    setAiVerifications(prev => {
+      const copy = { ...prev };
+      delete copy[order.id];
+      return copy;
+    });
+
+    try {
+      const res = await fetch('/api/verify-proof', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: order.id,
+          imageUrl: order.payment_proof_url,
+          expectedAmount: order.total,
+          force
+        })
+      });
+
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Gagal memverifikasi bukti transfer dengan AI');
+      }
+
+      const resultWithMeta = {
+        ...data.result,
+        _proof_url: order.payment_proof_url,
+        _expected_amount: order.total
+      };
+
+      setAiVerifications(prev => ({
+        ...prev,
+        [order.id]: resultWithMeta
+      }));
+
+      aiVerifiedIdsRef.current.add(`${order.id}_${order.payment_proof_url}_${order.total}`);
+      localUpdatesRef.current[order.id] = Date.now();
+
+      const newStatus = data.result?.is_valid ? (data.status || 'preparing') : 'pending';
+      const newPaymentStatus = data.result?.is_valid ? (data.payment_status || 'PAID') : (data.payment_status || 'AI_INVALID');
+
+      setOrders(prev => prev.map(o => o.id === order.id ? {
+        ...o,
+        status: newStatus as any,
+        payment_status: newPaymentStatus,
+        paid: data.result?.is_valid ? true : o.paid
+      } : o));
+
+      if (data.result?.is_valid) {
+        showToast(`✨ AI: Bukti #${order.id.slice(-4)} valid & sesuai!`);
+      } else {
+        showToast(`⚠️ AI: Bukti #${order.id.slice(-4)} meragukan / nominal tidak cocok.`);
+      }
+
+    } catch (err: any) {
+      console.error('AI verification failed:', err);
+      aiVerifiedIdsRef.current.add(order.id);
+      setAiErrors(prev => ({
+        ...prev,
+        [order.id]: err.message || 'Server AI sedang sibuk'
+      }));
+    } finally {
+      setAnalyzingOrderIds(prev => ({ ...prev, [order.id]: false }));
+    }
+  };
+
+  // Load AI verification result when opening order detail (re-verify if not yet verified for this exact proof & amount)
+  useEffect(() => {
+    if (!selectedOrder || !selectedOrder.payment_proof_url) return;
+
+    const existing = aiVerifications[selectedOrder.id];
+    if (existing && existing._proof_url === selectedOrder.payment_proof_url && existing._expected_amount === selectedOrder.total) {
+      return;
+    }
+
+    if (!analyzingOrderIds[selectedOrder.id]) {
+      verifyProofWithAi(selectedOrder, true);
+    }
+  }, [selectedOrder?.id, selectedOrder?.payment_proof_url, selectedOrder?.total]);
+
+  // Confirm payment & accept order (AI verification action)
+  const confirmPaymentAndAcceptOrder = async (order: Order) => {
+    setIsUpdatingStatus(true);
+    localUpdatesRef.current[order.id] = Date.now();
+
+    const nowIso = new Date().toISOString();
+    const cashier = userName || 'Kasir';
+
+    setOrders(prev => prev.map(o => o.id === order.id ? {
+      ...o,
+      paid: true,
+      payment_status: 'PAID',
+      status: 'preparing'
+    } : o));
+    showToast(`Pembayaran #${order.id.slice(-4)} dikonfirmasi & pesanan diproses dapur!`);
+
+    try {
+      await supabase.from('transactions').update({
+        payment_status: 'PAID',
+        payment_confirmed_at: nowIso,
+        payment_confirmed_by: cashier,
+        status: 'preparing'
+      }).eq('id', order.id);
+    } catch (err) {
+      console.error('Failed to confirm payment:', err);
+      fetchOrders(false);
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
+  // Reject payment proof
+  const rejectPaymentProof = async (order: Order) => {
+    if (!confirm('Apakah Anda yakin ingin menolak bukti transfer pesanan ini?')) return;
+    setIsUpdatingStatus(true);
+    localUpdatesRef.current[order.id] = Date.now();
+
+    setOrders(prev => prev.map(o => o.id === order.id ? {
+      ...o,
+      payment_status: 'PAYMENT_REJECTED'
+    } : o));
+    showToast('Bukti pembayaran ditolak.');
+
+    try {
+      await supabase.from('transactions').update({
+        payment_status: 'PAYMENT_REJECTED'
+      }).eq('id', order.id);
+    } catch (err) {
+      console.error('Failed to reject payment:', err);
+      fetchOrders(false);
+    } finally {
+      setIsUpdatingStatus(false);
     }
   };
 
@@ -993,10 +1160,28 @@ export default function OrdersPage() {
                           {formatSummary(order)}
                         </span>
 
-                        {/* Payment Status */}
-                        <span className={`orders-ps ${order.paid ? '' : 'n0'}`}>
-                          {order.paid ? 'Lunas' : 'Belum bayar'}
-                        </span>
+                        {/* Payment Status & AI Badges */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {order.payment_proof_url && (
+                            aiVerifications[order.id]?.is_valid || order.payment_status === 'PAID' ? (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 flex items-center gap-1">
+                                <Sparkles size={10} /> Valid AI
+                              </span>
+                            ) : analyzingOrderIds[order.id] ? (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-blue-500/15 text-blue-400 border border-blue-500/25 flex items-center gap-1 animate-pulse">
+                                <RefreshCw size={9} className="animate-spin" /> Cek AI...
+                              </span>
+                            ) : aiVerifications[order.id] && !aiVerifications[order.id].is_valid ? (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-red-500/15 text-red-400 border border-red-500/25 flex items-center gap-1">
+                                <AlertTriangle size={10} /> Cek Bukti
+                              </span>
+                            ) : null
+                          )}
+
+                          <span className={`orders-ps ${order.paid ? '' : 'n0'}`}>
+                            {order.paid ? 'Lunas' : 'Belum bayar'}
+                          </span>
+                        </div>
                       </button>
                     );
                   })}
@@ -1062,7 +1247,7 @@ export default function OrdersPage() {
                             Lihat Bukti Transfer
                           </button>
                         )}
-                        {selectedOrder.payment_status === 'PAID' && (
+                        {(selectedOrder.payment_status === 'PAID' || selectedOrder.paid) && (
                           <span className="text-xs px-2.5 py-1 rounded-full font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
                             <Sparkles size={12} />
                             Valid AI
@@ -1070,6 +1255,248 @@ export default function OrdersPage() {
                         )}
                       </div>
                     )}
+
+                    {/* AI Payment Verification Section */}
+                    {selectedOrder.payment_proof_url && (() => {
+                      const isAnalyzing = !!analyzingOrderIds[selectedOrder.id];
+                      const rawAiResult = aiVerifications[selectedOrder.id];
+                      const aiErr = aiErrors[selectedOrder.id];
+                      const hasFreshResult = !!(
+                        rawAiResult &&
+                        rawAiResult._proof_url === selectedOrder.payment_proof_url &&
+                        rawAiResult._expected_amount === selectedOrder.total
+                      );
+                      const showLoading = isAnalyzing || (!hasFreshResult && !aiErr && selectedOrder.payment_status !== 'PAID');
+                      const aiResult = (!isAnalyzing && hasFreshResult) ? rawAiResult : null;
+
+                      return (
+                        <div className="mt-4 rounded-2xl border border-white/10 bg-black/40 backdrop-blur-md p-3.5 space-y-3">
+                          {/* AI Verification Header */}
+                          <div className="flex items-center justify-between">
+                            <h4 className="font-bold text-xs text-white flex items-center gap-1.5">
+                              <Sparkles size={14} className="text-amber-400" />
+                              Verifikasi AI Pembayaran
+                            </h4>
+                            {showLoading ? (
+                              <span className="text-[10px] bg-blue-500/15 text-blue-400 px-2 py-0.5 rounded-full border border-blue-500/30 font-bold flex items-center gap-1 animate-pulse">
+                                <RefreshCw size={10} className="animate-spin" /> Menganalisis...
+                              </span>
+                            ) : aiResult ? (
+                              aiResult.is_valid ? (
+                                <span className="text-[10px] bg-emerald-500/15 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/30 font-bold flex items-center gap-1">
+                                  <CheckCircle2 size={11} /> Bukti Valid
+                                </span>
+                              ) : (
+                                <span className="text-[10px] bg-red-500/15 text-red-400 px-2 py-0.5 rounded-full border border-red-500/30 font-bold flex items-center gap-1">
+                                  <AlertTriangle size={11} /> Meragukan
+                                </span>
+                              )
+                            ) : aiErr ? (
+                              <span className="text-[10px] bg-amber-500/15 text-amber-400 px-2 py-0.5 rounded-full border border-amber-500/30 font-bold">
+                                AI Belum Merespons
+                              </span>
+                            ) : null}
+                          </div>
+
+                          {/* Image Preview Box with Laser Scanner */}
+                          <div className="relative w-full rounded-xl border border-white/10 overflow-hidden bg-black flex flex-col group">
+                            <div 
+                              onClick={() => setViewProofUrl(selectedOrder.payment_proof_url || null)}
+                              className="w-full h-44 relative overflow-hidden flex items-center justify-center bg-zinc-950/80 cursor-pointer"
+                              title="Klik untuk memperbesar struk"
+                            >
+                              <img 
+                                src={selectedOrder.payment_proof_url} 
+                                alt="Bukti Pembayaran" 
+                                className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-105" 
+                              />
+                              {/* Laser Scan Animation Line when analyzing */}
+                              {showLoading && (
+                                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-amber-400 to-transparent shadow-[0_0_15px_rgba(251,191,36,0.8)] animate-scan pointer-events-none" />
+                              )}
+                            </div>
+
+                            <div className="px-2.5 py-1.5 bg-black/80 backdrop-blur border-t border-white/5 flex items-center justify-between text-[11px] text-zinc-400">
+                              <button
+                                type="button"
+                                onClick={() => setViewProofUrl(selectedOrder.payment_proof_url || null)}
+                                className="text-zinc-400 hover:text-white flex items-center gap-1 transition-colors cursor-pointer"
+                              >
+                                <Eye size={12} /> Perbesar Struk
+                              </button>
+                              <button 
+                                type="button" 
+                                onClick={(e) => { 
+                                  e.preventDefault(); 
+                                  e.stopPropagation(); 
+                                  verifyProofWithAi(selectedOrder, true); 
+                                }}
+                                disabled={isAnalyzing}
+                                className="text-amber-400 hover:text-amber-300 font-medium flex items-center gap-1 transition-colors disabled:opacity-50 cursor-pointer"
+                              >
+                                <RefreshCw size={11} className={isAnalyzing ? 'animate-spin' : ''} /> Pindai Ulang AI
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* AI Breakdown & Checklist */}
+                          {showLoading ? (
+                            <div className="rounded-xl border border-blue-500/20 bg-blue-950/20 p-3 space-y-1.5 animate-pulse">
+                              <div className="flex items-center gap-2 text-xs font-bold text-blue-400">
+                                <RefreshCw size={13} className="animate-spin text-blue-400" />
+                                <span>Gemini AI sedang membaca struk pembayaran...</span>
+                              </div>
+                              <p className="text-[11px] text-zinc-400 leading-relaxed">
+                                Memeriksa kesesuaian nominal Rp {selectedOrder.total.toLocaleString('id-ID')}, waktu transfer, status transaksi, dan keaslian gambar.
+                              </p>
+                            </div>
+                          ) : aiResult ? (
+                            <div className={`rounded-xl border p-3 space-y-2.5 transition-all ${
+                              aiResult.is_valid 
+                                ? 'border-emerald-500/30 bg-emerald-950/20' 
+                                : 'border-red-500/30 bg-red-950/20'
+                            }`}>
+                              {/* Header Status */}
+                              <div className="flex items-center justify-between pb-2 border-b border-white/5">
+                                <span className="text-[11px] font-bold text-zinc-300">Hasil Analisis AI:</span>
+                                <span className={`text-[11px] font-extrabold uppercase tracking-wider flex items-center gap-1 ${
+                                  aiResult.is_valid ? 'text-emerald-400' : 'text-red-400'
+                                }`}>
+                                  {aiResult.is_valid ? (
+                                    <><CheckCircle2 size={13} /> Aman & Valid</>
+                                  ) : (
+                                    <><XCircle size={13} /> Tidak Valid</>
+                                  )}
+                                </span>
+                              </div>
+
+                              {/* Checklist Items */}
+                              {aiResult.checklist && (
+                                <div className="space-y-1.5 text-xs">
+                                  {/* 1. Nominal Check */}
+                                  <div className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-black/40 border border-white/5">
+                                    <div className="flex items-center gap-1.5">
+                                      {aiResult.checklist.amount_check?.passed ? (
+                                        <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />
+                                      ) : (
+                                        <XCircle size={13} className="text-red-400 shrink-0" />
+                                      )}
+                                      <span className="text-zinc-300 font-medium text-[11px]">Nominal Transfer:</span>
+                                    </div>
+                                    <span className={`text-[11px] font-mono font-bold ${
+                                      aiResult.checklist.amount_check?.passed ? 'text-emerald-400' : 'text-red-400'
+                                    }`}>
+                                      {aiResult.detected_amount 
+                                        ? `Rp ${Number(aiResult.detected_amount).toLocaleString('id-ID')}` 
+                                        : (aiResult.checklist.amount_check?.detail || '-')}
+                                    </span>
+                                  </div>
+
+                                  {/* 2. Waktu Transfer */}
+                                  <div className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-black/40 border border-white/5">
+                                    <div className="flex items-center gap-1.5">
+                                      {aiResult.checklist.time_check?.passed ? (
+                                        <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />
+                                      ) : (
+                                        <AlertTriangle size={13} className="text-amber-400 shrink-0" />
+                                      )}
+                                      <span className="text-zinc-300 font-medium text-[11px]">Waktu Transfer:</span>
+                                    </div>
+                                    <span className={`text-[11px] font-mono font-bold ${
+                                      aiResult.checklist.time_check?.passed ? 'text-emerald-400' : 'text-amber-400'
+                                    }`}>
+                                      {aiResult.checklist.time_check?.detail || ([aiResult.transaction_date, aiResult.transaction_time].filter(Boolean).join(' ') || '-')}
+                                    </span>
+                                  </div>
+
+                                  {/* 3. Status Struk */}
+                                  <div className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-black/40 border border-white/5">
+                                    <div className="flex items-center gap-1.5">
+                                      {aiResult.checklist.status_check?.passed ? (
+                                        <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />
+                                      ) : (
+                                        <XCircle size={13} className="text-red-400 shrink-0" />
+                                      )}
+                                      <span className="text-zinc-300 font-medium text-[11px]">Status Struk:</span>
+                                    </div>
+                                    <span className={`text-[11px] font-mono font-bold ${
+                                      aiResult.checklist.status_check?.passed ? 'text-emerald-400' : 'text-red-400'
+                                    }`}>
+                                      {aiResult.checklist.status_check?.detail || aiResult.status_text || '-'}
+                                    </span>
+                                  </div>
+
+                                  {/* 4. Keaslian / Fraud Check */}
+                                  <div className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-black/40 border border-white/5">
+                                    <div className="flex items-center gap-1.5">
+                                      {aiResult.checklist.fraud_check?.passed ? (
+                                        <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />
+                                      ) : (
+                                        <XCircle size={13} className="text-red-400 shrink-0" />
+                                      )}
+                                      <span className="text-zinc-300 font-medium text-[11px]">Keaslian Bukti:</span>
+                                    </div>
+                                    <span className={`text-[11px] font-mono font-bold ${
+                                      aiResult.checklist.fraud_check?.passed ? 'text-emerald-400' : 'text-red-400'
+                                    }`}>
+                                      {aiResult.checklist.fraud_check?.detail || 'Bukan duplikat'}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* List of issues if not valid */}
+                              {!aiResult.is_valid && aiResult.issues && aiResult.issues.length > 0 ? (
+                                <div className="p-2.5 bg-red-950/40 border border-red-500/20 rounded-lg space-y-1">
+                                  <p className="text-[11px] font-extrabold text-red-300 flex items-center gap-1">
+                                    <AlertTriangle size={12} className="text-red-400" /> Masalah Terdeteksi:
+                                  </p>
+                                  <ul className="text-[11px] text-red-200/90 space-y-0.5 list-disc list-inside">
+                                    {aiResult.issues.map((iss: string, idx: number) => (
+                                      <li key={idx}>{iss}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              ) : !aiResult.is_valid ? (
+                                <div className="p-2.5 bg-red-950/40 border border-red-500/20 rounded-lg">
+                                  <p className="text-[11px] text-red-200/90">
+                                    {aiResult.reason || 'Bukti transfer tidak valid atau meragukan.'}
+                                  </p>
+                                </div>
+                              ) : (
+                                <div className="p-2 bg-emerald-950/40 border border-emerald-500/20 rounded-lg flex items-center gap-1.5 text-emerald-300 text-[11px]">
+                                  <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />
+                                  <span>Semua parameter valid. Pembayaran terverifikasi AI.</span>
+                                </div>
+                              )}
+                            </div>
+                          ) : aiErr ? (
+                            <div className="rounded-xl border border-amber-500/25 bg-amber-950/20 p-3 space-y-1.5 text-xs">
+                              <div className="flex items-center justify-between text-amber-400 font-bold">
+                                <span className="flex items-center gap-1"><AlertTriangle size={13} /> AI Belum Merespons</span>
+                                <button 
+                                  onClick={() => verifyProofWithAi(selectedOrder, true)} 
+                                  className="underline hover:text-amber-300 text-[11px]"
+                                >
+                                  Coba Lagi
+                                </button>
+                              </div>
+                              <p className="text-[11px] text-zinc-400">
+                                {aiErr}. Kasir dapat memverifikasi foto secara visual atau memindai ulang.
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-3 text-xs text-zinc-400">
+                              <p>Memuat verifikasi AI...</p>
+                            </div>
+                          )}
+
+                          <div className="text-[10px] text-zinc-500 leading-tight border-t border-white/5 pt-1.5">
+                            💡 Kasir bertanggung jawab melakukan verifikasi akhir sebelum konfirmasi pesanan.
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Line Items List */}
                     <ul className={`orders-ti ${selectedOrder.items.length >= 4 ? 'two' : ''}`}>
@@ -1105,30 +1532,52 @@ export default function OrdersPage() {
                       )}
                     </div>
 
-                    {/* Big Action CTA */}
-                    <button
-                      type="button"
-                      className={`orders-cta ${selectedOrder.paid ? 'ok' : ''}`}
-                      onClick={() => {
-                        if (selectedOrder.paid) {
-                          handleCompleteOrder(selectedOrder);
-                        } else {
-                          handleOpenPayment(selectedOrder);
-                        }
-                      }}
-                    >
-                      {selectedOrder.paid ? (
-                        <>
-                          <CheckCircle2 size={20} />
-                          <span>Selesai</span>
-                        </>
-                      ) : (
-                        <>
-                          <Banknote size={20} />
-                          <span>Terima pembayaran</span>
-                        </>
-                      )}
-                    </button>
+                    {/* Action CTA Buttons */}
+                    {selectedOrder.payment_proof_url && !selectedOrder.paid && selectedOrder.payment_status !== 'PAID' ? (
+                      <div className="flex gap-2.5 mt-4">
+                        <button
+                          type="button"
+                          disabled={isUpdatingStatus}
+                          onClick={() => confirmPaymentAndAcceptOrder(selectedOrder)}
+                          className="flex-1 h-12 text-sm font-extrabold text-white bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 disabled:opacity-50 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 cursor-pointer"
+                        >
+                          <CheckCircle2 size={18} />
+                          <span>{isUpdatingStatus ? 'Memproses...' : 'Konfirmasi & Terima (AI Valid)'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isUpdatingStatus}
+                          onClick={() => rejectPaymentProof(selectedOrder)}
+                          className="h-12 px-4 text-xs font-bold text-red-400 hover:text-white bg-red-500/10 hover:bg-red-600 border border-red-500/20 disabled:opacity-50 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <X size={16} /> Tolak
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className={`orders-cta ${selectedOrder.paid ? 'ok' : ''}`}
+                        onClick={() => {
+                          if (selectedOrder.paid) {
+                            handleCompleteOrder(selectedOrder);
+                          } else {
+                            handleOpenPayment(selectedOrder);
+                          }
+                        }}
+                      >
+                        {selectedOrder.paid ? (
+                          <>
+                            <CheckCircle2 size={20} />
+                            <span>Selesai</span>
+                          </>
+                        ) : (
+                          <>
+                            <Banknote size={20} />
+                            <span>Terima pembayaran</span>
+                          </>
+                        )}
+                      </button>
+                    )}
                   </section>
                 )}
               </div>
