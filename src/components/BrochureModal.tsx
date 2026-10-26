@@ -669,9 +669,9 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
               {/* 2. MENU SECTION (Daftar Menu Makanan, Minuman, Kopi & Snack)   */}
               {/* ══════════════════════════════════════════════════════════════ */}
               <div 
-                className="flex-1 flex flex-col justify-between relative z-20 h-full"
+                className="flex-1 flex flex-col justify-between relative z-20 h-full overflow-hidden"
                 style={{
-                  padding: '18px 12px 8px',
+                  padding: '12px 12px 14px',
                   background: bg,
                 }}
               >
@@ -727,13 +727,13 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
 
                 {/* Columns Menu Layout (3 cols in A5 Landscape) */}
                 <div 
-                  className="flex-1 grid grid-cols-3"
+                  className="flex-1 grid grid-cols-3 min-h-0"
                   style={{
                     columnGap: '8px',
                   }}
                 >
                   {columns.map((col, colIdx) => (
-                    <div key={colIdx} className="flex flex-col gap-2 h-full">
+                    <div key={colIdx} className="flex flex-col gap-1.5 h-full min-h-0">
                       {col.map(({ cat, items }, cardIdx) => {
                         const isLastCard = cardIdx === col.length - 1;
                         const conf = CATEGORY_CONFIG[cat.name] || { label: cat.name.toUpperCase(), icon: Sparkles };
@@ -761,14 +761,14 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
 
                         // Optimal row vertical padding per category for uniform layout balance
                         const rowPadding = colIdx === 2
-                          ? '2.1px 0'
+                          ? '2px 0'
                           : isSnack
-                            ? '2.7px 0'
+                            ? '2.4px 0'
                             : isDessert
-                              ? '3.4px 0'
+                              ? '2.8px 0'
                               : isPopMie
-                                ? '3.3px 0'
-                                : '3.1px 0';
+                                ? '2.8px 0'
+                                : '2.6px 0';
 
                         return (
                           <div 
@@ -833,7 +833,7 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
                                   }}
                                 >
                                   {/* Featured Dish Photo */}
-                                  <div className="relative w-full overflow-hidden" style={{ height: '70px' }}>
+                                  <div className="relative w-full overflow-hidden" style={{ height: '60px' }}>
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
                                     <img
                                       src="/images/samba_signature_dish.jpg"
@@ -859,26 +859,22 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
                                   </div>
 
                                   {/* Card Content */}
-                                  <div style={{ padding: '4.5px 7px' }}>
-                                    <div className="flex items-start justify-between gap-1.5 min-w-0">
-                                      <div className="min-w-0 flex-1">
-                                        <span 
-                                          style={{
-                                            fontSize: signatureProduct.name.trim().length > 20 ? '9.2px' : '10.5px',
-                                            fontWeight: 800,
-                                            color: '#ffffff',
-                                            lineHeight: 1.25,
-                                            letterSpacing: signatureProduct.name.trim().length > 20 ? '-0.02em' : '-0.01em',
-                                            display: '-webkit-box',
-                                            WebkitLineClamp: 2,
-                                            WebkitBoxOrient: 'vertical',
-                                            overflow: 'hidden',
-                                            wordBreak: 'break-word',
-                                          }}
-                                        >
-                                          {signatureProduct.name}
-                                        </span>
-                                      </div>
+                                  <div style={{ padding: '3.5px 6.5px' }}>
+                                    <div className="flex items-center justify-between gap-1.5 min-w-0">
+                                      <span 
+                                        className="min-w-0 flex-1"
+                                        style={{
+                                          fontSize: signatureProduct.name.trim().length > 20 ? '8.8px' : '10px',
+                                          fontWeight: 800,
+                                          color: '#ffffff',
+                                          whiteSpace: 'nowrap',
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                          letterSpacing: signatureProduct.name.trim().length > 20 ? '-0.025em' : '-0.01em',
+                                        }}
+                                      >
+                                        {signatureProduct.name}
+                                      </span>
                                       <span 
                                         style={{
                                           fontSize: '11px',
@@ -887,7 +883,6 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
                                           fontFamily: "'Inter', sans-serif",
                                           flexShrink: 0,
                                           whiteSpace: 'nowrap',
-                                          lineHeight: 1.25,
                                         }}
                                       >
                                         {signatureProduct.price >= 1000
@@ -899,8 +894,8 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
                                       style={{
                                         fontSize: '7.5px',
                                         color: 'rgba(255,255,255,0.8)',
-                                        marginTop: '2px',
-                                        lineHeight: 1.25,
+                                        marginTop: '1.5px',
+                                        lineHeight: 1.2,
                                       }}
                                     >
                                       Ayam katsu renyah keemasan berpadu nasi hangat &amp; saus khas Samba.
@@ -1056,8 +1051,8 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
                 <div 
                   className="shrink-0 flex items-center justify-between"
                   style={{
-                    marginTop: '4px',
-                    paddingTop: '3px',
+                    marginTop: '2.5px',
+                    paddingTop: '2.5px',
                     borderTop: `1px dashed ${borderColor}`,
                   }}
                 >
