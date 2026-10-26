@@ -860,24 +860,34 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
 
                                   {/* Card Content */}
                                   <div style={{ padding: '4.5px 7px' }}>
-                                    <div className="flex items-center justify-between gap-1.5">
+                                    <div className="flex items-start justify-between gap-1.5 min-w-0">
+                                      <div className="min-w-0 flex-1">
+                                        <span 
+                                          style={{
+                                            fontSize: signatureProduct.name.trim().length > 20 ? '9.2px' : '10.5px',
+                                            fontWeight: 800,
+                                            color: '#ffffff',
+                                            lineHeight: 1.25,
+                                            letterSpacing: signatureProduct.name.trim().length > 20 ? '-0.02em' : '-0.01em',
+                                            display: '-webkit-box',
+                                            WebkitLineClamp: 2,
+                                            WebkitBoxOrient: 'vertical',
+                                            overflow: 'hidden',
+                                            wordBreak: 'break-word',
+                                          }}
+                                        >
+                                          {signatureProduct.name}
+                                        </span>
+                                      </div>
                                       <span 
                                         style={{
-                                          fontSize: '10.5px',
-                                          fontWeight: 800,
-                                          color: '#ffffff',
-                                          whiteSpace: 'nowrap',
-                                        }}
-                                      >
-                                        {signatureProduct.name}
-                                      </span>
-                                      <span 
-                                        style={{
-                                          fontSize: '11.5px',
+                                          fontSize: '11px',
                                           fontWeight: 900,
                                           color: accent,
                                           fontFamily: "'Inter', sans-serif",
                                           flexShrink: 0,
+                                          whiteSpace: 'nowrap',
+                                          lineHeight: 1.25,
                                         }}
                                       >
                                         {signatureProduct.price >= 1000
@@ -911,15 +921,19 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
                                     padding: '4px 7px',
                                   }}
                                 >
-                                  <div className="flex items-center justify-between gap-1.5">
-                                    <div className="flex items-center gap-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-1.5 min-w-0">
+                                    <div className="flex items-center gap-1 min-w-0 flex-1">
                                       <Sparkles size={9} className="text-amber-400 shrink-0" />
                                       <span 
                                         style={{
-                                          fontSize: '10px',
+                                          fontSize: featuredDessert.name.trim().length > 20 ? '9px' : '10px',
                                           fontWeight: 800,
                                           color: '#ffffff',
+                                          lineHeight: 1.2,
                                           whiteSpace: 'nowrap',
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                          letterSpacing: featuredDessert.name.trim().length > 20 ? '-0.02em' : '-0.01em',
                                         }}
                                       >
                                         {featuredDessert.name}
@@ -932,6 +946,8 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
                                         color: accent,
                                         fontFamily: "'Inter', sans-serif",
                                         flexShrink: 0,
+                                        whiteSpace: 'nowrap',
+                                        lineHeight: 1.2,
                                       }}
                                     >
                                       {featuredDessert.price >= 1000
