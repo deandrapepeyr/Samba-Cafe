@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Loader2, BarChart3 } from 'lucide-react';
+import Link from 'next/link';
 import { DateFilter, DateFilterValue } from '@/components/ui/DateFilter';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
@@ -193,8 +194,11 @@ export default function DashboardPage() {
         .gte('date', thirtyDaysAgoStr)
         .order('date', { ascending: false });
 
-      const { data: products } = await supabase.from('products').select('name, is_titipan');
+      const { data: products } = await supabase.from('products').select('id, name, is_titipan, is_available');
       const titipanNames = new Set(products?.filter(p => p.is_titipan).map(p => p.name) || []);
+      if (products) {
+        setLowStocks(products.filter(p => !p.is_available));
+      }
 
       if (txs) {
         let tOmzet = 0, yOmzet = 0;
@@ -372,11 +376,6 @@ export default function DashboardPage() {
           .filter(d => d.value > 0 || d.kasMasuk > 0);
           
         setChartData(chartArr);
-      }
-
-      const { data: stocks } = await supabase.from('stocks').select('*').order('quantity', { ascending: true }).limit(5);
-      if (stocks) {
-        setLowStocks(stocks.filter(s => s.quantity <= 10));
       }
 
       setIsFetching(false);
@@ -697,27 +696,27 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Stok Menipis */}
+              {/* Menu Tidak Tersedia */}
               <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-5 shadow-sm relative">
                 <div className="flex items-center justify-between mb-6 border-b border-white/5 pb-4">
-                  <h3 className="text-[15px] font-bold text-white">Stok Menipis</h3>
-                  <span className="text-[11px] font-bold text-[#e53e3e] bg-[#e53e3e]/10 px-2 py-0.5 rounded-full">{lowStocks.length} SKU</span>
+                  <h3 className="text-[15px] font-bold text-white">Menu Tidak Tersedia</h3>
+                  <span className="text-[11px] font-bold text-[#e53e3e] bg-[#e53e3e]/10 px-2 py-0.5 rounded-full">{lowStocks.length} Menu</span>
                 </div>
-                <div className="space-y-4">
+                <div className="space-y-4 max-h-[200px] overflow-y-auto pr-1">
                   {lowStocks.length === 0 ? (
-                    <p className="text-sm text-zinc-400">Semua stok terpantau aman.</p>
+                    <p className="text-sm text-zinc-400">Semua menu tersedia dan siap dipesan.</p>
                   ) : (
                     lowStocks.map((s, i) => (
                       <div key={i} className="flex justify-between items-center py-0.5">
                         <span className="text-sm font-bold text-zinc-200 truncate pr-4">{s.name}</span>
-                        <span className="text-xs font-bold text-[#e53e3e]">sisa {s.quantity}</span>
+                        <span className="text-xs font-bold text-[#e53e3e]">Habis</span>
                       </div>
                     ))
                   )}
                 </div>
-                <button className="mt-8 text-xs font-bold text-blue-400 hover:text-blue-300 transition-colors">
-                  Kirim notif stok ke WA owner
-                </button>
+                <Link href="/stock" className="inline-block mt-8 text-xs font-bold text-blue-400 hover:text-blue-300 transition-colors">
+                  Kelola Ketersediaan Menu →
+                </Link>
               </div>
 
               {/* Transaksi Terbaru */}

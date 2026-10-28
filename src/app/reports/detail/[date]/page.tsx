@@ -96,11 +96,11 @@ export default function DailyReportDetailPage({ params }: { params: Promise<{ da
     });
 
     text += `\ntotal ${totalProduk} produk\n\n`;
-    text += `SISA STOK:\n`;
+    text += `STATUS MENU:\n`;
     
     sortedProducts.forEach(p => {
-      const stock = productStocks.get(p.product_name) ?? 0;
-      text += `• ${p.product_name.toLowerCase()} sisa ${stock}\n`;
+      const status = productStocks.get(p.product_name) ?? 'Tersedia';
+      text += `• ${p.product_name.toLowerCase()} (${status})\n`;
     });
 
     text += `\nTOTAL SETORAN PER TANGGAL ${report?.date || dateParam}\n`;
@@ -132,50 +132,19 @@ export default function DailyReportDetailPage({ params }: { params: Promise<{ da
   const fetchData = async () => {
     setIsLoadingData(true);
     
-    // Fetch products, stocks, and recipes to calculate actual remaining portions
-    const [productsRes, stocksRes, recipesRes] = await Promise.all([
-      supabase.from('products').select('*'),
-      supabase.from('stocks').select('id, quantity, name'),
-      supabase.from('product_ingredients').select('product_id, stock_id, quantity_required')
-    ]);
+    const productsRes = await supabase.from('products').select('*');
 
     const titipanMap = new Map<string, string | null>();
     const stockMap = new Map<string, number | string>();
     const spMap = new Map<string, number>();
     
     if (productsRes.data) {
-      const stocksData = stocksRes.data || [];
-      const recipesData = recipesRes.data || [];
-
       productsRes.data.forEach(p => {
         if (p.is_titipan) {
           titipanMap.set(p.name, p.titipan_name);
         }
         spMap.set(p.name, Number(p.supplier_price) || 0);
-        
-        // Calculate stock based on recipe
-        const productRecipes = recipesData.filter(r => r.product_id === p.id);
-        if (productRecipes.length === 0) {
-          // Fallback: check if there is a stock item with the exact same name
-          const exactStock = stocksData.find(s => s.name.toLowerCase().trim() === p.name.toLowerCase().trim());
-          if (exactStock) {
-            stockMap.set(p.name, exactStock.quantity);
-          } else {
-            stockMap.set(p.name, '-'); // Untracked / no recipe
-          }
-        } else {
-          let minPortions = Infinity;
-          for (const recipe of productRecipes) {
-            const stockItem = stocksData.find(s => s.id === recipe.stock_id);
-            if (!stockItem) {
-              minPortions = 0;
-              break;
-            }
-            const possiblePortions = Math.floor(stockItem.quantity / recipe.quantity_required);
-            if (possiblePortions < minPortions) minPortions = possiblePortions;
-          }
-          stockMap.set(p.name, minPortions === Infinity ? 0 : minPortions);
-        }
+        stockMap.set(p.name, p.is_available ? 'Tersedia' : 'Habis');
       });
       setTitipanProductNames(titipanMap);
       setProductStocks(stockMap);
@@ -505,7 +474,7 @@ export default function DailyReportDetailPage({ params }: { params: Promise<{ da
                     <div className="flex-1 overflow-y-auto bg-background/30 p-2 sm:p-4">
                       <div className="flex flex-col space-y-1">
                         {Object.values(selectedVendorForSheet.products).sort((a,b) => b.revenue - a.revenue).map((product, idx) => {
-                          const stock = productStocks.get(product.product_name) ?? 0;
+                          const stock = productStocks.get(product.product_name) ?? 'Tersedia';
                           return (
                             <div key={idx} className="px-5 py-3.5 border border-transparent border-b-border/40 hover:bg-muted/10 transition-colors rounded-2xl">
                               <div className="flex items-start justify-between gap-4">
@@ -513,7 +482,7 @@ export default function DailyReportDetailPage({ params }: { params: Promise<{ da
                                   <span className="font-semibold text-[15px] text-muted-foreground w-8 shrink-0 text-right mt-0.5">{product.quantity}x</span>
                                   <div className="flex flex-col min-w-0">
                                     <span className="font-semibold text-[15px] text-foreground truncate leading-tight">{product.product_name}</span>
-                                    <span className="text-xs text-muted-foreground mt-1">Sisa stok: {stock}</span>
+                                    <span className={`text-xs mt-1 font-medium ${stock === 'Habis' ? 'text-rose-500' : 'text-emerald-500'}`}>Status: {stock}</span>
                                     {selectedVendorForSheet.vendor_name !== 'Samba Cafe' && product.capital > 0 && (
                                       <span className="text-[10px] text-orange-500/80 mt-0.5">Penitip: Rp {product.capital.toLocaleString('id-ID')}</span>
                                     )}

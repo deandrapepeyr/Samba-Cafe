@@ -82,7 +82,6 @@ export default function SettingsPage() {
 
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
-  const [stocks, setStocks] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [broadcastMessages, setBroadcastMessages] = useState<string[]>(['']);
   const [isBroadcastEnabled, setIsBroadcastEnabled] = useState(true);
@@ -95,10 +94,9 @@ export default function SettingsPage() {
 
   const fetchData = async () => {
     setIsLoadingData(true);
-    const [categoriesRes, productsRes, stocksRes, usersRes, settingsRes] = await Promise.all([
+    const [categoriesRes, productsRes, usersRes, settingsRes] = await Promise.all([
       supabase.from('categories').select('*'),
       supabase.from('products').select('*'),
-      supabase.from('stocks').select('*'),
       supabase.from('users').select('*'),
       supabase.from('settings').select('*').in('key', ['broadcast_message', 'broadcast_enabled'])
     ]);
@@ -108,16 +106,6 @@ export default function SettingsPage() {
     if (categoriesRes.data) setCategories(categoriesRes.data);
     if (productsRes.data) {
       setProducts(productsRes.data.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
-    }
-    if (stocksRes.data) {
-      const parsedStocks = stocksRes.data.map((s: any) => {
-        const match = s.name.match(/^(.*?)\s*\|titipan:(.+?)\|$/);
-        if (match) {
-          return { ...s, name: match[1], is_titipan: true, titipan_name: match[2], original_name: s.name };
-        }
-        return { ...s, is_titipan: false, original_name: s.name };
-      });
-      setStocks(parsedStocks.sort((a, b) => a.name.localeCompare(b.name)));
     }
     if (usersRes.data) setUsers(usersRes.data);
     if (settingsRes.data) {
@@ -159,10 +147,8 @@ export default function SettingsPage() {
     titipan_name: '',
     supplier_price: '',
     is_quick: false,
-    stock: '',
     variants: [] as any[]
   });
-  const [newIngredients, setNewIngredients] = useState<{stock_id: string, quantity_required: string}[]>([]);
 
   useEffect(() => {
     if (categories.length > 1 && newItem.category_id === '1') {
@@ -171,7 +157,6 @@ export default function SettingsPage() {
   }, [categories]);
 
   const [editingItem, setEditingItem] = useState<any | null>(null);
-  const [editIngredients, setEditIngredients] = useState<{stock_id: string, quantity_required: string}[]>([]);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [isEditCategoryDialogOpen, setIsEditCategoryDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<{id: string, name: string} | null>(null);
@@ -394,7 +379,6 @@ export default function SettingsPage() {
         is_titipan: newItem.is_titipan,
         titipan_name: newItem.is_titipan ? newItem.titipan_name : null,
         supplier_price: newItem.is_titipan ? parseInt(newItem.supplier_price.toString()) || 0 : 0,
-        stock: newItem.is_titipan ? parseInt(newItem.stock.toString()) || 0 : 0,
         is_quick: newItem.is_quick,
         variants: newItem.variants || []
       };
@@ -402,37 +386,6 @@ export default function SettingsPage() {
       const { error } = await supabase.from('products').insert([product]);
       
       if (!error) {
-        // Save ingredients
-        const ingredientsToInsert: any[] = newIngredients
-          .filter(ing => ing.stock_id && ing.quantity_required)
-          .map(ing => ({
-            product_id: product.id,
-            stock_id: ing.stock_id,
-            quantity_required: parseFloat(ing.quantity_required)
-          }));
-
-        if (product.variants) {
-          product.variants.forEach((v: any) => {
-            if (!v.is_required && v.choices) {
-               v.choices.forEach((c: any) => {
-                 if (c.stock_id) {
-                    ingredientsToInsert.push({
-                      product_id: product.id,
-                      stock_id: c.stock_id,
-                      quantity_required: 1, // default topping deducts 1
-                      variant_name: v.name,
-                      choice_name: c.name
-                    });
-                 }
-               });
-            }
-          });
-        }
-          
-        if (ingredientsToInsert.length > 0) {
-           await supabase.from('product_ingredients').insert(ingredientsToInsert);
-        }
-
         setProducts([product, ...products]);
         setIsAddItemDialogOpen(false);
         setNewItem({
@@ -443,11 +396,9 @@ export default function SettingsPage() {
           is_titipan: false,
           titipan_name: '',
           supplier_price: '',
-          stock: '',
           is_quick: false,
           variants: [] as any[]
         });
-        setNewIngredients([]);
         setNewImageFile(null);
       } else {
         alert("Failed to add product: " + error.message);
@@ -470,9 +421,6 @@ export default function SettingsPage() {
       if (!updatedItem.is_titipan) {
         updatedItem.titipan_name = null;
         updatedItem.supplier_price = 0;
-        updatedItem.stock = 0;
-      } else {
-        updatedItem.stock = parseInt(updatedItem.stock?.toString()) || 0;
       }
       if (editImageFile) {
         const imageUrl = await uploadImage(editImageFile);
@@ -481,42 +429,9 @@ export default function SettingsPage() {
 
       const { error } = await supabase.from('products').update(updatedItem).eq('id', updatedItem.id);
       if (!error) {
-        // Update ingredients
-        await supabase.from('product_ingredients').delete().eq('product_id', updatedItem.id);
-        const ingredientsToInsert: any[] = editIngredients
-          .filter(ing => ing.stock_id && ing.quantity_required)
-          .map(ing => ({
-            product_id: updatedItem.id,
-            stock_id: ing.stock_id,
-            quantity_required: parseFloat(ing.quantity_required)
-          }));
-
-        if (updatedItem.variants) {
-          updatedItem.variants.forEach((v: any) => {
-            if (!v.is_required && v.choices) {
-               v.choices.forEach((c: any) => {
-                 if (c.stock_id) {
-                    ingredientsToInsert.push({
-                      product_id: updatedItem.id,
-                      stock_id: c.stock_id,
-                      quantity_required: 1, // default topping deducts 1
-                      variant_name: v.name,
-                      choice_name: c.name
-                    });
-                 }
-               });
-            }
-          });
-        }
-          
-        if (ingredientsToInsert.length > 0) {
-           await supabase.from('product_ingredients').insert(ingredientsToInsert);
-        }
-
         setProducts(products.map(p => p.id === updatedItem.id ? updatedItem : p));
         setIsEditItemDialogOpen(false);
         setEditingItem(null);
-        setEditIngredients([]);
         setEditImageFile(null);
       } else {
         alert("Failed to update product: " + error.message);
@@ -965,11 +880,13 @@ export default function SettingsPage() {
                                                 {categories.find(c => c.id === product.category_id)?.name || 'Unknown'}
                                               </span>
                                             )}
-                                            {product.is_titipan && (
-                                              <span className="text-orange-400 text-xs font-bold bg-orange-400/10 px-2.5 py-0.5 rounded-full border border-orange-400/20">
-                                                Stok: {product.stock || 0}
-                                              </span>
-                                            )}
+                                            <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${
+                                              product.is_available !== false
+                                                ? 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20'
+                                                : 'text-rose-400 bg-rose-400/10 border-rose-400/20'
+                                            }`}>
+                                              {product.is_available !== false ? 'Tersedia' : 'Habis'}
+                                            </span>
                                           </div>
                                         </div>
                                       </div>
@@ -977,14 +894,7 @@ export default function SettingsPage() {
                                         <Button 
                                           variant="outline" 
                                           className="flex-1 sm:flex-none border-white/10 hover:bg-white/5 transition-colors rounded-xl"
-                                          onClick={async () => {
-                                            // Fetch recipe
-                                            const { data } = await supabase.from('product_ingredients').select('*').eq('product_id', product.id);
-                                            if (data) {
-                                              setEditIngredients(data.map(d => ({ stock_id: d.stock_id, quantity_required: d.quantity_required.toString() })));
-                                            } else {
-                                              setEditIngredients([]);
-                                            }
+                                          onClick={() => {
                                             setEditingItem({ ...product, variants: product.variants || [] });
                                             setIsEditItemDialogOpen(true);
                                           }}
@@ -1332,20 +1242,6 @@ export default function SettingsPage() {
                   />
                   <p className="text-[10px] text-zinc-500 font-medium mt-1">Uang ini tidak akan dihitung sebagai Laba Bersih.</p>
                 </div>
-                <div className="grid gap-2">
-                  <label htmlFor="titipan_stock" className="text-sm font-bold text-primary">Stok Titipan</label>
-                  <Input 
-                    id="titipan_stock" 
-                    type="text"
-                    className="bg-zinc-900/80 border-white/10 text-zinc-100 focus-visible:ring-primary h-11 rounded-xl" 
-                    placeholder="Misal: 10"
-                    value={newItem.stock || ''}
-                    onChange={(e) => {
-                      const rawValue = e.target.value.replace(/\D/g, '');
-                      setNewItem({...newItem, stock: rawValue});
-                    }}
-                  />
-                </div>
               </div>
             )}
             
@@ -1472,20 +1368,6 @@ export default function SettingsPage() {
                       }}
                     />
                     <p className="text-[10px] text-zinc-500 font-medium mt-1">Uang ini tidak akan dihitung sebagai Laba Bersih.</p>
-                  </div>
-                  <div className="grid gap-2">
-                    <label htmlFor="edit_titipan_stock" className="text-sm font-bold text-primary">Stok Titipan</label>
-                    <Input 
-                      id="edit_titipan_stock" 
-                      type="text"
-                      className="bg-zinc-900/80 border-white/10 text-zinc-100 focus-visible:ring-primary h-11 rounded-xl" 
-                      placeholder="Misal: 10"
-                      value={editingItem.stock || ''}
-                      onChange={(e) => {
-                        const rawValue = e.target.value.replace(/\D/g, '');
-                        setEditingItem({...editingItem, stock: rawValue});
-                      }}
-                    />
                   </div>
                 </div>
               )}

@@ -768,63 +768,6 @@ export default function OrdersPage() {
     }
   };
 
-  // Inventory restore logic on deletion
-  const restoreOrderStock = async (order: Order) => {
-    const itemNames = order.items.map(i => i.name);
-    const { data: products } = await supabase.from('products').select('*').in('name', itemNames);
-    if (!products) return;
-
-    for (const item of order.items) {
-      const p = products.find(prod => prod.name === item.name);
-      if (p && p.is_titipan) {
-        const newStock = (p.stock || 0) + item.qty;
-        await supabase.from('products').update({ stock: newStock }).eq('id', p.id);
-      }
-    }
-
-    const productIds = products.map(p => p.id);
-    const { data: recipes } = await supabase.from('product_ingredients').select('*').in('product_id', productIds);
-
-    if (recipes && recipes.length > 0) {
-      const stockToRestore: Record<string, number> = {};
-
-      for (const item of order.items) {
-        const p = products.find(prod => prod.name === item.name);
-        if (!p) continue;
-        const itemRecipes = recipes.filter(r => r.product_id === p.id);
-
-        for (const recipe of itemRecipes) {
-          const isBaseRecipe = !recipe.variant_name;
-          let noteMatches = false;
-          if (!isBaseRecipe && item.notes && recipe.choice_name) {
-            noteMatches = item.notes.includes(recipe.choice_name);
-          }
-          if (isBaseRecipe || noteMatches) {
-            if (!stockToRestore[recipe.stock_id]) stockToRestore[recipe.stock_id] = 0;
-            stockToRestore[recipe.stock_id] += (recipe.quantity_required * item.qty);
-          }
-        }
-      }
-
-      const stockIds = Object.keys(stockToRestore);
-      if (stockIds.length > 0) {
-        const { data: currentStocks } = await supabase.from('stocks').select('id, quantity').in('id', stockIds);
-        if (currentStocks) {
-          for (const stock of currentStocks) {
-            const amountToRestore = stockToRestore[stock.id];
-            if (amountToRestore) {
-              const newQuantity = stock.quantity + amountToRestore;
-              await supabase.from('stocks').update({
-                quantity: newQuantity,
-                last_updated: new Date().toISOString()
-              }).eq('id', stock.id);
-            }
-          }
-        }
-      }
-    }
-  };
-
   // Delete Order with Undo
   const handleConfirmDelete = async () => {
     if (!editingOrder) return;
@@ -883,7 +826,6 @@ export default function OrdersPage() {
     });
 
     try {
-      await restoreOrderStock(orderToDelete);
       await supabase.from('transactions').delete().eq('id', orderToDelete.id);
       fetchOrders(false);
     } catch (e) {

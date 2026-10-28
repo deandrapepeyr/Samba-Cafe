@@ -37,7 +37,6 @@ export default function POSPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [stocksData, setStocksData] = useState<{id: string, quantity: number, name: string, sell_price: number, is_topping: boolean, tracking_method?: string}[]>([]);
-  const [recipesData, setRecipesData] = useState<{product_id: string, stock_id: string, quantity_required: number}[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
 
   const gridContainerRef = useRef<HTMLDivElement>(null);
@@ -541,19 +540,15 @@ export default function POSPage() {
         if (cachedPreparing) setPreparingOrders(JSON.parse(cachedPreparing));
       } catch(e) {}
 
-      const [categoriesRes, productsRes, stocksRes, recipesRes] = await Promise.all([
+      const [categoriesRes, productsRes] = await Promise.all([
         supabase.from('categories').select('*'),
-        supabase.from('products').select('*'),
-        supabase.from('stocks').select('id, quantity, name, sell_price, is_topping, tracking_method'),
-        supabase.from('product_ingredients').select('product_id, stock_id, quantity_required, variant_name, choice_name')
+        supabase.from('products').select('*')
       ]);
 
       if (categoriesRes.data) {
         setCategories(categoriesRes.data);
         try { localStorage.setItem('samba_categories_cache', JSON.stringify(categoriesRes.data)); } catch(e) {}
       }
-      if (stocksRes.data) setStocksData(stocksRes.data);
-      if (recipesRes.data) setRecipesData(recipesRes.data);
       if (productsRes.data) {
         const sorted = productsRes.data.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
         setProducts(sorted);
@@ -674,11 +669,7 @@ export default function POSPage() {
     initPageData();
 
     const handleRefreshProducts = async () => {
-      const [productsRes, stocksRes] = await Promise.all([
-        supabase.from('products').select('*'),
-        supabase.from('stocks').select('id, quantity, name, sell_price, is_topping, tracking_method')
-      ]);
-      if (stocksRes.data) setStocksData(stocksRes.data);
+      const productsRes = await supabase.from('products').select('*');
       if (productsRes.data) {
         const data = productsRes.data;
         // Find newly added products or updated products and ensure state is fresh
@@ -699,7 +690,6 @@ export default function POSPage() {
 
     const catalogChannel = supabase
       .channel(`pos_catalog_${Date.now()}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'stocks' }, debouncedRefresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, debouncedRefresh)
       .subscribe();
 
@@ -832,29 +822,12 @@ export default function POSPage() {
     }
   };
 
-  const getProductStock = (productId: string) => {
-    const product = products.find(p => p.id === productId);
-    if (!product || !product.is_available) return 0;
-    if (product.is_titipan && typeof product.stock === 'number') {
-      return product.stock;
-    }
-    return null;
-  };
-
   const getStockString = (product: Product) => {
-    if (!product.is_available) return 'Habis';
-    if (product.is_titipan && typeof product.stock === 'number') {
-      return product.stock <= 0 ? 'Habis' : `Sisa ${product.stock}`;
-    }
-    return 'Tersedia';
+    return product.is_available ? 'Tersedia' : 'Habis';
   };
 
   const isStockEmpty = (product: Product) => {
-    if (!product.is_available) return true;
-    if (product.is_titipan && typeof product.stock === 'number') {
-      return product.stock <= 0;
-    }
-    return false;
+    return !product.is_available;
   };
 
   const handleCheckoutClick = () => {
@@ -1171,16 +1144,11 @@ export default function POSPage() {
   };
 
   const addToCart = (product: Product, notes: string = '', addonPrice: number = 0, variantChoices?: Record<string, string[]>) => {
-    const maxStock = getProductStock(product.id);
     const cartItemId = notes ? `${product.id}-${notes}` : product.id;
 
     setCart(prev => {
       const existing = prev.find(item => item.product.id === product.id && (item.notes || '') === notes);
       if (existing) {
-        if (maxStock !== null && existing.quantity >= maxStock) {
-          alert(`Maksimal stok yang tersedia hanya ${maxStock}`);
-          return prev;
-        }
         return prev.map(item =>
           (item.product.id === product.id && (item.notes || '') === notes)
             ? { ...item, quantity: item.quantity + 1 }
@@ -1209,11 +1177,6 @@ export default function POSPage() {
       return prev.map(item => {
         if (item.id === id) {
           const newQuantity = Math.max(0, item.quantity + delta);
-          const maxStock = getProductStock(item.product.id);
-          if (delta > 0 && maxStock !== null && newQuantity > maxStock) {
-            alert(`Maksimal stok yang tersedia hanya ${maxStock}`);
-            return item;
-          }
           return { ...item, quantity: newQuantity };
         }
         return item;
@@ -1297,89 +1260,14 @@ export default function POSPage() {
       supplier_price: item.product.supplier_price || 0
     }));
 
-    const titipanDeductions: { id: string; amount: number }[] = [];
-    if (isEditMode) {
-      const titipanDelta: Record<string, number> = {};
-      for (const cartItem of cart.filter(i => i.product.is_titipan)) {
-        titipanDelta[cartItem.product.id] = (titipanDelta[cartItem.product.id] || 0) + cartItem.quantity;
-      }
-      for (const oldItem of oldCartItems) {
-        const p = products.find(prod => prod.name === oldItem.product_name);
-        if (p?.is_titipan) {
-          titipanDelta[p.id] = (titipanDelta[p.id] || 0) - oldItem.quantity;
-        }
-      }
-      for (const id of Object.keys(titipanDelta)) {
-        if (titipanDelta[id] !== 0) titipanDeductions.push({ id, amount: titipanDelta[id] });
-      }
-    } else {
-      const titipanItems = cart.filter(item => item.product.is_titipan);
-      for (const cartItem of titipanItems) {
-        titipanDeductions.push({ id: cartItem.product.id, amount: cartItem.quantity });
-      }
-    }
-
-    const stockDeductions: { id: string; amount: number }[] = [];
-    const allProductIds = Array.from(new Set([
-      ...cart.map(i => i.product.id),
-      ...(isEditMode ? oldCartItems.map(i => products.find(p => p.name === i.product_name)?.id).filter(Boolean) : [])
-    ]));
-    
-    const { data: recipes } = await supabase.from('product_ingredients').select('*').in('product_id', allProductIds as string[]);
-    
-    if (recipes && recipes.length > 0) {
-      const stockDelta: Record<string, number> = {};
-      
-      for (const cartItem of cart) {
-        const itemRecipes = recipes.filter(r => r.product_id === cartItem.product.id);
-        for (const recipe of itemRecipes) {
-          const isBaseRecipe = !recipe.variant_name;
-          let matchesVariant = false;
-          if (!isBaseRecipe && cartItem.variantChoices) {
-            const selectedOptions = cartItem.variantChoices[recipe.variant_name] || [];
-            if (selectedOptions.includes(recipe.choice_name)) {
-              matchesVariant = true;
-            }
-          }
-          
-          if (isBaseRecipe || matchesVariant) {
-            if (!stockDelta[recipe.stock_id]) stockDelta[recipe.stock_id] = 0;
-            stockDelta[recipe.stock_id] += (recipe.quantity_required * cartItem.quantity);
-          }
-        }
-      }
-      
-      if (isEditMode) {
-        for (const oldItem of oldCartItems) {
-          const productId = products.find(p => p.name === oldItem.product_name)?.id;
-          const itemRecipes = recipes.filter(r => r.product_id === productId);
-          for (const recipe of itemRecipes) {
-            const isBaseRecipe = !recipe.variant_name;
-            const noteMatches = !isBaseRecipe && oldItem.notes && recipe.choice_name && oldItem.notes.includes(recipe.choice_name);
-            
-            if (isBaseRecipe || noteMatches) {
-              if (!stockDelta[recipe.stock_id]) stockDelta[recipe.stock_id] = 0;
-              stockDelta[recipe.stock_id] -= (recipe.quantity_required * oldItem.quantity);
-            }
-          }
-        }
-      }
-
-      for (const id of Object.keys(stockDelta)) {
-        if (stockDelta[id] !== 0) {
-          stockDeductions.push({ id, amount: stockDelta[id] });
-        }
-      }
-    }
-
     try {
       if (navigator.onLine) {
         const rpcPromise = supabase.rpc('process_checkout_v2', {
           p_is_edit: isEditMode,
           p_transaction: transaction,
           p_transaction_items: itemsToInsert,
-          p_titipan_deductions: titipanDeductions,
-          p_stock_deductions: stockDeductions
+          p_titipan_deductions: [],
+          p_stock_deductions: []
         });
 
         const { data, error } = await Promise.race([
@@ -1399,15 +1287,10 @@ export default function POSPage() {
       setIsProcessingCheckout(false);
       
       const errMsg = error.message || '';
-      if (errMsg.includes('INSUFFICIENT_STOCK')) {
-        const cleanMsg = errMsg.split('INSUFFICIENT_STOCK:')[1] || "Stok tidak mencukupi untuk memproses pesanan ini.";
-        alert(`⚠️ GAGAL DIPROSES:\n\n${cleanMsg.trim()}\n\nPesanan ini dibatalkan secara otomatis (Stok belum terpotong).`);
-        return; // Henti, jangan hapus cart
-      }
 
       if (errMsg.includes('Offline') || errMsg.includes('Failed to fetch') || errMsg.includes('Timeout')) {
         const offlineQueue = JSON.parse(localStorage.getItem('offline_transactions') || '[]');
-        offlineQueue.push({ transaction, itemsToInsert, titipanDeductions, stockDeductions });
+        offlineQueue.push({ transaction, itemsToInsert });
         localStorage.setItem('offline_transactions', JSON.stringify(offlineQueue));
         alert("⚠️ Mode Offline / Gangguan Jaringan: Transaksi disimpan secara lokal dan akan disinkronisasi ketika koneksi kembali.");
       } else {

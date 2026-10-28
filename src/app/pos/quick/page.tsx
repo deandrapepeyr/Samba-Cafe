@@ -62,8 +62,6 @@ function QuickPOSContent() {
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [activeCategory, setActiveCategory] = useState('1');
   const [searchQuery, setSearchQuery] = useState('');
-  const [stocksData, setStocksData] = useState<{ id: string; quantity: number }[]>([]);
-  const [recipesData, setRecipesData] = useState<{ product_id: string; stock_id: string; quantity_required: number }[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [activeShift, setActiveShift] = useState<any>(null);
@@ -181,11 +179,9 @@ function QuickPOSContent() {
         if (cachedPreparing) setPreparingOrders(JSON.parse(cachedPreparing));
       } catch {}
 
-      const [categoriesRes, productsRes, stocksRes, recipesRes] = await Promise.all([
+      const [categoriesRes, productsRes] = await Promise.all([
         supabase.from('categories').select('*'),
-        supabase.from('products').select('*'),
-        supabase.from('stocks').select('id, quantity'),
-        supabase.from('product_ingredients').select('product_id, stock_id, quantity_required')
+        supabase.from('products').select('*')
       ]);
 
       if (categoriesRes.data) {
@@ -193,8 +189,6 @@ function QuickPOSContent() {
         setCategories(newCats);
         try { localStorage.setItem('samba_categories_cache', JSON.stringify(newCats)); } catch {}
       }
-      if (stocksRes.data) setStocksData(stocksRes.data);
-      if (recipesRes.data) setRecipesData(recipesRes.data);
       if (productsRes.data) {
         setAllProducts(productsRes.data);
         const quickProducts = productsRes.data
@@ -352,23 +346,6 @@ function QuickPOSContent() {
     router.push(`/pos?edit=${order.id}`);
   };
 
-  const getProductStock = useCallback((productId: string) => {
-    const product = products.find(p => p.id === productId);
-    if (product?.is_titipan) return product.stock ?? null;
-
-    const productRecipes = recipesData.filter(r => r.product_id === productId);
-    if (productRecipes.length === 0) return null;
-
-    let maxAvailable = Infinity;
-    for (const recipe of productRecipes) {
-      const stockItem = stocksData.find(s => s.id === recipe.stock_id);
-      if (!stockItem) return 0;
-      const possiblePortions = Math.floor(stockItem.quantity / recipe.quantity_required);
-      if (possiblePortions < maxAvailable) maxAvailable = possiblePortions;
-    }
-    return maxAvailable;
-  }, [products, stocksData, recipesData]);
-
   const isStockEmpty = (product: Product) => {
     return !product.is_available;
   };
@@ -391,8 +368,6 @@ function QuickPOSContent() {
       const existingIndex = prev.findIndex(item => item.product.id === product.id);
       if (existingIndex > -1) {
         const current = prev[existingIndex];
-        const stock = getProductStock(product.id);
-        if (stock !== null && current.quantity >= stock) return prev;
         const updated = [...prev];
         updated[existingIndex] = { ...current, quantity: current.quantity + 1 };
         return updated;
@@ -534,48 +509,13 @@ function QuickPOSContent() {
         supplier_price: item.product.supplier_price || 0
       }));
 
-      // Stock deductions for quick items & recipes
-      const titipanDeductions: { id: string; amount: number }[] = [];
-      const titipanItems = cart.filter(item => item.product.is_titipan);
-      for (const cartItem of titipanItems) {
-        titipanDeductions.push({ id: cartItem.product.id, amount: cartItem.quantity });
-      }
-
-      const stockDeductions: { id: string; amount: number }[] = [];
-      const allProductIds = Array.from(new Set(cart.map(i => i.product.id)));
-      const { data: recipes } = await supabase.from('product_ingredients').select('*').in('product_id', allProductIds as string[]);
-
-      if (recipes && recipes.length > 0) {
-        const stockDelta: Record<string, number> = {};
-        for (const cartItem of cart) {
-          const itemRecipes = recipes.filter(r => r.product_id === cartItem.product.id);
-          for (const recipe of itemRecipes) {
-            const isBaseRecipe = !recipe.variant_name;
-            let matchesVariant = false;
-            if (!isBaseRecipe && cartItem.variantChoices) {
-              const selectedOptions = cartItem.variantChoices[recipe.variant_name] || [];
-              if (selectedOptions.includes(recipe.choice_name)) matchesVariant = true;
-            }
-            if (isBaseRecipe || matchesVariant) {
-              if (!stockDelta[recipe.stock_id]) stockDelta[recipe.stock_id] = 0;
-              stockDelta[recipe.stock_id] += (recipe.quantity_required * cartItem.quantity);
-            }
-          }
-        }
-        for (const id of Object.keys(stockDelta)) {
-          if (stockDelta[id] !== 0) {
-            stockDeductions.push({ id, amount: stockDelta[id] });
-          }
-        }
-      }
-
       try {
         const { error: rpcError } = await supabase.rpc('process_checkout_v2', {
           p_is_edit: false,
           p_transaction: transaction,
           p_transaction_items: itemsToInsert,
-          p_titipan_deductions: titipanDeductions,
-          p_stock_deductions: stockDeductions
+          p_titipan_deductions: [],
+          p_stock_deductions: []
         });
         if (rpcError) throw rpcError;
       } catch {
