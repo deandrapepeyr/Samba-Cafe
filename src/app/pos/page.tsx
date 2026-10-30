@@ -76,6 +76,8 @@ export default function POSPage() {
   const [lastRemovedItem, setLastRemovedItem] = useState<CartItem | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [lastAddedItemId, setLastAddedItemId] = useState<string | null>(null);
+  const [lastActionTimestamp, setLastActionTimestamp] = useState<number>(0);
   
   // Options Modal State
   const [isOptionsModalOpen, setIsOptionsModalOpen] = useState(false);
@@ -1134,6 +1136,9 @@ export default function POSPage() {
   const addToCart = (product: Product, notes: string = '', addonPrice: number = 0, variantChoices?: Record<string, string[]>) => {
     const cartItemId = notes ? `${product.id}-${notes}` : product.id;
 
+    setLastAddedItemId(cartItemId);
+    setLastActionTimestamp(Date.now());
+
     setCart(prev => {
       const existing = prev.find(item => item.product.id === product.id && (item.notes || '') === notes);
       if (existing) {
@@ -1441,6 +1446,8 @@ export default function POSPage() {
       onDirectSave={() => finalizeTransaction(paymentMethod || 'Cash')}
       isEditMode={isEditMode}
       onCancelEdit={cancelEdit}
+      lastAddedItemId={lastAddedItemId}
+      lastActionTimestamp={lastActionTimestamp}
     />
   );
 

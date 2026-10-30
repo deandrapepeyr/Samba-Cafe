@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { LockKeyhole, FileEdit, Minus, Plus, QrCode, Banknote, Clock, Flame, ShoppingBag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,6 +42,8 @@ interface CartPanelProps {
   onDirectSave?: () => void;
   isEditMode?: boolean;
   onCancelEdit?: () => void;
+  lastAddedItemId?: string | null;
+  lastActionTimestamp?: number;
 }
 
 export function CartPanel({
@@ -73,7 +75,57 @@ export function CartPanel({
   onDirectSave,
   isEditMode = false,
   onCancelEdit,
+  lastAddedItemId,
+  lastActionTimestamp,
 }: CartPanelProps) {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [activeHighlightId, setActiveHighlightId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!lastAddedItemId) return;
+    setActiveHighlightId(lastAddedItemId);
+    const highlightTimer = setTimeout(() => {
+      setActiveHighlightId(null);
+    }, 1800);
+
+    const scrollTimer = setTimeout(() => {
+      const container = scrollContainerRef.current;
+      if (!container) return;
+
+      const safeId = typeof CSS !== 'undefined' && CSS.escape 
+        ? CSS.escape(lastAddedItemId) 
+        : lastAddedItemId.replace(/["\\]/g, '\\$&');
+      const itemElement = container.querySelector(`[data-cart-item-id="${safeId}"]`) as HTMLElement | null;
+      if (!itemElement) return;
+
+      const containerRect = container.getBoundingClientRect();
+      const itemRect = itemElement.getBoundingClientRect();
+
+      // Check if item is not fully visible within container viewport
+      const isBelow = itemRect.bottom > containerRect.bottom;
+      const isAbove = itemRect.top < containerRect.top;
+
+      if (isBelow) {
+        const diff = itemRect.bottom - containerRect.bottom;
+        container.scrollBy({
+          top: diff + 24, // padding agar kartu terlihat utuh dan leluasa
+          behavior: 'smooth'
+        });
+      } else if (isAbove) {
+        const diff = itemRect.top - containerRect.top;
+        container.scrollBy({
+          top: diff - 24,
+          behavior: 'smooth'
+        });
+      }
+    }, 60);
+
+    return () => {
+      clearTimeout(highlightTimer);
+      clearTimeout(scrollTimer);
+    };
+  }, [lastAddedItemId, lastActionTimestamp]);
+
   const cookedItems = React.useMemo(() => cart.filter(item => !item.product.is_quick), [cart]);
   const quickItems = React.useMemo(() => cart.filter(item => Boolean(item.product.is_quick)), [cart]);
 
@@ -81,11 +133,18 @@ export function CartPanel({
     ? amountDue
     : (isEditMode && previouslyPaidAmount > 0 ? Math.max(0, total - previouslyPaidAmount) : total);
 
-  const renderItemCard = (item: CartItem) => (
-    <div
-      key={item.id}
-      className="flex flex-col gap-2 p-3 bg-zinc-900/60 rounded-2xl border border-white/5 hover:border-white/10 transition-colors"
-    >
+  const renderItemCard = (item: CartItem) => {
+    const isRecentlyAdded = activeHighlightId === item.id;
+    return (
+      <div
+        key={item.id}
+        data-cart-item-id={item.id}
+        className={`flex flex-col gap-2 p-3 bg-zinc-900/60 rounded-2xl border transition-all duration-300 ${
+          isRecentlyAdded
+            ? 'border-amber-500/60 bg-amber-500/15 shadow-[0_0_15px_rgba(245,158,11,0.2)] ring-1 ring-amber-500/40'
+            : 'border-white/5 hover:border-white/10'
+        }`}
+      >
       <div className="flex justify-between items-start gap-2">
         <div className="min-w-0 flex-1">
           <span className="font-semibold text-sm text-zinc-100 line-clamp-2 leading-snug">
@@ -143,7 +202,8 @@ export function CartPanel({
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
   return (
     <>
@@ -197,7 +257,10 @@ export function CartPanel({
       )}
 
       {/* Konten Daftar Item Keranjang */}
-      <div className="flex-1 min-h-0 p-4 overflow-y-auto overscroll-contain touch-pan-y scrollbar-thin scrollbar-thumb-white/10 bg-zinc-950">
+      <div 
+        ref={scrollContainerRef}
+        className="flex-1 min-h-0 p-4 overflow-y-auto overscroll-contain touch-pan-y scrollbar-thin scrollbar-thumb-white/10 bg-zinc-950"
+      >
         {isPageLoading ? (
           <div className="h-full flex flex-col items-center justify-center text-zinc-500 mt-12 gap-3">
             <p className="text-xs">Memeriksa status shift...</p>
