@@ -6,6 +6,7 @@ import { QrCode, Banknote, Clock, CheckCircle2, X, AlertCircle } from 'lucide-re
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { supabase } from '@/lib/supabase';
 
 interface PaymentSheetProps {
   isOpen: boolean;
@@ -38,6 +39,29 @@ export function PaymentSheet({
 }: PaymentSheetProps) {
   const [activeTab, setActiveTab] = useState<'Cash' | 'QRIS' | 'Bayar Nanti'>('Cash');
   const [cashInput, setCashInput] = useState<string>('');
+  const [qrisUrl, setQrisUrl] = useState<string>('/qris-static.jpg');
+
+  useEffect(() => {
+    const cached = typeof window !== 'undefined' ? localStorage.getItem('samba_qris_image') : null;
+    if (cached) setQrisUrl(cached);
+
+    const fetchQris = async () => {
+      try {
+        const { data } = await supabase
+          .from('settings')
+          .select('value')
+          .eq('key', 'qris_image_url')
+          .maybeSingle();
+        if (data?.value) {
+          setQrisUrl(data.value);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('samba_qris_image', data.value);
+          }
+        }
+      } catch {}
+    };
+    fetchQris();
+  }, [isOpen]);
   const [customerNameError, setCustomerNameError] = useState(false);
 
   // Reset or initialize state when modal opens
@@ -254,13 +278,14 @@ export function PaymentSheet({
         {activeTab === 'QRIS' && (
           <div className="space-y-4 text-center py-2 animate-in fade-in zoom-in-95 duration-150">
             <div className="mx-auto w-[240px] h-[240px] relative bg-white p-3 rounded-2xl border-4 border-blue-500/30 shadow-2xl overflow-hidden flex items-center justify-center">
-              <Image
-                src="/qris-static.jpg"
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={qrisUrl}
                 alt="QRIS Samba Cafe"
-                width={220}
-                height={220}
-                className="w-full h-auto object-contain"
-                priority
+                className="w-full h-full object-contain"
+                onError={(e) => {
+                  e.currentTarget.src = '/qris-static.jpg';
+                }}
               />
             </div>
             <div>

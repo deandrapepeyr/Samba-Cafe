@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -9,10 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/lib/supabase';
-import { Search, Plus, Trash2, Edit2, Check, X, Tag, DollarSign, Image as ImageIcon, Box, Utensils, Loader2, Layers, ChevronLeft, ChevronUp, ChevronDown, Menu, Printer, Settings } from 'lucide-react';
+import { Search, Plus, Trash2, Edit2, Check, X, Tag, DollarSign, Image as ImageIcon, Box, Utensils, Loader2, Layers, ChevronLeft, ChevronUp, ChevronDown, Menu, Printer, Settings, QrCode, Upload, Download, RotateCcw, CheckCircle2, ExternalLink, Link2, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+
 import { BrochureModal } from '@/components/BrochureModal';
 
 function TitipanAutocomplete({ id, value, onChange, options, placeholder }: { id: string, value: string, onChange: (val: string) => void, options: string[], placeholder?: string }) {
@@ -88,6 +88,13 @@ export default function SettingsPage() {
   const [isUpdatingBroadcast, setIsUpdatingBroadcast] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
 
+  // QR Settings State
+  const [qrisImageUrl, setQrisImageUrl] = useState<string>('/qris-static.jpg');
+  const [tableQrUrl, setTableQrUrl] = useState<string>('');
+  const [isUploadingQris, setIsUploadingQris] = useState<boolean>(false);
+  const [isSavingQrUrl, setIsSavingQrUrl] = useState<boolean>(false);
+  const qrisFileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -98,7 +105,7 @@ export default function SettingsPage() {
       supabase.from('categories').select('*'),
       supabase.from('products').select('*'),
       supabase.from('users').select('*'),
-      supabase.from('settings').select('*').in('key', ['broadcast_message', 'broadcast_enabled'])
+      supabase.from('settings').select('*')
     ]);
     if (categoriesRes.error) console.error("Error fetching categories:", categoriesRes.error);
     if (productsRes.error) console.error("Error fetching products:", productsRes.error);
@@ -124,8 +131,104 @@ export default function SettingsPage() {
         }
       }
       if (enabled) setIsBroadcastEnabled(enabled.value !== 'false');
+
+      const qrisSetting = settingsRes.data.find(s => s.key === 'qris_image_url');
+      const tableQrSetting = settingsRes.data.find(s => s.key === 'table_qr_url');
+
+      if (qrisSetting?.value) {
+        setQrisImageUrl(qrisSetting.value);
+        if (typeof window !== 'undefined') localStorage.setItem('samba_qris_image', qrisSetting.value);
+      }
+      if (tableQrSetting?.value) {
+        setTableQrUrl(tableQrSetting.value);
+      } else if (typeof window !== 'undefined') {
+        setTableQrUrl(`${window.location.protocol}//${window.location.host}/order`);
+      }
     }
     setIsLoadingData(false);
+  };
+
+  const handleUploadQrisFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingQris(true);
+    try {
+      let finalUrl = '';
+      try {
+        finalUrl = await uploadImage(file);
+      } catch (storageErr) {
+        console.warn("Storage upload failed, falling back to Data URL:", storageErr);
+        finalUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      }
+
+      if (!finalUrl) throw new Error("Gagal memproses file gambar");
+
+      const { error } = await supabase
+        .from('settings')
+        .upsert({ key: 'qris_image_url', value: finalUrl });
+
+      if (error) throw error;
+
+      setQrisImageUrl(finalUrl);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('samba_qris_image', finalUrl);
+        window.dispatchEvent(new Event('storage'));
+      }
+
+      alert("✅ Gambar QRIS berhasil diperbarui dan disimpan ke sistem!");
+    } catch (err: any) {
+      console.error("Gagal upload QRIS:", err);
+      alert("❌ Gagal mengunggah QRIS: " + (err.message || 'Terjadi kesalahan'));
+    } finally {
+      setIsUploadingQris(false);
+      if (qrisFileInputRef.current) qrisFileInputRef.current.value = '';
+    }
+  };
+
+  const handleResetQris = async () => {
+    if (!confirm("Kembalikan QRIS ke gambar bawaan standar Samba Cafe (/qris-static.jpg)?")) return;
+    setIsUploadingQris(true);
+    try {
+      const defaultUrl = '/qris-static.jpg';
+      const { error } = await supabase
+        .from('settings')
+        .upsert({ key: 'qris_image_url', value: defaultUrl });
+
+      if (error) throw error;
+
+      setQrisImageUrl(defaultUrl);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('samba_qris_image', defaultUrl);
+        window.dispatchEvent(new Event('storage'));
+      }
+      alert("✅ QRIS berhasil dikembalikan ke bawaan!");
+    } catch (err: any) {
+      alert("❌ Gagal reset QRIS: " + err.message);
+    } finally {
+      setIsUploadingQris(false);
+    }
+  };
+
+  const handleSaveTableQrUrl = async () => {
+    if (!tableQrUrl.trim()) return;
+    setIsSavingQrUrl(true);
+    try {
+      const { error } = await supabase
+        .from('settings')
+        .upsert({ key: 'table_qr_url', value: tableQrUrl.trim() });
+      if (error) throw error;
+      alert("✅ URL QR Meja berhasil disimpan!");
+    } catch (err: any) {
+      alert("❌ Gagal menyimpan URL: " + err.message);
+    } finally {
+      setIsSavingQrUrl(false);
+    }
   };
   
   const [isAddItemDialogOpen, setIsAddItemDialogOpen] = useState(false);
@@ -547,9 +650,10 @@ export default function SettingsPage() {
         </div>
 
         <Tabs defaultValue="menu" className="w-full flex-1 flex flex-col min-h-0">
-          <TabsList className="w-full lg:w-[600px] grid grid-cols-3 mb-6 bg-zinc-900/50 p-1.5 rounded-2xl border border-white/5 flex-shrink-0 h-auto min-h-[52px] items-stretch gap-1">
+          <TabsList className="w-full lg:w-[720px] grid grid-cols-2 sm:grid-cols-4 mb-6 bg-zinc-900/50 p-1.5 rounded-2xl border border-white/5 flex-shrink-0 h-auto min-h-[52px] items-stretch gap-1">
             <TabsTrigger value="menu" className="h-full rounded-xl py-2.5 data-active:bg-zinc-800 data-active:text-primary data-[state=active]:bg-zinc-800 data-[state=active]:text-primary dark:data-active:bg-zinc-800 data-[state=active]:shadow-lg transition-all text-zinc-400">Food and Drinks</TabsTrigger>
             <TabsTrigger value="users" className="h-full rounded-xl py-2.5 data-active:bg-zinc-800 data-active:text-primary data-[state=active]:bg-zinc-800 data-[state=active]:text-primary dark:data-active:bg-zinc-800 data-[state=active]:shadow-lg transition-all text-zinc-400">User Management</TabsTrigger>
+            <TabsTrigger value="qr" className="h-full rounded-xl py-2.5 data-active:bg-zinc-800 data-active:text-primary data-[state=active]:bg-zinc-800 data-[state=active]:text-primary dark:data-active:bg-zinc-800 data-[state=active]:shadow-lg transition-all text-zinc-400">Pengaturan QR</TabsTrigger>
             <TabsTrigger value="system" className="h-full rounded-xl py-2.5 data-active:bg-zinc-800 data-active:text-primary data-[state=active]:bg-zinc-800 data-[state=active]:text-primary dark:data-active:bg-zinc-800 data-[state=active]:shadow-lg transition-all text-zinc-400">System</TabsTrigger>
           </TabsList>
           
@@ -1133,6 +1237,215 @@ export default function SettingsPage() {
                       >
                         Reset Data
                       </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="qr" className="m-0 border-none p-0 outline-none space-y-6">
+              {/* Card 1: QRIS Pembayaran Toko */}
+              <Card className="bg-zinc-950/50 border-white/10 backdrop-blur-xl shadow-2xl rounded-2xl overflow-hidden">
+                <CardHeader className="pb-6 border-b border-white/5">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
+                        <QrCode size={20} />
+                      </div>
+                      <div>
+                        <CardTitle className="text-xl text-zinc-100 font-bold flex items-center gap-2">
+                          QRIS Pembayaran Toko
+                          {qrisImageUrl !== '/qris-static.jpg' ? (
+                            <span className="text-[11px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded-full">
+                              QRIS Kustom Aktif
+                            </span>
+                          ) : (
+                            <span className="text-[11px] font-bold bg-zinc-800 text-zinc-400 border border-white/10 px-2.5 py-0.5 rounded-full">
+                              Bawaan Default
+                            </span>
+                          )}
+                        </CardTitle>
+                        <CardDescription className="text-zinc-400 text-xs sm:text-sm mt-0.5">
+                          Atur gambar barcode QRIS yang ditampilkan kepada kasir di POS dan halaman pelacakan pesanan customer.
+                        </CardDescription>
+                      </div>
+                    </div>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="p-6">
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                    {/* Frame Preview QRIS */}
+                    <div className="lg:col-span-5 flex flex-col items-center">
+                      <div className="relative group w-full max-w-[280px] bg-white p-4 rounded-3xl border-4 border-blue-500/30 shadow-2xl overflow-hidden aspect-square flex items-center justify-center">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img 
+                          src={qrisImageUrl} 
+                          alt="QRIS Aktif Samba Cafe" 
+                          className="w-full h-full object-contain rounded-xl"
+                          onError={(e) => {
+                            e.currentTarget.src = '/qris-static.jpg';
+                          }}
+                        />
+                        {isUploadingQris && (
+                          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center text-white gap-2">
+                            <Loader2 className="animate-spin text-amber-400" size={32} />
+                            <span className="text-xs font-semibold">Mengunggah QRIS...</span>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs text-zinc-500 mt-2.5 text-center">
+                        Resolusi rekomendasi: 600x600 px (JPG/PNG).
+                      </p>
+                    </div>
+
+                    {/* Action Controls */}
+                    <div className="lg:col-span-7 space-y-6">
+                      <div className="bg-zinc-900/60 p-5 rounded-2xl border border-white/5 space-y-3">
+                        <h4 className="text-sm font-bold text-zinc-200 flex items-center gap-2">
+                          <Upload size={16} className="text-amber-400" /> Ganti / Unggah QRIS Baru
+                        </h4>
+                        <p className="text-xs text-zinc-400 leading-relaxed">
+                          Pilih foto atau file barcode QRIS toko Anda (GoPay, DANA, BCA, OVO, ShopeePay, atau Bank Mandiri). Gambar otomatis disinkronkan ke seluruh sistem kasir dan mobile order.
+                        </p>
+
+                        <input 
+                          type="file" 
+                          ref={qrisFileInputRef}
+                          accept="image/png, image/jpeg, image/webp"
+                          className="hidden"
+                          onChange={handleUploadQrisFile}
+                        />
+
+                        <div className="flex flex-wrap items-center gap-3 pt-2">
+                          <Button
+                            type="button"
+                            disabled={isUploadingQris}
+                            onClick={() => qrisFileInputRef.current?.click()}
+                            className="bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold h-11 px-5 rounded-xl shadow-lg shadow-amber-500/10 cursor-pointer"
+                          >
+                            {isUploadingQris ? (
+                              <>
+                                <Loader2 size={16} className="animate-spin mr-2" /> Mengunggah...
+                              </>
+                            ) : (
+                              <>
+                                <Upload size={16} className="mr-2" /> Pilih File Gambar QRIS
+                              </>
+                            )}
+                          </Button>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => window.open(qrisImageUrl, '_blank')}
+                            className="border-white/10 text-zinc-200 hover:text-white hover:bg-white/5 h-11 px-4 rounded-xl cursor-pointer"
+                          >
+                            <Download size={16} className="mr-2" /> Unduh QRIS
+                          </Button>
+
+                          {qrisImageUrl !== '/qris-static.jpg' && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              disabled={isUploadingQris}
+                              onClick={handleResetQris}
+                              className="text-zinc-400 hover:text-red-400 hover:bg-red-500/10 h-11 px-4 rounded-xl cursor-pointer"
+                            >
+                              <RotateCcw size={16} className="mr-2" /> Reset ke Bawaan
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Info Penerapan Otomatis */}
+                      <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-200/90 space-y-1.5">
+                        <p className="font-bold flex items-center gap-1.5 text-amber-300">
+                          <CheckCircle2 size={14} className="text-amber-400" /> Otomatis Aktif di Seluruh Aplikasi:
+                        </p>
+                        <ul className="list-disc list-inside space-y-1 text-zinc-300 ml-1">
+                          <li><strong>Kasir POS:</strong> Tampil saat kasir memproses bayar dengan metode QRIS.</li>
+                          <li><strong>Tracking Pesanan Customer:</strong> Pelanggan yang pesan mandiri langsung melihat barcode ini.</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Card 2: QR Code Meja Pelanggan */}
+              <Card className="bg-zinc-950/50 border-white/10 backdrop-blur-xl shadow-2xl rounded-2xl overflow-hidden">
+                <CardHeader className="pb-6 border-b border-white/5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                      <QrCode size={20} />
+                    </div>
+                    <div>
+                      <CardTitle className="text-xl text-zinc-100 font-bold">
+                        QR Code Meja (Pesan Mandiri)
+                      </CardTitle>
+                      <CardDescription className="text-zinc-400 text-xs sm:text-sm mt-0.5">
+                        Barcode meja yang discan pengunjung kafe untuk membuka menu mandiri tanpa antre di kasir.
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="p-6">
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+                    <div className="lg:col-span-4 flex flex-col items-center">
+                      <div className="bg-white p-3 rounded-2xl shadow-xl w-48 h-48 flex items-center justify-center border-4 border-amber-500/20">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img 
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(tableQrUrl || 'https://samba-cafe-one.vercel.app/order')}`}
+                          alt="QR Meja Samba Cafe"
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="lg:col-span-8 space-y-4">
+                      <div>
+                        <label className="text-xs font-bold text-zinc-300 mb-1.5 block">
+                          URL Link Pemesanan Meja
+                        </label>
+                        <div className="flex gap-2">
+                          <Input
+                            value={tableQrUrl}
+                            onChange={(e) => setTableQrUrl(e.target.value)}
+                            placeholder="Contoh: https://samba-cafe-one.vercel.app/order"
+                            className="bg-zinc-900 border-white/10 text-xs text-zinc-100 h-11 rounded-xl"
+                          />
+                          <Button
+                            type="button"
+                            disabled={isSavingQrUrl}
+                            onClick={handleSaveTableQrUrl}
+                            className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold h-11 px-5 rounded-xl shrink-0 cursor-pointer"
+                          >
+                            Simpan URL
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-3 pt-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => router.push('/qr')}
+                          className="border-white/10 text-zinc-200 hover:text-white hover:bg-white/5 h-11 px-5 rounded-xl cursor-pointer"
+                        >
+                          <Printer size={16} className="mr-2 text-amber-400" /> Buka Cetak QR Meja (/qr)
+                        </Button>
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => window.open(`https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${encodeURIComponent(tableQrUrl || 'https://samba-cafe-one.vercel.app/order')}`, '_blank')}
+                          className="border-white/10 text-zinc-200 hover:text-white hover:bg-white/5 h-11 px-4 rounded-xl cursor-pointer"
+                        >
+                          <Download size={16} className="mr-2" /> Unduh Resolusi Tinggi
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </CardContent>

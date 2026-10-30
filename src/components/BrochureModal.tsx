@@ -530,20 +530,22 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
                     }}
                   >
                     <div 
-                      className="flex items-center justify-center rounded-full shadow-lg relative mb-1.5"
+                      className="flex items-center justify-center rounded-full shadow-lg relative mb-1.5 overflow-hidden shrink-0"
                       style={{
                         width: '46px',
                         height: '46px',
-                        background: isDark ? 'radial-gradient(circle, #251d14 0%, #120e0a 100%)' : '#ffffff',
+                        background: isDark 
+                          ? 'radial-gradient(circle, #251d14 0%, #120e0a 100%)' 
+                          : 'radial-gradient(circle, #fffbeb 0%, #fef3c7 100%)',
                         border: `1.5px solid ${accent}`,
                         boxShadow: `0 4px 16px ${isDark ? 'rgba(0,0,0,0.6)' : 'rgba(180,83,9,0.15)'}`,
                       }}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src="/logo-cropped.png"
+                        src="/logo-transparent.png"
                         alt="Samba Cafe Logo"
-                        className="w-[74%] h-[74%] object-contain"
+                        className="w-[82%] h-[82%] object-contain"
                       />
                     </div>
 
@@ -1105,6 +1107,12 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
                   </div>
 
                   <div className="flex items-center gap-1.5">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img 
+                      src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=https%3A%2F%2Fsamba-cafe-one.vercel.app%2Forder" 
+                      alt="QR Order" 
+                      className="w-5 h-5 rounded p-0.5 bg-white border border-amber-500/30 object-contain shadow-sm shrink-0"
+                    />
                     <span 
                       className="px-2 py-0.5 rounded text-[7px] font-bold"
                       style={{

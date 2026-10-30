@@ -64,6 +64,7 @@ export default function OrderTrackingPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [isReplacingProof, setIsReplacingProof] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [qrisUrl, setQrisUrl] = useState('/qris-static.jpg');
 
   // 1. Initial Fetch & Session
   useEffect(() => {
@@ -73,6 +74,18 @@ export default function OrderTrackingPage() {
       return;
     }
     setSession(currentSession);
+
+    const fetchQrisSetting = async () => {
+      try {
+        const { data } = await supabase
+          .from('settings')
+          .select('value')
+          .eq('key', 'qris_image_url')
+          .maybeSingle();
+        if (data?.value) setQrisUrl(data.value);
+      } catch {}
+    };
+    fetchQrisSetting();
 
     const fetchOrders = async () => {
       const { data, error } = await supabase
@@ -693,7 +706,7 @@ export default function OrderTrackingPage() {
               {/* QR Container */}
               <div className="bg-white p-2.5 rounded-2xl shadow-xl w-full max-w-[260px] aspect-[3/4.2] flex items-center justify-center overflow-hidden border border-zinc-200 group relative">
                 <img 
-                  src="/qris-static.jpg" 
+                  src={qrisUrl} 
                   alt="QRIS Samba Cafe TN Sereal" 
                   className="w-full h-full object-contain rounded-xl"
                   onError={(e) => {
@@ -703,7 +716,7 @@ export default function OrderTrackingPage() {
               </div>
 
               <a 
-                href="/qris-static.jpg" 
+                href={qrisUrl} 
                 download="QRIS-Samba-Cafe.jpg"
                 className="mt-3 text-xs text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1.5 py-1.5 px-4 rounded-xl bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 transition-all"
               >
