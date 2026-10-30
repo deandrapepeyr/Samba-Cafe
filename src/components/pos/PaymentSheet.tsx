@@ -96,7 +96,7 @@ export function PaymentSheet({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-zinc-950 border-white/10 text-zinc-100 max-w-lg w-[95vw] rounded-3xl p-5 sm:p-6 max-h-[92vh] overflow-y-auto">
+      <DialogContent className="z-[150] bg-zinc-950 border-white/10 text-zinc-100 max-w-lg w-[95vw] rounded-3xl p-5 sm:p-6 max-h-[92vh] overflow-y-auto">
         <DialogHeader className="space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-xs font-mono text-zinc-400">Pesanan #{orderNumber || '-'}</span>

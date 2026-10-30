@@ -148,7 +148,7 @@ export function CartPanel({
   return (
     <>
       {/* Header Pesanan */}
-      <div className="p-4 xl:p-5 border-b border-white/10 flex items-center justify-between bg-zinc-950">
+      <div className="shrink-0 p-4 xl:p-5 border-b border-white/10 flex items-center justify-between bg-zinc-950">
         <div>
           <h2 className="text-lg xl:text-xl font-bold tracking-tight text-zinc-100 font-serif">
             Pesanan Aktif
@@ -171,7 +171,7 @@ export function CartPanel({
 
       {/* Edit Mode Banner jika kasir sedang menambah menu ke pesanan Bayar Nanti / Aktif */}
       {isEditMode && (
-        <div className="mx-4 mt-3 p-3 bg-amber-500/15 border border-amber-500/30 rounded-2xl flex items-center justify-between text-xs animate-in fade-in slide-in-from-top-2">
+        <div className="shrink-0 mx-4 mt-3 p-3 bg-amber-500/15 border border-amber-500/30 rounded-2xl flex items-center justify-between text-xs animate-in fade-in slide-in-from-top-2">
           <div className="flex items-center gap-2 text-amber-300 font-bold">
             <FileEdit size={15} className="text-amber-400 shrink-0" />
             <div>
@@ -197,7 +197,7 @@ export function CartPanel({
       )}
 
       {/* Konten Daftar Item Keranjang */}
-      <div className="flex-1 p-4 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 bg-zinc-950">
+      <div className="flex-1 min-h-0 p-4 overflow-y-auto overscroll-contain touch-pan-y scrollbar-thin scrollbar-thumb-white/10 bg-zinc-950">
         {isPageLoading ? (
           <div className="h-full flex flex-col items-center justify-center text-zinc-500 mt-12 gap-3">
             <p className="text-xs">Memeriksa status shift...</p>
@@ -258,7 +258,7 @@ export function CartPanel({
       </div>
 
       {/* Ringkasan & Pembayaran Footer */}
-      <div className="p-4 xl:p-5 bg-zinc-950 border-t border-white/10 mt-auto relative shadow-[0_-10px_30px_-10px_rgba(0,0,0,0.5)]">
+      <div className="shrink-0 p-4 xl:p-5 bg-zinc-950 border-t border-white/10 mt-auto relative shadow-[0_-10px_30px_-10px_rgba(0,0,0,0.5)]">
         <div className="space-y-3 mb-4">
           <div className="bg-zinc-900/60 rounded-2xl p-4 border border-white/5 space-y-2">
             <div className="flex justify-between text-zinc-400 text-xs">

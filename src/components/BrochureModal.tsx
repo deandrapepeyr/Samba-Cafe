@@ -67,6 +67,42 @@ const POPULAR_KEYWORDS = [
   'katsu', 'mix platter', 'dimsum', 'aren', 'cireng', 'cappuccino', 'kentang', 'piscok', 'mie'
 ];
 
+// Deskripsi dinamis untuk menu unggulan Food
+const getFoodDescription = (name: string) => {
+  const lower = name.toLowerCase();
+  if (lower.includes('katsu')) {
+    return 'Ayam katsu renyah keemasan berpadu nasi hangat & saus khas Samba.';
+  }
+  if (lower.includes('egg roll') || lower.includes('nugget')) {
+    return 'Rice bowl egg roll nugget lezat berpadu nasi hangat khas Samba.';
+  }
+  if (lower.includes('burger')) {
+    return 'Burger beef patty juicy dengan racikan bumbu istimewa.';
+  }
+  if (lower.includes('mie') || lower.includes('indomie')) {
+    return 'Indomie lezat hangat dengan telur dan racikan bumbu khas Samba.';
+  }
+  return 'Hidangan lezat istimewa favorit pilihan pelanggan Samba Cafe.';
+};
+
+// Deskripsi dinamis untuk menu unggulan Dessert
+const getDessertDescription = (name: string) => {
+  const lower = name.toLowerCase();
+  if (lower.includes('mochi')) {
+    return 'Mochi lembut & kenyal dengan isian manis spesial Samba.';
+  }
+  if (lower.includes('buko')) {
+    return 'Kelapa muda buko & jelly pandan berpadu susu creamy keju.';
+  }
+  if (lower.includes('pudding') || lower.includes('puding')) {
+    return 'Pudding manis lembut dengan tekstur lumer istimewa.';
+  }
+  if (lower.includes('ice cream') || lower.includes('es krim')) {
+    return 'Es krim segar dan manis lembut pelepas dahaga.';
+  }
+  return 'Hidangan penutup manis dan segar khas Samba Cafe.';
+};
+
 export function BrochureModal({ isOpen, onClose, products, categories }: BrochureModalProps) {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [zoomMode, setZoomMode] = useState<'fit' | '100%'>('fit');
@@ -898,7 +934,7 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
                                         lineHeight: 1.2,
                                       }}
                                     >
-                                      Ayam katsu renyah keemasan berpadu nasi hangat &amp; saus khas Samba.
+                                      {getFoodDescription(signatureProduct.name)}
                                     </p>
                                   </div>
                                 </div>
@@ -911,19 +947,19 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
                                   style={{
                                     background: isDark 
                                       ? 'linear-gradient(135deg, rgba(224,170,62,0.15) 0%, rgba(20,16,12,0.95) 100%)' 
-                                      : '#fffbeb',
+                                      : 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
                                     border: `1.5px solid ${accent}`,
                                     padding: '4px 7px',
                                   }}
                                 >
                                   <div className="flex items-start justify-between gap-1.5 min-w-0">
                                     <div className="flex items-center gap-1 min-w-0 flex-1">
-                                      <Sparkles size={9} className="text-amber-400 shrink-0" />
+                                      <Sparkles size={9} className={isDark ? "text-amber-400 shrink-0" : "text-amber-600 shrink-0"} />
                                       <span 
                                         style={{
                                           fontSize: featuredDessert.name.trim().length > 20 ? '9px' : '10px',
                                           fontWeight: 800,
-                                          color: '#ffffff',
+                                          color: isDark ? '#ffffff' : '#18181b',
                                           lineHeight: 1.2,
                                           whiteSpace: 'nowrap',
                                           overflow: 'hidden',
@@ -953,12 +989,12 @@ export function BrochureModal({ isOpen, onClose, products, categories }: Brochur
                                   <p 
                                     style={{
                                       fontSize: '7.5px',
-                                      color: 'rgba(255,255,255,0.8)',
+                                      color: isDark ? 'rgba(255,255,255,0.8)' : '#78350f',
                                       marginTop: '1.5px',
                                       lineHeight: 1.2,
                                     }}
                                   >
-                                    Kelapa muda buko &amp; jelly pandan berpadu susu creamy keju.
+                                    {getDessertDescription(featuredDessert.name)}
                                   </p>
                                 </div>
                               )}

@@ -700,19 +700,7 @@ export default function POSPage() {
     };
   }, [userName, isLoading]);
 
-  useEffect(() => {
-    if (cart.length > 0) {
-      const timer = setTimeout(() => {
-        if (cartEndRef.current) {
-          cartEndRef.current.scrollIntoView({ behavior: 'smooth' });
-        }
-      }, 50);
-      return () => clearTimeout(timer);
-    }
-  }, [cart.length]);
-
-  // No more DANA Timer logic needed
-
+  // Lock action handler
   const handleLockActionClick = () => {
     if (!role || !userName) {
       window.dispatchEvent(new CustomEvent('shake-sidebar-profiles'));
@@ -1446,7 +1434,10 @@ export default function POSPage() {
       finalizeTransaction={finalizeTransaction}
       getQuickCashSuggestions={getQuickCashSuggestions}
       setIsHutangNameDialogOpen={setIsHutangNameDialogOpen}
-      onOpenPaymentSheet={() => setIsPaymentSheetOpen(true)}
+      onOpenPaymentSheet={() => {
+        setIsMobileCartSheetOpen(false);
+        setIsPaymentSheetOpen(true);
+      }}
       onDirectSave={() => finalizeTransaction(paymentMethod || 'Cash')}
       isEditMode={isEditMode}
       onCancelEdit={cancelEdit}
@@ -1470,7 +1461,7 @@ export default function POSPage() {
               </div>
             )}
           </SheetTrigger>
-          <SheetContent side="bottom" className="h-[85vh] p-0 bg-card border-t border-border rounded-t-2xl flex flex-col z-[100]">
+          <SheetContent side="bottom" className="h-[85vh] max-h-[85vh] p-0 bg-card border-t border-border rounded-t-2xl flex flex-col z-[100] overflow-hidden">
             <SheetHeader className="p-4 border-b border-border sr-only">
               <SheetTitle>Current Order</SheetTitle>
             </SheetHeader>
@@ -1675,6 +1666,13 @@ export default function POSPage() {
               )}
             </div>
           </div>
+        </div>
+
+        {/* Permanent Desktop/Tablet Landscape Cart */}
+        <div className="hidden lg:flex w-[360px] xl:w-[380px] border-l border-white/10 bg-zinc-950 flex-col h-full shrink-0 min-h-0 overflow-hidden">
+          {renderCartContent()}
+        </div>
+      </div>
         
         <PaymentSheet
           isOpen={isPaymentSheetOpen}
@@ -1688,7 +1686,6 @@ export default function POSPage() {
           finalizeTransaction={finalizeTransaction}
           isProcessingCheckout={isProcessingCheckout}
         />
-      </div>
 
       {/* Mobile Floating Cart Bar */}
       <div className={`lg:hidden fixed bottom-[80px] left-4 right-4 z-40 animate-in slide-in-from-bottom-5 fade-in duration-300 ${cartItemCount > 0 ? 'block' : 'hidden'}`}>
@@ -1707,7 +1704,7 @@ export default function POSPage() {
                 <ShoppingCart size={20} />
               </div>
             </SheetTrigger>
-            <SheetContent side="bottom" className="h-[85vh] p-0 bg-card border-t border-border rounded-t-3xl flex flex-col z-[100] outline-none">
+            <SheetContent side="bottom" className="h-[85vh] max-h-[85vh] p-0 bg-card border-t border-border rounded-t-3xl flex flex-col z-[100] outline-none overflow-hidden">
               <SheetHeader className="p-0 border-b border-border sr-only">
                 <SheetTitle>Pesanan Aktif</SheetTitle>
               </SheetHeader>
@@ -1715,11 +1712,6 @@ export default function POSPage() {
               {renderCartContent()}
             </SheetContent>
         </Sheet>
-      </div>
-
-      {/* Permanent Desktop/Tablet Landscape Cart */}
-      <div className="hidden lg:flex w-[360px] xl:w-[380px] border-l border-white/10 bg-zinc-950 flex-col h-full shrink-0">
-        {renderCartContent()}
       </div>
 
       {/* Free Item Modal */}
@@ -1822,7 +1814,6 @@ export default function POSPage() {
           </div>
         </div>
       )}
-      </div>
     </MainLayout>
   );
 }
