@@ -86,45 +86,50 @@ export function CartPanel({
     setActiveHighlightId(lastAddedItemId);
     const highlightTimer = setTimeout(() => {
       setActiveHighlightId(null);
-    }, 1800);
+    }, 2000);
 
     const scrollTimer = setTimeout(() => {
       const container = scrollContainerRef.current;
       if (!container) return;
 
-      const safeId = typeof CSS !== 'undefined' && CSS.escape 
-        ? CSS.escape(lastAddedItemId) 
-        : lastAddedItemId.replace(/["\\]/g, '\\$&');
-      const itemElement = container.querySelector(`[data-cart-item-id="${safeId}"]`) as HTMLElement | null;
-      if (!itemElement) return;
+      // Cari elemen dengan pencocokan atribut langsung (mencegah bug escaping karakter/UUID)
+      const allItemElements = Array.from(container.querySelectorAll<HTMLElement>('[data-cart-item-id]'));
+      const itemElement = allItemElements.find(el => el.getAttribute('data-cart-item-id') === lastAddedItemId);
 
-      const containerRect = container.getBoundingClientRect();
-      const itemRect = itemElement.getBoundingClientRect();
+      if (itemElement) {
+        const containerRect = container.getBoundingClientRect();
+        const itemRect = itemElement.getBoundingClientRect();
 
-      // Check if item is not fully visible within container viewport
-      const isBelow = itemRect.bottom > containerRect.bottom;
-      const isAbove = itemRect.top < containerRect.top;
+        const isBelow = itemRect.bottom > containerRect.bottom;
+        const isAbove = itemRect.top < containerRect.top;
 
-      if (isBelow) {
-        const diff = itemRect.bottom - containerRect.bottom;
-        container.scrollBy({
-          top: diff + 24, // padding agar kartu terlihat utuh dan leluasa
-          behavior: 'smooth'
-        });
-      } else if (isAbove) {
-        const diff = itemRect.top - containerRect.top;
-        container.scrollBy({
-          top: diff - 24,
+        if (isBelow) {
+          const diff = itemRect.bottom - containerRect.bottom;
+          container.scrollBy({
+            top: diff + 32, // padding ekstra agar kartu dan tombol kuantitas tampak utuh
+            behavior: 'smooth'
+          });
+        } else if (isAbove) {
+          const diff = itemRect.top - containerRect.top;
+          container.scrollBy({
+            top: diff - 32,
+            behavior: 'smooth'
+          });
+        }
+      } else {
+        // Fallback: Jika item baru di keranjang berada di paling bawah
+        container.scrollTo({
+          top: container.scrollHeight,
           behavior: 'smooth'
         });
       }
-    }, 60);
+    }, 50);
 
     return () => {
       clearTimeout(highlightTimer);
       clearTimeout(scrollTimer);
     };
-  }, [lastAddedItemId, lastActionTimestamp]);
+  }, [lastAddedItemId, lastActionTimestamp, cart.length]);
 
   const cookedItems = React.useMemo(() => cart.filter(item => !item.product.is_quick), [cart]);
   const quickItems = React.useMemo(() => cart.filter(item => Boolean(item.product.is_quick)), [cart]);
@@ -141,7 +146,7 @@ export function CartPanel({
         data-cart-item-id={item.id}
         className={`flex flex-col gap-2 p-3 bg-zinc-900/60 rounded-2xl border transition-all duration-300 ${
           isRecentlyAdded
-            ? 'border-amber-500/60 bg-amber-500/15 shadow-[0_0_15px_rgba(245,158,11,0.2)] ring-1 ring-amber-500/40'
+            ? 'border-amber-500/80 bg-amber-500/20 shadow-[0_0_20px_rgba(245,158,11,0.25)] ring-2 ring-amber-500/50'
             : 'border-white/5 hover:border-white/10'
         }`}
       >

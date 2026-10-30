@@ -1075,6 +1075,10 @@ export default function POSPage() {
       });
 
       setCart(repeatedCart);
+      if (repeatedCart.length > 0) {
+        setLastAddedItemId(repeatedCart[repeatedCart.length - 1].id);
+        setLastActionTimestamp(Date.now());
+      }
       if (lastTx[0].customer_name) {
         setCustomerName(lastTx[0].customer_name);
       }
@@ -1156,6 +1160,10 @@ export default function POSPage() {
   };
 
   const updateQuantity = (id: string, delta: number) => {
+    if (delta > 0) {
+      setLastAddedItemId(id);
+      setLastActionTimestamp(Date.now());
+    }
     setCart(prev => {
       const target = prev.find(item => item.id === id);
       if (target && target.quantity + delta <= 0) {
