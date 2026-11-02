@@ -210,7 +210,7 @@ export default function OrdersPage() {
 
     const { data: txData } = await supabase
       .from('transactions')
-      .select('*')
+      .select('*, transaction_items(*)')
       .or(`created_at.gte.${sevenDaysAgo.toISOString()},status.eq.pending,status.eq.preparing,status.eq.ready,status.eq.Paid,status.eq.paid,status.is.null`)
       .neq('status', 'cancelled')
       .order('created_at', { ascending: true });
@@ -226,14 +226,8 @@ export default function OrdersPage() {
         return true;
       });
 
-      const txIds = validTx.map(t => t.id);
-      const { data: itemsData } = await supabase
-        .from('transaction_items')
-        .select('*')
-        .in('transaction_id', txIds);
-
-      const parsedOrders: Order[] = validTx.map(tx => {
-        const items = itemsData ? itemsData.filter(i => i.transaction_id === tx.id) : [];
+      const parsedOrders: Order[] = validTx.map((tx: any) => {
+        const items = Array.isArray(tx.transaction_items) ? tx.transaction_items : [];
         const dateObj = new Date(tx.created_at);
 
         let normStatus = (tx.status || 'preparing');
@@ -265,7 +259,7 @@ export default function OrdersPage() {
           payment_status: tx.payment_status,
           payment_proof_url: tx.payment_proof_url,
           paid,
-          items: items.map(item => ({
+          items: items.map((item: any) => ({
             name: item.product_name,
             price: item.price,
             qty: item.quantity,

@@ -104,22 +104,19 @@ export default function HistoryPage() {
   const fetchData = async () => {
     setIsLoadingData(true);
     
-    // Fetch transactions
-    const { data: txData } = await supabase
+    // Fetch transactions with joined items
+    const { data: txData, error: txError } = await supabase
       .from('transactions')
-      .select('*')
+      .select('*, transaction_items(*)')
       .order('created_at', { ascending: false });
 
-    if (txData && txData.length > 0) {
-      const txIds = txData.map(t => t.id);
-      
-      const { data: itemsData } = await supabase
-        .from('transaction_items')
-        .select('*')
-        .in('transaction_id', txIds);
+    if (txError) {
+      console.error('Error fetching transactions:', txError);
+    }
 
-      const formattedTxs: Transaction[] = txData.map(tx => {
-        const items = itemsData ? itemsData.filter(i => i.transaction_id === tx.id) : [];
+    if (txData && txData.length > 0) {
+      const formattedTxs: Transaction[] = txData.map((tx: any) => {
+        const items = Array.isArray(tx.transaction_items) ? tx.transaction_items : [];
         
         const dateObj = new Date(tx.created_at);
         const dateStr = dateObj.toLocaleString('id-ID', {
@@ -145,9 +142,9 @@ export default function HistoryPage() {
           payment_confirmed_at: tx.payment_confirmed_at,
           payment_confirmed_by: tx.payment_confirmed_by,
           payment_proof_url: tx.payment_proof_url,
-          itemsCount: items.reduce((sum, item) => sum + item.quantity, 0),
+          itemsCount: items.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0),
           status: tx.status,
-          itemsDetail: items.map(item => ({
+          itemsDetail: items.map((item: any) => ({
             name: item.product_name,
             price: item.price,
             qty: item.quantity,
@@ -186,6 +183,39 @@ export default function HistoryPage() {
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [selectedCashierGroup, setSelectedCashierGroup] = useState<CashierGroup | null>(null);
   const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
+
+  const handleSelectTx = async (tx: Transaction) => {
+    setSelectedTx(tx);
+    if (!tx.itemsDetail || tx.itemsDetail.length === 0) {
+      try {
+        const { data: itemRows } = await supabase
+          .from('transaction_items')
+          .select('*')
+          .eq('transaction_id', tx.id);
+        if (itemRows && itemRows.length > 0) {
+          const updatedItems = itemRows.map(item => ({
+            name: item.product_name,
+            price: item.price,
+            qty: item.quantity,
+            notes: item.notes
+          }));
+          const updatedCount = itemRows.reduce((sum, item) => sum + item.quantity, 0);
+          setSelectedTx(prev => prev && prev.id === tx.id ? {
+            ...prev,
+            itemsCount: updatedCount,
+            itemsDetail: updatedItems
+          } : prev);
+          setTransactions(prev => prev.map(t => t.id === tx.id ? {
+            ...t,
+            itemsCount: updatedCount,
+            itemsDetail: updatedItems
+          } : t));
+        }
+      } catch (err) {
+        console.warn('Fallback item fetch error:', err);
+      }
+    }
+  };
 
   const handleConfirmPayment = async (txId: string) => {
     if (!role || isConfirmingPayment) return;
@@ -441,7 +471,7 @@ export default function HistoryPage() {
                       return (
                         <div
                           key={trx.id}
-                          onClick={() => setSelectedTx(trx)}
+                          onClick={() => handleSelectTx(trx)}
                           className="p-4 bg-card border border-border rounded-xl shadow-sm hover:border-primary/50 transition-all cursor-pointer space-y-3"
                         >
                           <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
@@ -535,7 +565,7 @@ export default function HistoryPage() {
                             return (
                               <tr 
                                 key={trx.id} 
-                                onClick={() => setSelectedTx(trx)}
+                                onClick={() => handleSelectTx(trx)}
                                 className="hover:bg-muted/50 transition-colors cursor-pointer group"
                               >
                                 <td className="p-4 pl-6 font-medium flex items-center gap-2 group-hover:text-primary transition-colors">

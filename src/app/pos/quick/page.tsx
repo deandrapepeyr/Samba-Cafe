@@ -227,20 +227,14 @@ function QuickPOSContent() {
     const fetchActiveOrders = async () => {
       const { data } = await supabase
         .from('transactions')
-        .select('*')
+        .select('*, transaction_items(*)')
         .in('status', ['pending', 'preparing', 'ready'])
         .order('created_at', { ascending: true });
 
       if (data && data.length > 0) {
-        const txIds = data.map(t => t.id);
-        const { data: itemsData } = await supabase
-          .from('transaction_items')
-          .select('*')
-          .in('transaction_id', txIds);
-          
-        const txWithItems = data.map(tx => ({
+        const txWithItems = data.map((tx: any) => ({
           ...tx,
-          items: itemsData ? itemsData.filter((i: any) => i.transaction_id === tx.id) : []
+          items: Array.isArray(tx.transaction_items) ? tx.transaction_items : []
         }));
 
         // Only show pending QR orders on POS if customer has uploaded proof / waiting confirmation
