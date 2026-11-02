@@ -47,24 +47,24 @@ export function ProductGrid({
   }, [cart]);
 
   return (
-    <div className="p-4 md:p-6 shrink-0">
+    <div className="p-3 sm:p-4 md:p-5 shrink-0">
       {isLoading && products.length === 0 ? (
-        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 pb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5 sm:gap-3 md:gap-3.5 pb-6">
           {Array.from({ length: 10 }).map((_, i) => (
             <div
               key={i}
-              className="rounded-2xl bg-zinc-900/60 border border-white/5 p-4 flex flex-col justify-between h-[155px] animate-pulse select-none"
+              className="rounded-2xl bg-zinc-900/60 border border-white/5 p-3 sm:p-3.5 flex flex-col justify-between min-h-[135px] md:min-h-[145px] animate-pulse select-none"
             >
               <div className="space-y-2.5">
                 <div className="flex justify-between items-center">
-                  <div className="w-16 h-4.5 rounded-md bg-zinc-800/80" />
+                  <div className="w-16 h-4 rounded-md bg-zinc-800/80" />
                   <div className="w-10 h-3.5 rounded-md bg-zinc-850" />
                 </div>
-                <div className="w-4/5 h-5 rounded-md bg-zinc-800/90 mt-2" />
+                <div className="w-4/5 h-4.5 rounded-md bg-zinc-800/90 mt-2" />
                 <div className="w-1/2 h-3.5 rounded-md bg-zinc-850/60" />
               </div>
-              <div className="flex justify-between items-center pt-3 border-t border-white/5">
-                <div className="w-20 h-5 rounded-md bg-amber-500/10" />
+              <div className="flex justify-between items-center pt-2.5 border-t border-white/5">
+                <div className="w-20 h-4.5 rounded-md bg-amber-500/10" />
                 <div className="w-12 h-4 rounded-md bg-zinc-800/60" />
               </div>
             </div>
@@ -87,7 +87,7 @@ export function ProductGrid({
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 pb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5 sm:gap-3 md:gap-3.5 pb-6">
           {products.map(product => {
             const qtyInCart = cartQtyMap.get(product.id) || 0;
             const isUnavailable = isStockEmpty(product);

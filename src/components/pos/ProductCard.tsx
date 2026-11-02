@@ -33,7 +33,7 @@ export function ProductCard({
         if (isUnavailable) return;
         onClick(product);
       }}
-      className={`group relative border rounded-2xl p-4 transition-all duration-200 flex flex-col justify-between min-h-[140px] md:min-h-[150px] select-none touch-manipulation active:scale-[0.98] ${
+      className={`group relative border rounded-2xl overflow-hidden p-3 sm:p-3.5 transition-all duration-200 flex flex-col justify-between min-h-[135px] md:min-h-[145px] select-none touch-manipulation active:scale-[0.98] ${
         isUnavailable
           ? 'bg-zinc-900/40 border-zinc-700/50 opacity-60 cursor-not-allowed shadow-none'
           : isLocked
@@ -46,37 +46,38 @@ export function ProductCard({
       }`}
     >
       <div>
-        <div className="flex justify-between items-start mb-2 gap-1">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {isQuick ? (
-              <span className="flex items-center gap-1 text-[9px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/25 px-1.5 py-0.5 rounded-md uppercase tracking-wider">
-                <ShoppingBag size={10} className="shrink-0" />
-                Siap Ambil
-              </span>
-            ) : (
-              <span className="flex items-center gap-1 text-[9px] font-bold text-orange-400 bg-orange-500/10 border border-orange-500/25 px-1.5 py-0.5 rounded-md uppercase tracking-wider">
-                <Flame size={10} className="shrink-0" />
-                Dimasak
-              </span>
-            )}
-            <span className="text-[9px] font-medium text-zinc-500 truncate max-w-[80px]">
-              {categoryName}
+        {/* Row 1: Badges */}
+        <div className="flex items-center justify-between gap-1 mb-1.5 min-w-0">
+          {isQuick ? (
+            <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/25 px-1.5 py-0.5 rounded-md uppercase shrink-0">
+              <ShoppingBag size={10} className="shrink-0" />
+              Siap Ambil
             </span>
-          </div>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-[9px] font-bold text-orange-400 bg-orange-500/10 border border-orange-500/25 px-1.5 py-0.5 rounded-md uppercase shrink-0">
+              <Flame size={10} className="shrink-0" />
+              Dimasak
+            </span>
+          )}
 
           <div className="flex items-center gap-1 shrink-0">
             {product.variants && product.variants.length > 0 && !isUnavailable && (
-              <div className="text-[9px] text-amber-400/90 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-md flex items-center gap-1 font-bold">
-                <ListPlus size={10} />
+              <span className="text-[9px] text-amber-400/90 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-md inline-flex items-center gap-1 font-bold shrink-0 whitespace-nowrap">
+                <ListPlus size={10} className="shrink-0" />
                 OPSI
-              </div>
+              </span>
             )}
             {qtyInCart > 0 && (
-              <div className="bg-amber-500 text-zinc-950 text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm">
+              <span className="bg-amber-500 text-zinc-950 text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-sm shrink-0 whitespace-nowrap">
                 {qtyInCart}x
-              </div>
+              </span>
             )}
           </div>
+        </div>
+
+        {/* Row 2: Category */}
+        <div className="text-[10px] font-medium text-zinc-500 truncate mb-1">
+          {categoryName}
         </div>
 
         <h3
